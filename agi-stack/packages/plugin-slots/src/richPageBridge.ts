@@ -215,8 +215,8 @@ export function connectPage(
         lang: bridge.locale,
       });
   };
-  const observer =
-    page.workbench && root ? new MutationObserver(theme) : undefined;
+  // Every signed page mirrors the workbench theme and language, whatever surface it renders.
+  const observer = root ? new MutationObserver(theme) : undefined;
   if (observer && root) {
     theme();
     if (viewport) viewport.addEventListener("resize", theme);

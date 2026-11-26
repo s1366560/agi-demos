@@ -36,7 +36,17 @@ await buildPackagePages({
           path: join(directory, "../../../../../web/src", path.slice(2) + (path.endsWith("Spinner") ? ".tsx" : ".ts")),
         }));
         build.onResolve({filter: /(?:agentConfigService|^@\/services\/(?:systemService|traceService))$/}, () => ({path: join(directory, "dashboardAuthority.ts")}));
-        build.onResolve({filter: /^@\/utils\/date$/}, () => ({path: join(directory, "../../../../../sdk/memstack-plugin-sdk/ui/localDate.ts")}));
+        build.onResolve({filter: /^@\/utils\/date$/}, () => ({path: join(directory, "signedDate.ts")}));
+        // The original transcript pieces enter the page through these host modules.
+        // Only their pure parts are bundled: opening an MCP app needs the shell canvas,
+        // and the card that tracks HITL state in the shell is the same card without it.
+        build.onResolve({filter: /^@\/components\/agent\/styles$/}, () => ({path: join(directory, '../web/chat/styles.ts')}));
+        build.onResolve({filter: /^@\/components\/agent\/InlineHITLCard$/}, () => ({path: join(directory, '../web/hitl/InlineHITLCard.tsx')}));
+        build.onResolve({filter: /^\.\/useMCPAppOpen$/}, () => ({path: join(directory, 'noMCPAppOpen.ts')}));
+        build.onResolve({filter: /^@\/utils\/hitlOptionDisplay$/}, () => ({path: join(directory, '../web/hitl/hitlOptionDisplay.ts')}));
+        build.onResolve({filter: /^@\/(?:utils\/(?:toolCallTimeline|executionSummary)|i18n\/formatters|components\/agent\/results\/MultiSourceResultsCard|components\/agent\/chat\/AgentSection)$/}, ({path}) => ({
+          path: join(webRoot, path.slice(2) + (path.startsWith('@/components/') ? '.tsx' : '.ts')),
+        }));
         build.onResolve({filter: /^(?:@desktop\/|@\/components\/agent\/multiAgent\/)/}, ({path}) => {
           const file = path.startsWith("@desktop/") ? join(directory, "../../../../../agi-stack/apps/desktop/src", path.slice(9)) : join(directory, "../../../../../web/src", path.slice(2));
           return {path: [file, file + ".ts", file + ".tsx"].find(existsSync)};

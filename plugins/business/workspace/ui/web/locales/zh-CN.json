@@ -1391,6 +1391,12 @@
       "backToProjects": "返回项目列表",
       "loadFailed": "无法加载此项目。",
       "loadFailedDescription": "项目可能已移动，或您的账户没有访问权限。"
+    },
+    "memories": {
+      "eyebrow": "项目知识",
+      "noMemories": "暂无记忆",
+      "size": "大小",
+      "untitled": "未命名记忆"
     }
   },
   "tenant": {
@@ -1458,6 +1464,63 @@
       "objectivesCount": "{{count}} 个目标",
       "tasksCount": "{{count}} 个任务",
       "progressLoadFailed": "进度不可用"
+    },
+    "overview": {
+      "actions": "操作",
+      "activeProjects": "活跃项目",
+      "currentPlan": "当前计划",
+      "last30Days": "最近30天",
+      "latestUsage": "最新用量",
+      "loadFailed": "加载租户数据失败",
+      "loading": "正在加载租户信息…",
+      "memoryChartAria": "租户记忆使用历史图表",
+      "memoryConsumed": "记忆用量",
+      "memoryUsageHistory": "记忆使用历史",
+      "mostActiveProjects": "最活跃项目",
+      "newMembers": "新增 {{count}} 名成员",
+      "newProjectThisWeek": "本周新增 {{count}} 个项目",
+      "nextBillingDate": "下一次计费日期",
+      "noMemoryHistory": "暂无记忆历史",
+      "noProjects": "暂无项目",
+      "openProject": "打开项目 {{name}}",
+      "orgId": "组织 ID",
+      "projectName": "项目名称",
+      "region": "区域",
+      "subtitle": "欢迎回来，这是您租户今日的动态。",
+      "teamMembers": "团队成员",
+      "tenantInfo": "租户信息",
+      "title": "概览",
+      "totalStorage": "总存储",
+      "viewInvoice": "查看发票"
+    },
+    "tasks": {
+      "charts": {
+        "current": "当前",
+        "dist_desc": "分布",
+        "loadFailed": "加载图表失败",
+        "loading": "正在加载图表…",
+        "pending_tasks": "待处理任务",
+        "queue_depth": "队列深度随时间变化",
+        "queue_desc": "等待处理的任务 • 实时",
+        "status_dist": "任务状态"
+      },
+      "lastUpdated": "更新于 {{time}}",
+      "loadFailed": "加载任务数据失败",
+      "refresh": "刷新",
+      "resumeFailed": "恢复待处理任务失败",
+      "resumePending": "恢复待处理任务",
+      "resumePendingHint": "每次最多恢复 5 个待处理任务",
+      "resumeSubmitted": "已提交 {{count}} 个待处理任务",
+      "stats": {
+        "failed": "失败",
+        "pending": "待处理",
+        "rate": "比率",
+        "throughput": "吞吐量",
+        "total": "总任务数 (累计)"
+      },
+      "subtitle": "系统吞吐量和队列健康状况的实时概览。",
+      "title": "任务状态看板",
+      "viewDeadLetterQueue": "查看死信队列"
     }
   },
   "components": {
@@ -1475,6 +1538,110 @@
       "createTenant": "创建租户",
       "switchProject": "切换项目",
       "backToTenant": "返回租户"
+    },
+    "taskList": {
+      "actions": {
+        "retry": "重试",
+        "stop": "停止"
+      },
+      "columns": {
+        "duration": "耗时",
+        "entity": "实体",
+        "status": "状态",
+        "timestamp": "时间戳",
+        "type": "类型"
+      },
+      "confirmStop": "确定要停止此任务吗？",
+      "empty": "未找到任务",
+      "loadFailed": "任务加载失败。",
+      "messages": {
+        "retryFailed": "重试任务失败，请稍后再试。",
+        "retrySuccess": "任务已加入重试队列。",
+        "stopFailed": "停止任务失败，请稍后再试。",
+        "stopSuccess": "任务已停止。"
+      },
+      "pagination": {
+        "showing": "显示 {{count}} / {{total}} 个任务"
+      },
+      "refresh": "刷新任务",
+      "searchAria": "搜索任务",
+      "searchPlaceholder": "搜索任务 ID 或名称…",
+      "status": {
+        "all": "所有状态",
+        "completed": "已完成",
+        "failed": "失败",
+        "pending": "待处理",
+        "processing": "处理中"
+      },
+      "statusFilter": "按状态筛选",
+      "title": "任务"
     }
+  },
+  "agent": {
+    "collab": {
+      "noWorkspace": "未选择工作空间"
+    }
+  },
+  "common": {
+    "actions": {
+      "label": "操作",
+      "next": "下一页",
+      "previous": "上一页",
+      "showMore": "显示更多",
+      "viewAll": "查看全部"
+    },
+    "add": "添加",
+    "cancel": "取消",
+    "close": "关闭",
+    "confirm": "确认",
+    "create": "创建",
+    "delete": "删除",
+    "edit": "编辑",
+    "error": "错误",
+    "forms": {
+      "name": "名称",
+      "status": "状态",
+      "type": "类型"
+    },
+    "loading": "加载中…",
+    "moreActions": "更多操作",
+    "next": "下一页",
+    "no": "否",
+    "pagination": {
+      "page_info": "第 {{page}} / {{total}} 页"
+    },
+    "previous": "上一页",
+    "ready": "就绪",
+    "refresh": "刷新",
+    "required": "必填",
+    "retry": "重试",
+    "save": "保存",
+    "stats": {
+      "activeNodes": "活跃节点",
+      "collaborators": "协作者",
+      "members": "成员",
+      "owner": "所有者",
+      "storageUsed": "已用存储",
+      "total": "总计",
+      "totalMemories": "总记忆数"
+    },
+    "status": {
+      "active": "活跃",
+      "available": "可用",
+      "completed": "已完成",
+      "failed": "失败",
+      "inactive": "非活跃",
+      "pending": "待处理",
+      "processing": "处理中",
+      "unavailable": "不可用"
+    },
+    "time": {
+      "ago": "{{time}}前",
+      "hours": "小时",
+      "justNow": "刚刚",
+      "minutes": "分",
+      "updated": "更新于 {{time}}"
+    },
+    "yes": "是"
   }
 }

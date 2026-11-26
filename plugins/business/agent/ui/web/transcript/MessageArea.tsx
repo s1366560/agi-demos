@@ -33,19 +33,17 @@ import {
   useRef,
   useEffect,
   useCallback,
-  useState,
   memo,
   Children,
   useMemo,
   useLayoutEffect,
   isValidElement,
-  useId,
 } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
-import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 import { usePinnedEventIds, useAgentHITLStore } from '@business/agent/ui/web/stores/agent/hitlStore';
 import { useAgentPermissionModeStore } from '@business/agent/ui/web/stores/agent/permissionModeStore';
@@ -81,6 +79,7 @@ import { MessageBubble } from './MessageBubble';
 import { MESSAGE_MAX_WIDTH_CLASSES, WIDE_MESSAGE_MAX_WIDTH_CLASSES } from '@/components/agent/styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { JitContextCard } from './timeline/JitContextCard';
+import { PinnedMessages } from './message/PinnedMessages';
 import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
@@ -329,8 +328,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // thinking flag) are subscribed inside StreamingAssistantSection so that
     // per-flush updates do not re-render the whole message area.
     const containerRef = useRef<HTMLDivElement>(null);
-    const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
-    const pinnedSectionId = useId();
     const { t } = useTranslation();
 
     // Approval provenance is keyed by exact conversation/request identity; changing
@@ -423,6 +420,16 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const pinnedEvents = useMemo(
       () => timeline.filter((e) => e.id && pinnedEventIds.has(e.id)),
       [timeline, pinnedEventIds]
+    );
+    const pinnedMessages = useMemo(
+      () =>
+        pinnedEvents.map((event) => ({
+          id: event.id ?? '',
+          content:
+            ('content' in event ? (event as { content: string }).content : '') ||
+            ('fullText' in event ? (event as { fullText: string }).fullText : ''),
+        })),
+      [pinnedEvents]
     );
 
     // Parse children to detect sub-components (memoized to avoid re-scanning on every render)
@@ -745,82 +752,23 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             </div>
           )}
 
-          {/* Pinned Messages Section */}
-          {pinnedEvents.length > 0 && (
-            <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50">
-              <button
-                type="button"
-                onClick={() => {
-                  setPinnedCollapsed(!pinnedCollapsed);
-                }}
-                aria-expanded={!pinnedCollapsed}
-                aria-controls={pinnedSectionId}
-                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 active:bg-slate-200 dark:active:bg-slate-700/70 transition-colors duration-150 motion-reduce:transition-none min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-              >
-                <Pin size={12} />
-                <span>{t('agent.pinnedMessages', 'Pinned')}</span>
-                <span className="text-slate-400">({pinnedEvents.length})</span>
-                <span className="ml-auto">
-                  {pinnedCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                </span>
-              </button>
-              {!pinnedCollapsed && (
-                <div
-                  id={pinnedSectionId}
-                  className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto"
-                >
-                  {pinnedEvents.map((event) => {
-                    const content =
-                      ('content' in event ? (event as { content: string }).content : '') ||
-                      ('fullText' in event ? (event as { fullText: string }).fullText : '');
-                    return (
-                      <div
-                        key={`pinned-${event.id}`}
-                        className="flex items-start gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/50 transition-colors group/pin hover:bg-slate-100 dark:hover:bg-slate-700/60"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const targetId = event.id;
-                            const el = Array.from(
-                              containerRef.current?.querySelectorAll<HTMLElement>(
-                                '[data-msg-id]'
-                              ) ?? []
-                            ).find((node) => node.getAttribute('data-msg-id') === targetId);
-                            if (el) {
-                              el.scrollIntoView({
-                                block: 'center',
-                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
-                                  .matches
-                                  ? 'auto'
-                                  : 'smooth',
-                              });
-                            }
-                          }}
-                          className="flex-1 min-w-0 text-left rounded-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                          aria-label={t('agent.actions.jumpToMessage', 'Jump to message')}
-                        >
-                          <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
-                            {content || '…'}
-                          </p>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (event.id) togglePinEvent(event.id);
-                          }}
-                          className="touch-target flex-shrink-0 p-1.5 rounded-md text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-[color,opacity] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                          aria-label={t('agent.actions.unpin', 'Unpin')}
-                        >
-                          <PinOff size={12} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+<PinnedMessages
+            pinned={pinnedMessages}
+            onJump={(id) => {
+              const el = Array.from(
+                containerRef.current?.querySelectorAll<HTMLElement>('[data-msg-id]') ?? []
+              ).find((node) => node.getAttribute('data-msg-id') === id);
+              if (el) {
+                el.scrollIntoView({
+                  block: 'center',
+                  behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                    ? 'auto'
+                    : 'smooth',
+                });
+              }
+            }}
+            onUnpin={togglePinEvent}
+          />
 
           {/* Message Container with Content */}
           {includeContent && !showLoadingState && !showEmptyState && (

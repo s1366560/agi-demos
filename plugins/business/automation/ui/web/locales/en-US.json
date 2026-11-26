@@ -322,7 +322,14 @@
     "refresh": "Refresh",
     "retry": "Retry",
     "close": "Close",
-    "save": "Save"
+    "save": "Save",
+    "actions": {
+      "label": "Actions"
+    },
+    "discard": "Discard",
+    "done": "Done",
+    "edit": "Edit",
+    "loading": "Loading…"
   },
   "agent": {
     "patternList": {

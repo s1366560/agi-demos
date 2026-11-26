@@ -421,6 +421,23 @@ describe('TenantHeader', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2/overview');
   });
 
+  it('lands tenant switching on the section chosen by the host layout', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+        landing="projects"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'User menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2/projects');
+  });
+
   it('does not reload the current tenant from the user dropdown', () => {
     render(
       <TenantHeader

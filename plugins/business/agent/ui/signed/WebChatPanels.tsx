@@ -12,47 +12,14 @@ import { InteractionPanel } from './InteractionPanel';
 import { invoke } from './reviewAuthority';
 import type { Chat } from './useChat';
 
+/** The task pane. The page reads the list once, for this pane and for the status bar. */
 export function SignedTaskList({
-  conversation,
-  active,
+  tasks,
+  failure,
 }: {
-  conversation: string;
-  active: boolean;
+  tasks: AgentTask[];
+  failure: string;
 }) {
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [failure, setFailure] = useState('');
-  useEffect(() => {
-    setTasks([]);
-    setFailure('');
-    if (!conversation) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function load() {
-      try {
-        const result = await invoke<{ tasks: AgentTask[] }>(
-          'chat-project-context',
-          {
-            view: 'tasks',
-            conversation_id: conversation,
-          },
-          { signal: controller.signal }
-        );
-        if (!controller.signal.aborted) {
-          setFailure('');
-          setTasks(result.tasks);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) setFailure(String(error));
-      } finally {
-        if (active && !controller.signal.aborted) timer = setTimeout(load, 1800);
-      }
-    }
-    void load();
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [conversation, active]);
   return failure ? <div role="alert">{failure}</div> : <TaskList tasks={tasks} />;
 }
 

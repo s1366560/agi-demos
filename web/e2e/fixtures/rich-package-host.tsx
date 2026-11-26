@@ -196,6 +196,7 @@ createRoot(document.getElementById('root')!).render(
   <RichPackagePages
     scope={{ tenantId: 't', projectId: 'p' }}
     target={target}
+    diagnostics={location.search === '?upgrade'}
     invokeDevice={chat ? chatRuntime.device : undefined}
     streamCommand={
       chat

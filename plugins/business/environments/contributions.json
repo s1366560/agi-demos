@@ -361,7 +361,7 @@
       ],
       "entry": {
         "path": "ui/project-sandbox.js",
-        "digest": "sha256:1546e5c9cca98de0adf5253a8e8be2849cf49e9bc4d8371f70e7ffd9c63dfda3"
+        "digest": "sha256:ec37e3bbd127209219c7480db21d6c3320b980c84f457f05a702048831595abe"
       },
       "commands": [
         "sandbox-status",
@@ -432,7 +432,7 @@
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
       },
       "commands": [
         "environment-inventory",
@@ -466,7 +466,7 @@
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
       },
       "commands": [
         "environment-inventory"
@@ -493,7 +493,7 @@
       ],
       "entry": {
         "path": "ui/clusters-web.js",
-        "digest": "sha256:b2bb173880c68efb77220e13d61e9758278c803a5da336e7fee2c10a2e264dfe"
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
       },
       "commands": [
         "environment-inventory",
@@ -547,7 +547,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/interaction.js",
-        "digest": "sha256:3274a315356a43e0fec2f0e6cd19c4158913f77ceb9f35c319e7f3920a441094"
+        "digest": "sha256:1eabf27c07735cb449d7b0c65379750e641945ca44e7ea0a0635ed4c54166f19"
       },
       "style": {
         "path": "ui/interaction.css",
@@ -580,7 +580,7 @@
       ],
       "entry": {
         "path": "ui/tenant-deploy.js",
-        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
       },
       "style": {
         "path": "ui/tenant-deploy.css",
@@ -607,7 +607,7 @@
       ],
       "entry": {
         "path": "ui/tenant-deploy.js",
-        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
       },
       "style": {
         "path": "ui/tenant-deploy.css",
@@ -633,7 +633,7 @@
       ],
       "entry": {
         "path": "ui/tenant-deploy.js",
-        "digest": "sha256:1478c4931aaf8505d999a759a4717ad8ac0eb15405d2f440bfecab4e0aea9fec"
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
       },
       "style": {
         "path": "ui/tenant-deploy.css",
@@ -663,7 +663,7 @@
       ],
       "entry": {
         "path": "ui/runtime-pool.js",
-        "digest": "sha256:b76b8bde811a42ac3878dde88467e8945b802ed094df279bb7aa730a2ea1bd49"
+        "digest": "sha256:f4457fb50742c610b4672ae85d23234887a7144723fa910e97c178a2a9d6a4e3"
       },
       "style": {
         "path": "ui/runtime-pool.css",
@@ -692,7 +692,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/interaction.js",
-        "digest": "sha256:3274a315356a43e0fec2f0e6cd19c4158913f77ceb9f35c319e7f3920a441094"
+        "digest": "sha256:1eabf27c07735cb449d7b0c65379750e641945ca44e7ea0a0635ed4c54166f19"
       },
       "style": {
         "path": "ui/interaction.css",

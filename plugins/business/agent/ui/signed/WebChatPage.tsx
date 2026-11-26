@@ -4,11 +4,11 @@ import { SelectedSkillChip } from '../web/chat/SelectedSkillChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, ConfigProvider, theme } from 'antd';
-import enUS from 'antd/locale/en_US';
-import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/es/locale/en_US';
+import zhCN from 'antd/es/locale/zh_CN';
 import { lightTheme, darkTheme } from '../../../../../web/src/theme/antdTheme';
 import { Clock3, ListChecks } from 'lucide-react';
-import { createInstance } from 'i18next';
+import i18n from 'i18next';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import type { RichPageContext } from '../../../../../sdk/memstack-plugin-sdk/src/pageRuntime';
@@ -46,13 +46,64 @@ import {
 } from './WebChatPanels';
 import { WebComposerControls } from './WebComposerControls';
 import { useChat } from './useChat';
+import { useInteractions } from './useInteractions';
+import { latestPosition, timelineCount, transcriptRows } from './transcriptRows';
+import { foldTurns, foldableTurns } from './foldTurns';
+import { useConversationTasks } from './useConversationTasks';
+import { useTurnCollapse } from '../web/transcript/message/useTurnCollapse';
+import { PinnedMessages } from '../web/transcript/message/PinnedMessages';
+import { chatTranscriptItems } from './WebChatTranscript';
 import './webChat.css';
 
-import { WebChatMessage } from './WebChatMessage';
+/**
+ * The title of the conversation in the header. It takes the width of its text,
+ * as a plain title does, and is renamed in place.
+ */
+function ConversationTitle({
+  title,
+  label,
+  disabled,
+  onRename,
+}: {
+  title: string;
+  label: string;
+  disabled: boolean;
+  onRename: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(title);
+  return (
+    <div className="relative min-w-0">
+      <span
+        aria-hidden="true"
+        className="block invisible truncate text-sm font-medium text-slate-800 dark:text-slate-100"
+      >
+        {draft}
+      </span>
+      <input
+        className="absolute inset-0 w-full truncate bg-transparent text-sm font-medium text-slate-800 outline-none dark:text-slate-100"
+        aria-label={label}
+        title={title}
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={(event) => {
+          const value = event.currentTarget.value.trim();
+          if (value && value !== title) onRename(value);
+          else setDraft(title);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+    </div>
+  );
+}
 
 function WebChatPage({ scope }: { scope: RichPageContext }) {
   const { t } = useTranslation();
-  const chat = useChat(scope);
+  // Reasoning that streams in follows the events the page has read so far.
+  const read = useRef<[number, number] | undefined>(undefined);
+  const chat = useChat(scope, () => read.current);
   const slash = useSlashCommand({ onSend: (text) => void chat.send(text), onInputClear: () => chat.setDraft('') });
   const sendDraft = () => void chat.send(chat.draft, slash.selectedSkill?.name);
   const resetSlash = slash.resetSlash;
@@ -90,6 +141,67 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
   const refill = (value: string) => {
     chat.setDraft(value);
     input.current?.focus();
+  };
+  const interactionsEnabled =
+    chat.selectedRow?.execution_target === 'cloud' &&
+    scope.commands.includes('chat-interactions');
+  const interactions = useInteractions(chat.selected, !!chat.run, interactionsEnabled, chat.page);
+  useEffect(() => {
+    read.current = latestPosition(interactions.events);
+  }, [interactions.events]);
+  const rows = useMemo(
+    () => transcriptRows(chat.messages, chat.thoughts, interactions.events),
+    [chat.messages, chat.thoughts, interactions.events]
+  );
+  // The task list is read once, for the status bar and for the task pane.
+  const tasks = useConversationTasks(
+    chat.selected,
+    !!chat.run,
+    scope.commands.includes('chat-project-context')
+  );
+  // Rows of the timeline the way the original workbench counts them.
+  const count = useMemo(
+    () =>
+      timelineCount(
+        chat.messages,
+        chat.thoughts,
+        interactions.ready ? interactions.events : []
+      ),
+    [chat.messages, chat.thoughts, interactions.ready, interactions.events]
+  );
+  // A turn can be folded to one line, and an answer can be pinned above the
+  // messages, as in the original transcript.
+  const turnCollapse = useTurnCollapse(chat.selected);
+  const [pinned, setPinned] = useState<Set<string>>(() => new Set());
+  const shown = useMemo(
+    () => rows.filter((row) => row.kind !== 'message' || !hidden.has(row.id)),
+    [rows, hidden]
+  );
+  const entries = useMemo(
+    () => foldTurns(shown, turnCollapse.collapsed),
+    [shown, turnCollapse.collapsed]
+  );
+  const foldable = useMemo(() => foldableTurns(shown), [shown]);
+  const pinnedMessages = useMemo(
+    () =>
+      [...pinned]
+        .map((id) => ({ id, content: chat.messages.find((row) => row.id === id)?.content ?? '' }))
+        .filter((row) => row.content),
+    [pinned, chat.messages]
+  );
+  const togglePin = (id: string) =>
+    setPinned((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Earlier history is read together with the tool steps of the same page.
+  const loadOlder = () => {
+    const before = chat.cursor;
+    if (!before || !chat.selected || chat.loading || chat.busy) return;
+    void interactions.older(before).catch(chat.report);
+    void chat.older();
   };
   const workspace = chat.selectedRow?.workspace_id ?? new URLSearchParams(scope.search).get('workspaceId');
   const executionTarget = chat.selectedRow?.execution_target ?? chat.target;
@@ -134,6 +246,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
   useEffect(() => {
     setDraftCanvas(null);
     setHidden(new Set());
+    setPinned(new Set());
   }, [chat.selected]);
   const setLayout = (next: LayoutMode) => {
     setMode(next);
@@ -157,20 +270,12 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
         running={!!chat.run}
       />
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-        <input
-          key={chat.selected}
-          className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100"
-          aria-label={chat.label('Conversation title', '会话标题')}
-          defaultValue={chat.selectedRow.title}
-          disabled={chat.busy || !scope.commands.includes('chat-rename')}
+        <ConversationTitle
+          key={`${chat.selected}:${chat.selectedRow.title}`}
           title={chat.selectedRow.title}
-          onBlur={(event) => {
-            const value = event.target.value.trim();
-            if (value && value !== chat.selectedRow?.title) void chat.rename(value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
-          }}
+          disabled={chat.busy || !scope.commands.includes('chat-rename')}
+          label={chat.label('Conversation title', '会话标题')}
+          onRename={(value) => void chat.rename(value)}
         />
         {chat.selectedRow.created_at && (
           <span
@@ -204,20 +309,49 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
       ) : (
         <Transcript
           chat={chat}
+          older={loadOlder}
+          settled={interactions.ready}
           welcome={null}
-          render={(message) => <WebChatMessage message={message} chat={chat} refill={refill} openCode={openCode} hide={id => setHidden(current => new Set([...current, id]))} />}
-          hidden={hidden}
+          above={(jump) => (
+            <PinnedMessages
+              pinned={pinnedMessages}
+              onJump={jump}
+              onUnpin={togglePin}
+            />
+          )}
+          items={chatTranscriptItems({
+            entries,
+            chat,
+            streaming: !!chat.run,
+            refill,
+            openCode,
+            hide: (id) => setHidden((current) => new Set([...current, id])),
+            pinned,
+            onPin: togglePin,
+            foldFor: (row) => {
+              const hiddenCount = foldable.get(row.id);
+              return hiddenCount
+                ? {
+                    folded: turnCollapse.isCollapsed(row.id),
+                    hiddenCount,
+                    onToggle: () => turnCollapse.toggle(row.id),
+                  }
+                : undefined;
+            },
+            onExpand: turnCollapse.toggle,
+          })}
         >
           <InteractionPanel
             conversation={chat.selected}
-            enabled={
-              chat.selectedRow?.execution_target === 'cloud' &&
-              scope.commands.includes('chat-interactions')
-            }
+            enabled={interactionsEnabled}
+            interactions={interactions}
+            tools={false}
             active={!!chat.run}
             desktop={false}
             emptyActivity={!chat.loading && !chat.messages.length ? <EmptyConversation /> : null}
-            section={mode === 'canvas' ? 'activity' : 'all'}
+            // As in the original transcript, canvas content is shown in the canvas
+            // pane and not inside the messages.
+            section="activity"
           />
         </Transcript>
       )}
@@ -332,7 +466,8 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
         <WebChatStatus
           scope={scope}
           conversation={chat.selected}
-          count={chat.messages.length}
+          count={count}
+          tasks={tasks.tasks}
           running={!!chat.run}
         />
       }
@@ -373,7 +508,7 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
             }
             rightContent={
               mode === 'task' ? (
-                <SignedTaskList conversation={chat.selected} active={!!chat.run} />
+                <SignedTaskList tasks={tasks.tasks} failure={tasks.failure} />
               ) : mode === 'canvas' ? (
                 <SignedCanvas
                   scope={scope}
@@ -396,14 +531,15 @@ async function mount() {
   const scope = await window.memstack.getContext();
   document.documentElement.dataset.pageTarget = scope.target;
   const lng = scope.locale.startsWith('zh') ? 'zh' : 'en';
-  const instance = createInstance();
-  await instance.init({
+  // Date helpers of the shared transcript read the default instance, so the page
+  // initializes that one instead of a private instance.
+  await i18n.init({
     lng,
     resources: { [lng]: { translation: lng === 'zh' ? chinese : english } },
     interpolation: { escapeValue: false },
   });
   createRoot(document.getElementById('root')!).render(
-    <I18nextProvider i18n={instance}>
+    <I18nextProvider i18n={i18n}>
       <PageTheme scope={scope} />
     </I18nextProvider>
   );

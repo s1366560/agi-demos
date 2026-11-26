@@ -1275,5 +1275,67 @@
       "captured_one": "Captured 1 memory",
       "captured_other": "Captured {{count}} memories"
     }
+  },
+  "common": {
+    "actions": {
+      "retry": "Retry"
+    },
+    "add": "Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "create": "Create",
+    "created_at": "Created at",
+    "delete": "Delete",
+    "download": "Download",
+    "edit": "Edit",
+    "forms": {
+      "name": "Name",
+      "type": "Type"
+    },
+    "loading": "Loading…",
+    "noTenant": "No tenant selected",
+    "optional": "Optional",
+    "project": "Project",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "save": "Save",
+    "status": {
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "unknown": "Unknown"
+    },
+    "untitled": "Untitled"
+  },
+  "tenant": {
+    "backendStores": {
+      "connectionConfig": "Connection config",
+      "createFailed": "Failed to create store.",
+      "createTitle": "Create store",
+      "created": "Store created.",
+      "deleteConfirm": "Delete backend store \"{{name}}\"?",
+      "deleteFailed": "Failed to delete store.",
+      "deleted": "Store deleted.",
+      "editTitle": "Edit store",
+      "empty": "No backend stores found.",
+      "engineType": "Engine type",
+      "graph": "Graph",
+      "indexConfig": "Index config",
+      "invalidJson": "Configuration must be a JSON object.",
+      "loadFailed": "Failed to load backend stores.",
+      "readonly": "readonly",
+      "replaceMaskedSecrets": "Replace masked secret placeholders before saving connection config.",
+      "retrieval": "Retrieval",
+      "subtitle": "Manage graph and retrieval backends for project bindings.",
+      "test": "Test",
+      "testConnection": "Test connection",
+      "testFailed": "Connection test failed.",
+      "testSucceeded": "Connection test succeeded. Version: {{version}}",
+      "title": "Backend stores",
+      "updateFailed": "Failed to update store.",
+      "updated": "Store updated."
+    },
+    "projects": {
+      "loading": "Loading projects…"
+    }
   }
 }

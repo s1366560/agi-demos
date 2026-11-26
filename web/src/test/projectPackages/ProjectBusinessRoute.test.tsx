@@ -18,8 +18,22 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }));
 vi.mock('../../../../agi-stack/packages/plugin-marketplace-ui/src/RichPackagePages', () => ({
-  RichPackagePages: ({ backToMarket }: { backToMarket?: ReactNode }) => (
-    <section data-testid="signed-page">{backToMarket}</section>
+  RichPackagePages: ({
+    backToMarket,
+    pageMenu,
+    diagnostics,
+  }: {
+    backToMarket?: ReactNode;
+    pageMenu?: boolean;
+    diagnostics?: boolean;
+  }) => (
+    <section
+      data-testid="signed-page"
+      data-page-menu={String(pageMenu)}
+      data-diagnostics={String(diagnostics)}
+    >
+      {backToMarket}
+    </section>
   ),
 }));
 
@@ -59,5 +73,42 @@ describe('ProjectBusinessRoute', () => {
     expect(screen.getByTestId('signed-page')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'tenant.pluginHub.openFullWorkbench' })).toBeNull();
     expect(screen.queryByTestId('existing-route')).toBeNull();
+  });
+
+  it('leaves page navigation to the workbench shell', () => {
+    render(
+      <MemoryRouter initialEntries={[url]}>
+        <ProjectBusinessRoute insideWorkbench matchesFullRoute={() => false}>
+          <ExistingRoute />
+        </ProjectBusinessRoute>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('signed-page')).toHaveAttribute('data-page-menu', 'false');
+    expect(screen.getByTestId('signed-page')).toHaveAttribute('data-diagnostics', 'false');
+  });
+
+  it('keeps the page menu when a marketplace review opens a workbench page', () => {
+    const [pathname, search] = url.split('#')[0].split('?');
+    render(
+      <MemoryRouter
+        initialEntries={[
+          { pathname, search: `?${search}`, hash: '#form', state: { fromPackageMarket: true } },
+        ]}
+      >
+        <ProjectBusinessRoute insideWorkbench matchesFullRoute={() => false}>
+          <ExistingRoute />
+        </ProjectBusinessRoute>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('signed-page')).toHaveAttribute('data-page-menu', 'true');
+  });
+
+  it('offers the page menu outside the workbench and shows diagnostics only on request', () => {
+    mount(url.replace('?from=bookmark', '?from=bookmark&diagnostics=1'));
+
+    expect(screen.getByTestId('signed-page')).toHaveAttribute('data-page-menu', 'true');
+    expect(screen.getByTestId('signed-page')).toHaveAttribute('data-diagnostics', 'true');
   });
 });

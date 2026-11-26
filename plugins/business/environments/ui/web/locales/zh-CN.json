@@ -676,7 +676,198 @@
           "inactive": "未激活",
           "unknown": "未知"
         }
+      },
+      "genes": {
+        "addPolicy": "添加策略",
+        "addTitle": "添加基因策略",
+        "deleteConfirm": "确定删除基因策略 \"{{key}}\" 吗？此操作无法撤销。",
+        "deleteError": "基因策略删除失败",
+        "deleteSuccess": "基因策略已删除",
+        "description": "管理组织基因策略以配置智能体行为",
+        "descriptionPlaceholder": "简要描述此策略",
+        "editTitle": "编辑基因策略",
+        "empty": "尚未配置基因策略",
+        "emptyHint": "添加策略以配置组织的智能体行为。",
+        "fetchError": "加载基因策略失败",
+        "invalidJson": "策略值必须是有效的 JSON",
+        "keyRequired": "策略键为必填项",
+        "policyDescription": "描述",
+        "policyKey": "策略键",
+        "policyKeyPlaceholder": "例如：agent_behavior、memory_retention",
+        "policyValue": "策略值 (JSON)",
+        "policyValuePlaceholder": "{ \"key\": \"value\" }",
+        "saveError": "基因策略保存失败",
+        "saveSuccess": "基因策略保存成功",
+        "title": "基因策略",
+        "updatedAt": "更新于"
       }
+    },
+    "evolution": {
+      "trigger": "触发"
+    },
+    "genes": {
+      "actions": {
+        "install": "安装",
+        "rate": "评分"
+      },
+      "averageRating": "平均评分",
+      "back": "返回市场",
+      "commentPlaceholder": "留下评论…",
+      "deleteAction": "删除",
+      "description": "描述",
+      "downloads": "下载量",
+      "editAction": "编辑",
+      "editGene": "编辑基因",
+      "empty": "未找到基因",
+      "emptyGenomes": "未找到基因组",
+      "evolutionHistory": "进化历史",
+      "fetchError": "获取基因详情失败",
+      "filters": {
+        "allCategories": "所有类别",
+        "allStatus": "所有状态",
+        "allVisibility": "所有可见性",
+        "catAi": "AI",
+        "catTool": "工具",
+        "categoryLabel": "按类别筛选基因",
+        "genomeVisibilityLabel": "按可见性筛选基因组",
+        "statusLabel": "按发布状态筛选",
+        "visPrivate": "私有",
+        "visPublic": "公开",
+        "visUnlisted": "未列出",
+        "visibilityLabel": "按可见性筛选基因"
+      },
+      "genesCount": "个基因",
+      "installAction": "安装",
+      "installError": "安装基因失败",
+      "installGene": "安装基因",
+      "installSuccess": "基因安装成功",
+      "instanceLoadError": "加载实例失败",
+      "invalidJson": "无效的 JSON 格式",
+      "lastUpdated": "最近更新 {{time}}",
+      "listErrorTitle": "无法加载市场数据",
+      "manifest": "清单",
+      "noDescription": "暂无描述",
+      "noEvolutionEvents": "暂无进化事件",
+      "noInstances": "暂无可用实例",
+      "noTags": "暂无标签",
+      "notFound": "基因未找到",
+      "publish": {
+        "category": "分类",
+        "categoryPlaceholder": "tool",
+        "createDraft": "创建草稿",
+        "createDraftError": "创建基因草稿失败",
+        "createDraftSuccess": "基因草稿已创建",
+        "createGenomeDraft": "创建基因组草稿",
+        "createGenomeDraftError": "创建基因组草稿失败",
+        "createGenomeDraftSuccess": "基因组草稿已创建",
+        "descriptionPlaceholder": "描述此基因的能力和适用场景",
+        "geneSlugs": "包含的基因 Slug",
+        "geneSlugsPlaceholder": "code-review, test-writer",
+        "genomeModalDescription": "通过已有基因 Slug 创建基因组草稿，确认组合后再发布。",
+        "genomeModalTitle": "创建基因组草稿",
+        "modalDescription": "先创建一个市场基因草稿，进入详情页确认内容后再发布。",
+        "modalTitle": "创建基因草稿",
+        "name": "名称",
+        "namePlaceholder": "代码审查助手",
+        "nameRequired": "基因名称不能为空",
+        "shortDescription": "简短描述",
+        "shortDescriptionPlaceholder": "一句话概述",
+        "slug": "Slug",
+        "slugPlaceholder": "code-review-assistant",
+        "slugRequired": "基因 Slug 不能为空",
+        "tags": "标签",
+        "tagsPlaceholder": "review, quality, automation",
+        "version": "版本",
+        "visibility": "可见性"
+      },
+      "publishButton": "发布基因",
+      "publishGenomeButton": "创建基因组",
+      "ratingRequired": "评分不能为空",
+      "searchGenomesPlaceholder": "搜索基因组…",
+      "searchPlaceholder": "搜索基因…",
+      "statusDraft": "草稿",
+      "statusPublished": "已发布",
+      "subtitle": "发现并安装实例基因",
+      "tabs": {
+        "genes": "基因",
+        "genomes": "基因组"
+      },
+      "tags": "标签",
+      "title": "基因市场",
+      "triggeredBy": "触发者",
+      "updateError": "更新基因失败",
+      "updateSuccess": "基因已更新",
+      "versionRequired": "版本不能为空"
+    },
+    "genomeDetail": {
+      "configOverride": "配置覆盖 (JSON)",
+      "configOverridePlaceholder": "{\"key\": \"value\"}",
+      "configTitle": "配置",
+      "deleteAction": "删除",
+      "editAction": "编辑",
+      "editGenome": "编辑基因组",
+      "fields": {
+        "createdAt": "创建时间",
+        "description": "描述",
+        "id": "基因组 ID",
+        "rating": "评分",
+        "status": "状态",
+        "updatedAt": "更新时间",
+        "visibility": "可见性"
+      },
+      "genesTitle": "包含的基因",
+      "installAction": "安装",
+      "loadFailed": "加载基因组失败",
+      "loadingGenes": "正在加载包含的基因…",
+      "missingGenesTitle": "部分引用的基因不可用",
+      "noAvailableGenes": "包含的基因均不可用",
+      "noGenes": "该基因组暂无基因",
+      "notFound": "未找到基因组",
+      "rateAction": "评分",
+      "updateError": "更新基因组失败",
+      "updateSuccess": "基因组已更新"
+    },
+    "runtimes": {
+      "autoRefresh": "15 秒自动刷新",
+      "cards": {
+        "capacityUnavailable": "租户容量不可用",
+        "hotWarmCold": "Hot / Warm / Cold",
+        "memory": "内存",
+        "poolTotal": "Pool 总数",
+        "readyExecuting": "Ready / Executing",
+        "sandboxHealth": "沙箱健康",
+        "sandboxMemory": "沙箱内存",
+        "sandboxes": "沙箱",
+        "unhealthy": "不健康"
+      },
+      "columns": {
+        "health": "健康状态",
+        "identifier": "标识符",
+        "kind": "类型",
+        "lastActivity": "最后活动",
+        "loadMemory": "负载 / 内存",
+        "scope": "租户 / 项目",
+        "status": "状态",
+        "tier": "层级"
+      },
+      "description": "统一查看 Agent Pool Actor 和项目沙箱。此页面为只读视图，生命周期操作请在对应专用页面执行。",
+      "empty": "暂无运行时实例",
+      "errors": {
+        "poolForbiddenDescription": "Agent Pool 数据仅对全局管理员开放。租户级账号无法查看 Pool 状态与实例，自动刷新已暂停。",
+        "poolForbiddenTitle": "需要全局管理员权限",
+        "poolInstances": "Pool 实例不可用",
+        "poolStatus": "Pool 状态不可用",
+        "projectSandboxes": "项目沙箱不可用",
+        "sandboxMetrics": "沙箱指标部分不可用",
+        "sandboxMetricsDescription": "{{count}} 个运行中的沙箱行缺少实时资源指标。"
+      },
+      "instances": "实例",
+      "kind": {
+        "poolActor": "Pool Actor",
+        "sandbox": "Sandbox"
+      },
+      "sandboxHealthValue": "{{healthy}} 健康 / {{attention}} 需关注",
+      "title": "运行时"
     }
   },
   "admin": {
@@ -849,8 +1040,47 @@
     "retry": "重试",
     "refresh": "刷新",
     "actions": {
-      "viewAll": "查看全部"
-    }
+      "viewAll": "查看全部",
+      "checkHealth": "检查健康",
+      "label": "操作",
+      "no": "否",
+      "yes": "是"
+    },
+    "back": "返回",
+    "cancel": "取消",
+    "confirm": "确认",
+    "copied": "已复制",
+    "copy": "复制",
+    "delete": "删除",
+    "discard": "放弃更改",
+    "download": "下载",
+    "edit": "编辑",
+    "error": "错误",
+    "forms": {
+      "name": "名称",
+      "status": "状态"
+    },
+    "more": "更多",
+    "moreActions": "更多操作",
+    "no": "否",
+    "noTenant": "未选择租户",
+    "notFound": "未找到",
+    "pagination": {
+      "label": "分页",
+      "total": "共 {{total}} 条"
+    },
+    "refreshed": "已刷新",
+    "remove": "移除",
+    "save": "保存",
+    "search": "搜索",
+    "stats": {
+      "nodes": "节点"
+    },
+    "time": {
+      "never": "从不"
+    },
+    "view": "查看",
+    "yes": "是"
   },
   "project": {
     "settings": {
@@ -886,5 +1116,93 @@
       "desktopLabel": "远程桌面",
       "sandboxNotProvisioned": "请先准备项目沙箱"
     }
+  },
+  "agent": {
+    "sandbox": {
+      "action": {
+        "refresh": "刷新",
+        "restart": "重启",
+        "stop": "停止",
+        "stopConfirmDesc": "此操作将销毁沙箱容器，其中未保存的工作将丢失。",
+        "stopConfirmOk": "停止容器",
+        "stopConfirmTitle": "停止沙箱容器？"
+      },
+      "click_to_start": "点击启动沙箱环境",
+      "duration": {
+        "hours": "小时",
+        "minutes": "分",
+        "seconds": "秒"
+      },
+      "label": "沙箱环境",
+      "loading": "加载中…",
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "内存",
+        "network": "网络",
+        "processes": "进程",
+        "uptime": "运行时间"
+      },
+      "status": {
+        "creating": "创建中",
+        "creating_desc": "正在创建沙箱容器",
+        "error": "错误",
+        "error_desc": "沙箱遇到错误",
+        "not_started": "未启动",
+        "pending_desc": "沙箱正在排队启动",
+        "running": "运行中",
+        "running_desc": "沙箱运行正常",
+        "starting": "启动中…",
+        "stopped": "已停止",
+        "stopped_desc": "沙箱已停止，点击可重启",
+        "terminated": "已终止",
+        "terminated_desc": "沙箱已终止",
+        "unhealthy": "不健康",
+        "unhealthy_desc": "沙箱健康检查失败",
+        "waiting": "等待中"
+      },
+      "toast": {
+        "restart_failed": "重启沙箱失败",
+        "restarted": "沙箱已重启",
+        "start_failed": "启动沙箱失败",
+        "started": "沙箱已启动",
+        "stop_failed": "停止沙箱失败",
+        "stopped": "沙箱已停止",
+        "unknown_error": "未知错误"
+      }
+    },
+    "templates": {
+      "all": "全部",
+      "builtIn": "内置",
+      "categoryFilter": "分类筛选",
+      "install": "安装",
+      "installError": "安装模板失败",
+      "installed": "已安装子智能体: {{name}}",
+      "installing": "安装中…",
+      "loadError": "加载模板失败",
+      "marketplace": "模板市场",
+      "marketplaceDesc": "浏览并安装子智能体模板，扩展智能体能力。",
+      "noDescription": "暂无描述",
+      "noResults": "未找到模板",
+      "search": "搜索模板…",
+      "seedBuiltin": "初始化内置模板",
+      "seedError": "初始化模板失败",
+      "seeded": "已初始化 {{count}} 个模板",
+      "seeding": "初始化中…",
+      "viewDetails": "查看 {{name}} 的详情"
+    }
+  },
+  "gene": {
+    "deleteReview": "删除评价",
+    "deleteReviewConfirm": "确定要删除这条评价吗？",
+    "noReviews": "暂无评价。成为第一个评价的人吧！",
+    "reviewContent": "评价内容",
+    "reviewDeleteError": "评价删除失败",
+    "reviewDeleteSuccess": "评价删除成功",
+    "reviewPlaceholder": "分享您对这个基因的想法…",
+    "reviewSubmitError": "评价提交失败",
+    "reviewSubmitSuccess": "评价提交成功",
+    "reviews": "评价",
+    "writeReview": "写评价",
+    "yourRating": "您的评分"
   }
 }

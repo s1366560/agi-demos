@@ -34,7 +34,6 @@ import {
   ChevronUp,
   Clock,
   FileOutput,
-  Lightbulb,
   Loader2,
   PanelRight,
   RefreshCw,
@@ -50,7 +49,6 @@ import { useCurrentTenant } from '@/stores/tenant';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
-import { useLocaleNumberFormat } from '@/i18n/formatters';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 import { formatFileSize, formatDurationMs } from '@/utils/format';
@@ -66,7 +64,8 @@ import { useMarkdownPlugins } from '@/components/agent/chat/markdownPlugins';
 import { MessageActionBar } from '@/components/agent/chat/MessageActionBar';
 import { safeMarkdownComponents } from '@/components/agent/chat/safeMarkdownComponents';
 import { SaveTemplateModal } from '@/components/agent/chat/SaveTemplateModal';
-import { InlineHITLCard } from '@/components/agent/InlineHITLCard';
+import { InlineEvent, PermissionRequestCard, Thought } from './inlineEvents';
+import { ExecutionSummaryPanel } from './ExecutionSummaryPanel';
 import {
   ASSISTANT_AVATAR_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
@@ -84,7 +83,6 @@ import type {
   MessageBubbleRootProps,
   TextDeltaProps,
   TextEndProps,
-  ThoughtProps,
   ToolExecutionProps,
   UserMessageProps,
   WorkPlanProps,
@@ -94,35 +92,13 @@ import type {
   Artifact,
   ArtifactCreatedEvent,
   ArtifactReference,
-  ClarificationAskedEventData,
-  DecisionAskedEventData,
-  EnvVarRequestedEventData,
   ObserveEvent,
-  PermissionAskedEventData,
-  PermissionAskedTimelineEvent,
-  PermissionRequestedTimelineEvent,
   TimelineEvent,
 } from '@/types/agent';
 
 // ========================================
 // Utilities
 // ========================================
-
-const COUNT_FORMATTER_FALLBACK = new Intl.NumberFormat('en-US');
-const SUMMARY_PILL_CLASSES =
-  'inline-flex items-center gap-1 rounded-full border border-slate-200/60 bg-slate-50/80 px-2.5 py-1 text-xs text-neutral-600 dark:border-slate-800/60 dark:bg-slate-800/50';
-
-const formatCount = (
-  value: number,
-  formatter: Intl.NumberFormat = COUNT_FORMATTER_FALLBACK
-): string => formatter.format(value);
-
-const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <span className={SUMMARY_PILL_CLASSES}>
-    <span className="text-neutral-500">{label}</span>
-    <span className="font-medium text-neutral-800">{value}</span>
-  </span>
-);
 
 const USER_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%]';
 const SANDBOX_FILE_LINK_PREFIX = '#sandbox-file:';
@@ -462,179 +438,6 @@ function useSaveTemplate(content: string) {
     [content, createTemplate, tenantId, t]
   );
 }
-
-const ExecutionSummaryPanel: React.FC<{
-  summary: ReturnType<typeof normalizeExecutionSummary>;
-}> = ({ summary }) => {
-  const { t } = useTranslation();
-  const countFormatter = useLocaleNumberFormat();
-  if (!summary) {
-    return null;
-  }
-
-  const taskSummary = summary.tasks;
-  const hasVisibleSummary =
-    summary.stepCount > 0 ||
-    summary.artifactCount > 0 ||
-    summary.callCount > 0 ||
-    summary.totalTokens.total > 0 ||
-    Boolean(taskSummary && taskSummary.total > 0);
-  if (!hasVisibleSummary) {
-    return null;
-  }
-
-  return (
-    <div className="mb-3 flex flex-wrap gap-2">
-      {summary.stepCount > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.steps', 'Steps')}
-          value={formatCount(summary.stepCount, countFormatter)}
-        />
-      ) : null}
-      {taskSummary ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.tasks', 'Tasks')}
-          value={`${formatCount(taskSummary.completed, countFormatter)}/${formatCount(taskSummary.total, countFormatter)}`}
-        />
-      ) : null}
-      {taskSummary && taskSummary.remaining > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.remaining', 'Remaining')}
-          value={formatCount(taskSummary.remaining, countFormatter)}
-        />
-      ) : null}
-      {summary.artifactCount > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.artifacts', 'Artifacts')}
-          value={formatCount(summary.artifactCount, countFormatter)}
-        />
-      ) : null}
-      {summary.callCount > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.llmCalls', 'LLM calls')}
-          value={formatCount(summary.callCount, countFormatter)}
-        />
-      ) : null}
-      {summary.totalTokens.total > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.tokens', 'Tokens')}
-          value={formatCount(summary.totalTokens.total, countFormatter)}
-        />
-      ) : null}
-      {summary.totalCost > 0 ? (
-        <SummaryPill
-          label={t('agent.messageBubble.pill.cost', 'Cost')}
-          value={summary.totalCostFormatted}
-        />
-      ) : null}
-    </div>
-  );
-};
-
-// ========================================
-// HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
-// ========================================
-// HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
-// ========================================
-
-/**
- * Convert ClarificationAskedTimelineEvent to ClarificationAskedEventData (snake_case)
- */
-const toClarificationData = (event: TimelineEvent): ClarificationAskedEventData | undefined => {
-  if (event.type !== 'clarification_asked') return undefined;
-  const e = event as TimelineEvent & {
-    requestId: string;
-    question: string;
-    clarificationType: string;
-    options: unknown[];
-    allowCustom: boolean;
-    context?: Record<string, unknown> | undefined;
-  };
-  return {
-    request_id: e.requestId,
-    question: e.question,
-    clarification_type: e.clarificationType as ClarificationAskedEventData['clarification_type'],
-    options: e.options as ClarificationAskedEventData['options'],
-    allow_custom: e.allowCustom,
-    context: e.context || {},
-  };
-};
-
-/**
- * Convert DecisionAskedTimelineEvent to DecisionAskedEventData (snake_case)
- */
-const toDecisionData = (event: TimelineEvent): DecisionAskedEventData | undefined => {
-  if (event.type !== 'decision_asked') return undefined;
-  const e = event as TimelineEvent & {
-    requestId: string;
-    question: string;
-    decisionType: string;
-    options: unknown[];
-    allowCustom?: boolean | undefined;
-    context?: Record<string, unknown> | undefined;
-    defaultOption?: string | undefined;
-  };
-  return {
-    request_id: e.requestId,
-    question: e.question,
-    decision_type: e.decisionType as DecisionAskedEventData['decision_type'],
-    options: e.options as DecisionAskedEventData['options'],
-    allow_custom: e.allowCustom || false,
-    context: e.context || {},
-    default_option: e.defaultOption,
-  };
-};
-
-/**
- * Convert EnvVarRequestedTimelineEvent to EnvVarRequestedEventData (snake_case)
- */
-const toEnvVarData = (event: TimelineEvent): EnvVarRequestedEventData | undefined => {
-  if (event.type !== 'env_var_requested') return undefined;
-  const e = event as TimelineEvent & {
-    requestId: string;
-    toolName: string;
-    fields: EnvVarRequestedEventData['fields'];
-    message?: string | undefined;
-    context?: Record<string, unknown> | undefined;
-  };
-  return {
-    request_id: e.requestId,
-    tool_name: e.toolName,
-    fields: e.fields,
-    message: e.message,
-    context: e.context,
-  };
-};
-
-/**
- * Convert PermissionAskedTimelineEvent to PermissionAskedEventData (snake_case)
- * Supports both 'permission_asked' (SSE) and 'permission_requested' (DB) event types
- */
-const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | undefined => {
-  if (event.type !== 'permission_asked' && event.type !== 'permission_requested') return undefined;
-  const e = event;
-  if (event.type === 'permission_asked') {
-    const asked = e as PermissionAskedTimelineEvent;
-    return {
-      request_id: asked.requestId,
-      tool_name: asked.toolName,
-      permission_type: 'ask',
-      description: asked.description,
-      risk_level: asked.riskLevel,
-      context: asked.context,
-    };
-  } else {
-    const requested = e as PermissionRequestedTimelineEvent;
-    return {
-      request_id: requested.requestId,
-      tool_name: requested.resource || 'unknown',
-      permission_type: 'ask',
-      description: requested.reason || requested.action || '',
-      risk_level: requested.riskLevel,
-      context: requested.context,
-    };
-  }
-};
 
 // ========================================
 // Utilities
@@ -1092,56 +895,6 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content, timestamp }) => {
   );
 });
 TextDelta.displayName = 'MessageBubble.TextDelta';
-
-// Thought/Reasoning Component - Modern pill style
-const Thought: React.FC<ThoughtProps> = memo(({ content, timestamp }) => {
-  const [expanded, setExpanded] = useState(true);
-  const { t } = useTranslation();
-
-  if (!content) return null;
-  // Reasoning payloads often start with a blank line; whitespace-pre-wrap would
-  // render it as a phantom gap between the header and the text.
-  const reasoningText = content.trim();
-  if (!reasoningText) return null;
-
-  return (
-    <div className="flex items-start gap-3 pb-1">
-      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-        <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
-      </div>
-      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/45 dark:border-slate-700/45 rounded-md overflow-hidden">
-          <button
-            type="button"
-            onClick={() => {
-              setExpanded(!expanded);
-            }}
-            aria-expanded={expanded}
-            className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
-          >
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {t('agent.messageBubble.reasoning', 'Reasoning')}
-            </span>
-            <MessageTime timestamp={timestamp} className="ml-auto" />
-            {expanded ? (
-              <ChevronUp size={14} className="text-slate-400" />
-            ) : (
-              <ChevronDown size={14} className="text-slate-400" />
-            )}
-          </button>
-          {expanded && (
-            <div className="px-4 pb-3 pt-0.5">
-              <p className="text-xs leading-5 text-slate-500 dark:text-slate-400 whitespace-pre-wrap">
-                {reasoningText}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-Thought.displayName = 'MessageBubble.Thought';
 
 // Tool Execution Component - Modern collapsible card
 const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent }) => {
@@ -1765,19 +1518,11 @@ const getContent = (event: TimelineEvent): string => {
 };
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
-  ({ event, isStreaming, allEvents, isPinned, onPin, onReply, onRetry, onEdit, onDelete }) => {
-    const { t } = useTranslation();
+    ({ event, isStreaming, allEvents, isPinned, onPin, onReply, onRetry, onEdit, onDelete }) => {
     switch (event.type) {
       case 'error':
-        return (
-          <div
-            role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-          >
-            <p className="font-medium">{t('agent.chat.errors.title')}</p>
-            <p className="whitespace-pre-wrap break-words">{event.message}</p>
-          </div>
-        );
+        return <InlineEvent event={event} />;
+
       case 'user_message': {
         const rawContent = getContent(event);
         // Check for System Instruction prefix for SubAgent delegation
@@ -1881,230 +1626,22 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         );
 
       // HITL Events - Render inline cards
-      case 'clarification_asked': {
-        const clarificationData = toClarificationData(event);
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          expiresAt?: string | undefined;
-          createdAt?: string | undefined;
-          answered?: boolean | undefined;
-          answer?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="clarification"
-            requestId={e.requestId || clarificationData?.request_id || ''}
-            clarificationData={clarificationData}
-            isAnswered={e.answered === true}
-            answeredValue={e.answer}
-            expiresAt={e.expiresAt}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
+      case 'clarification_asked':
+      case 'clarification_answered':
+      case 'decision_asked':
+      case 'decision_answered':
+      case 'env_var_requested':
+      case 'env_var_provided':
+        return <InlineEvent event={event} />;
 
-      case 'clarification_answered': {
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          answer?: string | undefined;
-          createdAt?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="clarification"
-            requestId={e.requestId || ''}
-            isAnswered={true}
-            answeredValue={e.answer}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'decision_asked': {
-        const decisionData = toDecisionData(event);
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          expiresAt?: string | undefined;
-          createdAt?: string | undefined;
-          answered?: boolean | undefined;
-          decision?: string | string[] | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="decision"
-            requestId={e.requestId || decisionData?.request_id || ''}
-            decisionData={decisionData}
-            isAnswered={e.answered === true}
-            answeredValue={Array.isArray(e.decision) ? e.decision.join(', ') : e.decision}
-            expiresAt={e.expiresAt}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'decision_answered': {
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          decision?: string | string[] | undefined;
-          createdAt?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="decision"
-            requestId={e.requestId || ''}
-            isAnswered={true}
-            answeredValue={Array.isArray(e.decision) ? e.decision.join(', ') : e.decision}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'env_var_requested': {
-        const envVarData = toEnvVarData(event);
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          expiresAt?: string | undefined;
-          createdAt?: string | undefined;
-          answered?: boolean | undefined;
-          values?: Record<string, string> | undefined;
-          providedVariables?: string[] | undefined;
-        };
-        const answeredVal = e.values
-          ? Object.keys(e.values).join(', ')
-          : e.providedVariables
-            ? e.providedVariables.join(', ')
-            : undefined;
-        return (
-          <InlineHITLCard
-            hitlType="env_var"
-            requestId={e.requestId || envVarData?.request_id || ''}
-            envVarData={envVarData}
-            isAnswered={e.answered === true}
-            answeredValue={answeredVal}
-            expiresAt={e.expiresAt}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'env_var_provided': {
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          variableNames?: string[] | undefined;
-          createdAt?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="env_var"
-            requestId={e.requestId || ''}
-            isAnswered={true}
-            answeredValue={e.variableNames?.join(', ')}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'permission_asked': {
-        const permissionData = toPermissionData(event);
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          expiresAt?: string | undefined;
-          createdAt?: string | undefined;
-          answered?: boolean | undefined;
-          granted?: boolean | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="permission"
-            requestId={e.requestId || permissionData?.request_id || ''}
-            permissionData={permissionData}
-            isAnswered={e.answered === true}
-            answeredGranted={e.granted === true}
-            answeredValue={
-              e.granted !== undefined
-                ? e.granted
-                  ? t('agent.messageBubble.granted', 'Granted')
-                  : t('agent.messageBubble.denied', 'Denied')
-                : undefined
-            }
-            expiresAt={e.expiresAt}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
-      case 'permission_replied': {
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          granted?: boolean | undefined;
-          createdAt?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="permission"
-            requestId={e.requestId || ''}
-            isAnswered={true}
-            answeredGranted={e.granted === true}
-            answeredValue={
-              e.granted
-                ? t('agent.messageBubble.granted', 'Granted')
-                : t('agent.messageBubble.denied', 'Denied')
-            }
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
-
+      case 'permission_asked':
       case 'permission_requested': {
-        const permissionData = toPermissionData(event);
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          expiresAt?: string | undefined;
-          createdAt?: string | undefined;
-          answered?: boolean | undefined;
-          granted?: boolean | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="permission"
-            requestId={e.requestId || permissionData?.request_id || ''}
-            permissionData={permissionData}
-            isAnswered={e.answered === true}
-            answeredGranted={e.granted === true}
-            answeredValue={
-              e.granted !== undefined
-                ? e.granted
-                  ? t('agent.messageBubble.granted', 'Granted')
-                  : t('agent.messageBubble.denied', 'Denied')
-                : undefined
-            }
-            expiresAt={e.expiresAt}
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
+        return <PermissionRequestCard event={event} />;
       }
 
-      case 'permission_granted': {
-        const e = event as TimelineEvent & {
-          requestId?: string | undefined;
-          granted?: boolean | undefined;
-          createdAt?: string | undefined;
-        };
-        return (
-          <InlineHITLCard
-            hitlType="permission"
-            requestId={e.requestId || ''}
-            isAnswered={true}
-            answeredGranted={e.granted === true}
-            answeredValue={
-              e.granted
-                ? t('agent.messageBubble.granted', 'Granted')
-                : t('agent.messageBubble.denied', 'Denied')
-            }
-            createdAt={e.createdAt || String(event.timestamp)}
-          />
-        );
-      }
+      case 'permission_replied':
+      case 'permission_granted':
+        return <InlineEvent event={event} />;
 
       case 'artifact_ready':
       case 'artifact_error':

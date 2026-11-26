@@ -243,7 +243,7 @@
       ],
       "entry": {
         "path": "ui/workspaces-web.js",
-        "digest": "sha256:fdbaf67ffa8e57cc0a46393c65b20734db50407e889ca6ae4642622e7e242205"
+        "digest": "sha256:7a931dcff242ffea08a1113195412d06d290087c5b6094a17737d9d139c8dba0"
       },
       "commands": [
         "list-directory"
@@ -347,7 +347,7 @@
       ],
       "entry": {
         "path": "ui/project-overview-web.js",
-        "digest": "sha256:12bddbd123965a65f0fa0fd9ab4dcdf99a4dd2ddebaac4f59f214fc9a1f84d8b"
+        "digest": "sha256:83e3ad2a897c8c2230b46e62d34549aade333b3ff894c24fa63275d314de048b"
       },
       "device_tools": [],
       "style": {
@@ -378,7 +378,7 @@
       ],
       "entry": {
         "path": "ui/workspace-create-web.js",
-        "digest": "sha256:c7812295417e02a30053a0938e6aecc7fb6b7515eb90bac3f1016d8f1ccbae5b"
+        "digest": "sha256:2e8153d46cdd7ce46ed5ae45e4500b8eb9e4f12775d288f173568208effdb7d2"
       },
       "commands": [
         "create-workspace"
@@ -411,7 +411,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -448,7 +448,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -485,7 +485,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -522,7 +522,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -559,7 +559,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -600,7 +600,7 @@
       ],
       "entry": {
         "path": "ui/blackboard-web.js",
-        "digest": "sha256:ae80f20d1dd634dadbb8a400dd4f70148b1b06ed07d02a7c1a535e66feca5dd5"
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
       },
       "device_tools": [],
       "style": {
@@ -631,7 +631,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/group-chat.js",
-        "digest": "sha256:90ef27f52ae419587060b10d77cd558f9b90c1556ac4aba0299176327cc5eba4"
+        "digest": "sha256:04c6fb1aab3ea3f6436f0b93607e33c4aa6a0a1e0d32560f162ec98f279d63c5"
       },
       "style": {
         "path": "ui/group-chat.css",

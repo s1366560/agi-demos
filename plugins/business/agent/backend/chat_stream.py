@@ -22,6 +22,9 @@ def _project_message(event: dict[str, Any], run_id: str) -> dict[str, Any] | Non
         return {"type": "text_delta", "text": data["delta"]}
     if kind == "assistant_message" and isinstance(data.get("content"), str):
         return {"type": "assistant_message", "text": data["content"]}
+    # Reasoning is streamed ahead of the answer it leads to, as in the original transcript.
+    if kind == "thought" and isinstance(data.get("thought"), str):
+        return {"type": "thought", "text": data["thought"]}
     if kind in {"complete", "cancelled", "agent_stopped"}:
         return {"type": "complete"}
     return None

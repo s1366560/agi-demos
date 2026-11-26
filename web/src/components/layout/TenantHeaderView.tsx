@@ -61,6 +61,8 @@ export interface TenantHeaderProps {
   onSidebarToggle: () => void;
   onMobileMenuOpen: () => void;
   projectId?: string | undefined;
+  /** Tenant section opened when the user switches tenant. */
+  landing?: string | undefined;
   onCommandPaletteOpen?: (() => void) | undefined;
 }
 
@@ -103,6 +105,7 @@ export const TenantHeaderView: React.FC<
   onSidebarToggle,
   onMobileMenuOpen,
   projectId,
+  landing = 'overview',
   onCommandPaletteOpen,
 }) => {
   const { t } = useTranslation();
@@ -240,7 +243,7 @@ export const TenantHeaderView: React.FC<
             <SearchButton searchPath={searchPath} />
             {backgroundTasks}
             <NotificationDropdown />
-            <HeaderUserMenu tenantId={tenantId} currentTenant={currentTenant} />
+            <HeaderUserMenu tenantId={tenantId} currentTenant={currentTenant} landing={landing} />
           </div>
         </div>
       </header>
@@ -522,9 +525,11 @@ function SearchButton({ searchPath }: { searchPath: string | null }) {
 function HeaderUserMenu({
   tenantId,
   currentTenant,
+  landing,
 }: {
   tenantId: string;
   currentTenant: Tenant | null;
+  landing: string;
 }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -604,7 +609,7 @@ function HeaderUserMenu({
       return;
     }
     clearProjects();
-    void navigate(`/tenant/${tenant.id}/overview`);
+    void navigate(`/tenant/${tenant.id}/${landing}`);
   };
 
   const cycleTheme = () => {

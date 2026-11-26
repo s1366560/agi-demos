@@ -2,8 +2,8 @@ import { createRoot } from 'react-dom/client';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import { TenantAgentDashboardContent } from '../web/tenant/TenantAgentDashboardContent';
-import en from '../../../../../web/src/locales/en-US.json';
-import zh from '../../../../../web/src/locales/zh-CN.json';
+import en from '../web/locales/en-US.json';
+import zh from '../web/locales/zh-CN.json';
 import './webDashboard.css';
 
 void window.memstack.getContext().then(async (scope) => {

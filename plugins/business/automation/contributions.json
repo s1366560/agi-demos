@@ -635,7 +635,7 @@
       ],
       "entry": {
         "path": "ui/playbooks-web.js",
-        "digest": "sha256:3e73fb3057aa15c3628fbe7384a4855020b57b9fc2b4a96ce60fa4c99cc3c8f2"
+        "digest": "sha256:a6513f9d60f0a4eca21b25da6eca3906a324911f69b08d5d5fffbe82c775a3e2"
       },
       "commands": [
         "list-playbooks",
@@ -661,7 +661,7 @@
       ],
       "entry": {
         "path": "ui/cron-jobs.js",
-        "digest": "sha256:103a0b13979b7de7e0d49d6e4ee79fc745740c1ce580a5428aab6006416de32e"
+        "digest": "sha256:c6ba02e719bcdc0c67eb47711d2ba95cae3d76a518695989bcf1cdfe1a6fa6b0"
       },
       "commands": [
         "list-schedules",
@@ -698,7 +698,7 @@
       ],
       "entry": {
         "path": "ui/workflow-patterns.js",
-        "digest": "sha256:0ca4adc2868021e666a2d05d36b85278de3568c2db57dc7e59d44a88c8e8a482"
+        "digest": "sha256:ec2a6957b880e4b713afa4ac30f572d4360d9d089c5899d0c688394c918333d6"
       },
       "style": {
         "path": "ui/workflow-patterns.css",
@@ -723,7 +723,7 @@
       ],
       "entry": {
         "path": "ui/tenant-activity.js",
-        "digest": "sha256:855738aeceffe533c9edc007b90216bf74091f2981211c8c996ae6ed320cc749"
+        "digest": "sha256:63b4c5d4aebbb0d8acd6c317c18aea5b5782ea9eee54c8597b533f78f4ecd060"
       },
       "style": {
         "path": "ui/tenant-activity.css",
@@ -752,7 +752,7 @@
       ],
       "entry": {
         "path": "ui/tenant-activity.js",
-        "digest": "sha256:855738aeceffe533c9edc007b90216bf74091f2981211c8c996ae6ed320cc749"
+        "digest": "sha256:63b4c5d4aebbb0d8acd6c317c18aea5b5782ea9eee54c8597b533f78f4ecd060"
       },
       "style": {
         "path": "ui/tenant-activity.css",

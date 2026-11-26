@@ -1,6 +1,6 @@
 import { App, ConfigProvider, theme } from 'antd';
-import enUS from 'antd/locale/en_US';
-import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/es/locale/en_US';
+import zhCN from 'antd/es/locale/zh_CN';
 import { createInstance } from 'i18next';
 import { createRoot } from 'react-dom/client';
 import { I18nextProvider } from 'react-i18next';

@@ -1,37 +1,15 @@
 /**
  * Shared components for timeline event items.
  *
- * Contains TimeBadge, MarkdownWithSuspense, and OptionButton
- * used across multiple timeline item sub-components.
+ * Contains TimeBadge and OptionButton, used across multiple timeline item
+ * sub-components. Markdown rendering lives next door so that a step card
+ * does not have to load it.
  */
-
-import { Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '@/utils/date';
 import { getOptionDescriptionText, getOptionLabelText } from '@/utils/hitlOptionDisplay';
-
-import { MarkdownRenderer } from './MarkdownRenderer';
-
-/**
- * Suspense wrapper for MarkdownRenderer
- */
-export function MarkdownWithSuspense({ children }: { children: string }) {
-  const { t } = useTranslation();
-
-  return (
-    <Suspense
-      fallback={
-        <div className="text-slate-400">
-          {t('components.timelineItems.loadingMarkdown', { defaultValue: 'Loading…' })}
-        </div>
-      }
-    >
-      <MarkdownRenderer>{children}</MarkdownRenderer>
-    </Suspense>
-  );
-}
 
 /**
  * TimeBadge - Natural time display component with semantic time element

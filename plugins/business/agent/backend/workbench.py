@@ -59,6 +59,89 @@ class TimelineReview(History):
     view: Literal["workbench", "attachments"] = "workbench"
 
 
+# A step is placed among the messages of its turn, so every row keeps its position.
+ROW_KEYS = ("id", "type", "timestamp", "eventTimeUs", "eventCounter")
+TOOL_KEYS = (
+    "execution_id",
+    "call_id",
+    "message_id",
+    "toolName",
+    "toolInput",
+    "toolOutput",
+    "isError",
+    "execution",
+)
+PERMISSION_KEYS = (
+    "requestId",
+    "toolName",
+    "action",
+    "resource",
+    "reason",
+    "description",
+    "riskLevel",
+    "answered",
+    "granted",
+    # A request allowed by policy is not shown as a decision in the transcript.
+    "autoApproved",
+    "auto_approved",
+)
+# What the transcript cards read from a human-in-the-loop request and from its
+# answer. An answer names the variables it provided; their values are not part of
+# a transcript.
+CARD_KEYS = {
+    "permission_asked": (*PERMISSION_KEYS, "expiresAt", "createdAt"),
+    "permission_requested": (*PERMISSION_KEYS, "expiresAt", "createdAt"),
+    "permission_replied": ("requestId", "granted", "autoApproved", "auto_approved"),
+    "permission_granted": ("requestId", "granted", "autoApproved", "auto_approved"),
+    "clarification_asked": (
+        "requestId",
+        "question",
+        "clarificationType",
+        "options",
+        "allowCustom",
+        "answered",
+        "answer",
+        "expiresAt",
+        "createdAt",
+    ),
+    "clarification_answered": ("requestId", "answer"),
+    "decision_asked": (
+        "requestId",
+        "question",
+        "decisionType",
+        "options",
+        "allowCustom",
+        "defaultOption",
+        "selectionMode",
+        "maxSelections",
+        "answered",
+        "decision",
+        "expiresAt",
+        "createdAt",
+    ),
+    "decision_answered": ("requestId", "decision"),
+    "env_var_requested": (
+        "requestId",
+        "toolName",
+        "fields",
+        "message",
+        "answered",
+        "providedVariables",
+        "expiresAt",
+        "createdAt",
+    ),
+    "env_var_provided": ("requestId", "toolName", "variableNames"),
+}
+ERROR_KEYS = ("message", "code")
+# What the memory steps of a transcript read. A recalled memory is shown with its
+# text, score, source and category; the rest of the retrieval record stays.
+RECALLED_KEYS = ("content", "score", "source", "category")
+MEMORY_KEYS = {
+    "memory_recalled": ("memories", "count", "searchMs"),
+    "memory_captured": ("capturedCount", "categories"),
+}
+
+
 def timeline_attachments(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     files = {}
     for row in rows:
@@ -77,6 +160,48 @@ def timeline_attachments(rows: list[dict[str, Any]]) -> dict[str, list[dict[str,
     return files
 
 
+def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
+    """What a transcript reads from a timeline row, placed where it happened."""
+    kind = row.get("type")
+    if kind == "canvas_updated":
+        block = row.get("block") or {}
+        return {
+            **{key: row[key] for key in ROW_KEYS if key in row},
+            "action": row["action"],
+            "block_id": row["block_id"],
+            "block": {
+                key: block[key] for key in ("id", "title", "block_type", "content") if key in block
+            },
+        }
+    keys: tuple[str, ...]
+    if kind in {"act", "observe"}:
+        keys = TOOL_KEYS
+    elif kind in CARD_KEYS:
+        keys = CARD_KEYS[kind]
+    elif kind == "error":
+        keys = ERROR_KEYS
+    elif kind in MEMORY_KEYS:
+        keys = MEMORY_KEYS[kind]
+    else:
+        # Not drawn. It still ends the group of tool steps before it, as in the
+        # original transcript, so it keeps its place and nothing else.
+        keys = ()
+    projected = {key: row[key] for key in (*ROW_KEYS, *keys) if key in row}
+    if kind == "act":
+        # The transcript tells an argument draft of a call from its execution by
+        # this one field; the rest of the metadata stays on the server.
+        source = (row.get("metadata") or {}).get("sourceEventType")
+        if isinstance(source, str):
+            projected["metadata"] = {"sourceEventType": source}
+    if isinstance(projected.get("memories"), list):
+        projected["memories"] = [
+            {key: memory[key] for key in RECALLED_KEYS if key in memory}
+            for memory in projected["memories"]
+            if isinstance(memory, dict)
+        ]
+    return projected
+
+
 async def interactions(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
@@ -88,40 +213,7 @@ async def interactions(
     if data.view == "attachments":
         return {"attachments": timeline_attachments(timeline["timeline"])}
     pending = await _canonical(ctx, "GET", "hitl/" + base + "/pending")
-    rows = []
-    for row in timeline["timeline"]:
-        kind = row.get("type")
-        if kind in {"act", "observe"}:
-            rows.append(
-                {
-                    key: row[key]
-                    for key in (
-                        "id",
-                        "type",
-                        "execution_id",
-                        "toolName",
-                        "toolInput",
-                        "toolOutput",
-                        "isError",
-                    )
-                    if key in row
-                }
-            )
-        elif kind == "canvas_updated":
-            block = row.get("block") or {}
-            rows.append(
-                {
-                    "id": row["id"],
-                    "type": kind,
-                    "action": row["action"],
-                    "block_id": row["block_id"],
-                    "block": {
-                        key: block[key]
-                        for key in ("id", "title", "block_type", "content")
-                        if key in block
-                    },
-                }
-            )
+    rows = [transcript_event(row) for row in timeline["timeline"]]
     requests = []
     for item in pending["requests"]:
         if item.get("native_binding") or item["request_type"] not in {

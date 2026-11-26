@@ -7,6 +7,18 @@ import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig } from 'vite';
 
+const PACKAGE_HOST_ENTRY = '/src/projectPackages/main.tsx';
+const PACKAGE_HOST_TITLE = 'MemStack · Project packages';
+const WORKBENCH_TITLE = 'MemStack - AI Memory Cloud Platform';
+
+/** Full and compatibility workbenches open the original entry and document title. */
+export function workbenchDocument(html: string, mode: string) {
+  if (!['full', 'compat'].includes(mode)) return html;
+  return html
+    .replace(PACKAGE_HOST_ENTRY, mode === 'full' ? '/src/fullHost/main.tsx' : '/src/main.tsx')
+    .replace(`<title>${PACKAGE_HOST_TITLE}</title>`, `<title>${WORKBENCH_TITLE}</title>`);
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const packageHost = !['full', 'compat', 'test'].includes(mode);
@@ -15,19 +27,15 @@ export default defineConfig(({ mode }) => {
     publicDir: packageHost ? false : 'public',
     plugins: [
       richPageFramePlugin(),
-      ...(['full', 'compat'].includes(mode)
-        ? [
-            {
-              name: 'full-client-entry',
-              transformIndexHtml: {
-                order: 'pre' as const,
-                handler(html: string) {
-                  return html.replace('/src/projectPackages/main.tsx', mode === 'full' ? '/src/fullHost/main.tsx' : '/src/main.tsx');
-                },
-              },
-            },
-          ]
-        : []),
+      {
+        name: 'full-client-entry',
+        transformIndexHtml: {
+          order: 'pre' as const,
+          handler(html: string) {
+            return workbenchDocument(html, mode);
+          },
+        },
+      },
       react(),
       tailwindcss(),
       // Note: Ant Design 6+ has built-in tree-shaking support and uses CSS-in-JS

@@ -1287,5 +1287,67 @@
       "captured_one": "捕获 {{count}} 条记忆",
       "captured_other": "捕获 {{count}} 条记忆"
     }
+  },
+  "common": {
+    "actions": {
+      "retry": "重试"
+    },
+    "add": "添加",
+    "cancel": "取消",
+    "close": "关闭",
+    "create": "创建",
+    "created_at": "创建于",
+    "delete": "删除",
+    "download": "下载",
+    "edit": "编辑",
+    "forms": {
+      "name": "名称",
+      "type": "类型"
+    },
+    "loading": "加载中…",
+    "noTenant": "未选择租户",
+    "optional": "可选",
+    "project": "项目",
+    "refresh": "刷新",
+    "retry": "重试",
+    "save": "保存",
+    "status": {
+      "available": "可用",
+      "unavailable": "不可用",
+      "unknown": "未知"
+    },
+    "untitled": "未命名"
+  },
+  "tenant": {
+    "backendStores": {
+      "connectionConfig": "连接配置",
+      "createFailed": "创建存储失败。",
+      "createTitle": "创建存储",
+      "created": "存储已创建。",
+      "deleteConfirm": "确定删除后端存储 \"{{name}}\" 吗？",
+      "deleteFailed": "删除存储失败。",
+      "deleted": "存储已删除。",
+      "editTitle": "编辑存储",
+      "empty": "暂无后端存储。",
+      "engineType": "引擎类型",
+      "graph": "图",
+      "indexConfig": "索引配置",
+      "invalidJson": "配置必须是 JSON 对象。",
+      "loadFailed": "加载后端存储失败。",
+      "readonly": "只读",
+      "replaceMaskedSecrets": "保存连接配置前，请替换脱敏的密钥占位符。",
+      "retrieval": "检索",
+      "subtitle": "管理用于项目绑定的图与检索后端。",
+      "test": "测试",
+      "testConnection": "测试连接",
+      "testFailed": "连接测试失败。",
+      "testSucceeded": "连接测试成功。版本：{{version}}",
+      "title": "后端存储",
+      "updateFailed": "更新存储失败。",
+      "updated": "存储已更新。"
+    },
+    "projects": {
+      "loading": "正在加载项目…"
+    }
   }
 }

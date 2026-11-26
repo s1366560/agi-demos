@@ -351,7 +351,7 @@
       ],
       "entry": {
         "path": "ui/graph-web.js",
-        "digest": "sha256:6cadc243c203e439ba87f6e574ddb02147ff5286fe9e648484e68d84c0e37e86"
+        "digest": "sha256:143705994ad493bebcf8e28bdab644d8c450fc893097e6e6184904feacb2f6d5"
       },
       "style": {
         "path": "ui/graph-web.css",
@@ -377,7 +377,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
       },
       "commands": [
         "list-memories",
@@ -412,7 +412,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
       },
       "commands": [
         "read-memory",
@@ -444,7 +444,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
       },
       "commands": [
         "read-memory",
@@ -506,7 +506,7 @@
       ],
       "entry": {
         "path": "ui/entities.js",
-        "digest": "sha256:e338e6602bfcd73b48a1697152d69a1295323fd7da605c582ff809cc439dacd1"
+        "digest": "sha256:df3ec8cb3cf5b4c767c3d43850b828a04514910897d7693a07cefae4d9b5bda2"
       },
       "style": {
         "path": "ui/entities.css",
@@ -527,7 +527,7 @@
       ],
       "entry": {
         "path": "ui/memories-web.js",
-        "digest": "sha256:3e0a5161a0add508fedaf1dadbed126db0879e2e06ff60a98bf52cd0206f7aae"
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
       },
       "commands": [
         "read-memory",
@@ -559,7 +559,7 @@
       ],
       "entry": {
         "path": "ui/project-search.js",
-        "digest": "sha256:216fb819703f2291fe75a4cdbecb2cbcf097c4604315cb9955fcec8ab0cfa9b5"
+        "digest": "sha256:5341c45c8fcecdabea5488e91ecc80f4503fb2abd93206c889e92b1b34275ae6"
       },
       "style": {
         "path": "ui/project-search.css",

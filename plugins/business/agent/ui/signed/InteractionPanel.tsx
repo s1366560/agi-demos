@@ -10,7 +10,11 @@ import {
   type ToolActivity,
 } from "../desktop/chat/ToolActivityList";
 import { Answer } from "./ChatTranscriptView";
-import { useInteractions, type InteractionEvent } from "./useInteractions";
+import {
+  useInteractions,
+  type InteractionEvent,
+  type Interactions,
+} from "./useInteractions";
 
 function ToolMarkdown({ content }: { content: string }) {
   return <Answer text={content} />;
@@ -19,7 +23,7 @@ function ToolMarkdown({ content }: { content: string }) {
 function projectedTools(events: InteractionEvent[]) {
   const tools = new Map<string, ToolActivity>();
   for (const event of events) {
-    if (event.type === "canvas_updated") continue;
+    if (event.type !== "act" && event.type !== "observe") continue;
     const id = event.execution_id ?? event.id;
     const prev = tools.get(id);
     tools.set(id, {
@@ -93,6 +97,8 @@ export function InteractionPanel({
   section = "all",
   emptyCanvas,
   emptyActivity,
+  interactions,
+  tools: listTools = true,
 }: {
   conversation: string;
   active: boolean;
@@ -101,13 +107,14 @@ export function InteractionPanel({
   section?: "all" | "canvas" | "activity";
   emptyCanvas?: ReactNode;
   emptyActivity?: ReactNode;
+  /** Interactions the page already reads for its transcript, so the panel does not poll again. */
+  interactions?: Interactions;
+  /** Turn off once the page shows the tool steps inside the transcript itself. */
+  tools?: boolean;
 }) {
   const { t } = useTranslation();
-  const { events, requests, respond, failure } = useInteractions(
-    conversation,
-    active,
-    enabled,
-  );
+  const own = useInteractions(conversation, active, enabled && !interactions);
+  const { events, requests, respond, failure } = interactions ?? own;
   const tools = projectedTools(events);
   const blocks = new Map<string, NonNullable<InteractionEvent["block"]>>();
   for (const event of events) {
@@ -124,7 +131,7 @@ export function InteractionPanel({
     <>
       {failure && <div role="alert">{failure}</div>}
       {!failure && !events.length && !requests.length && emptyActivity}
-      {section !== "canvas" && (desktop ? (
+      {section !== "canvas" && listTools && (desktop ? (
         <ToolActivityList
           items={tools}
           t={(key, params) =>

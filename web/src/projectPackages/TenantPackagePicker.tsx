@@ -66,6 +66,7 @@ export function TenantPackagePicker({ token }: { token: string }) {
           scope={{ tenantId: tenant.tenant_id, projectId: null }}
           target="web"
           locale={i18n.language}
+          diagnostics={params.has('diagnostics')}
           revision={revision}
           pathname={location.pathname + location.search + location.hash}
           transport={session.transport}

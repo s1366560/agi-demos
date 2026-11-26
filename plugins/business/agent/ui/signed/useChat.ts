@@ -1,6 +1,8 @@
 import type { MessageFile } from '../web/chat/MessageFileList';
 import { uploadAttachment, type UploadedAttachment } from './uploadAttachment';
+import { PAGE } from './useInteractions';
 import { useEffect, useRef, useState } from 'react';
+import type { ExecutionSummary } from '@/types/agent';
 import type {
   RichPageContext,
   RichPageRuntime,
@@ -19,10 +21,23 @@ export interface Conversation {
 export interface Message {
   timestamp?: number;
   eventTimeUs?: number;
+  eventCounter?: number;
   files?: MessageFile[];
+  /** Steps, calls, tokens and cost of a finished answer. */
+  summary?: ExecutionSummary;
   id: string;
   role: 'user_message' | 'assistant_message';
   content: string;
+}
+/** Reasoning text of a turn, as the history and the turn stream report it. */
+export interface Thought {
+  id: string;
+  content: string;
+  timestamp?: number;
+  eventTimeUs?: number;
+  eventCounter?: number;
+  /** Reasoning that streams in has no position yet: it follows the events read when it arrived. */
+  after?: [time: number, counter: number];
 }
 type Cursor = { before_time_us: number; before_counter: number };
 type Run =
@@ -35,7 +50,11 @@ const command = <T>(
   options?: Parameters<RichPageRuntime['invoke']>[2]
 ) => sdk.invoke(name, payload, options) as Promise<T>;
 
-export function useChat(scope: RichPageContext) {
+export function useChat(
+  scope: RichPageContext,
+  /** The last position among the events the page has read, to place streaming reasoning. */
+  latest?: () => [number, number] | undefined,
+) {
   const local = scope.platform === 'desktop-renderer';
   const hasDevice = local && scope.deviceTools.includes('local_chat');
   const [list, setList] = useState<Conversation[]>([]);
@@ -45,6 +64,7 @@ export function useChat(scope: RichPageContext) {
   const linked = query.get('conversationId') || (segment ? decodeURIComponent(segment) : null);
   const [selected, setSelected] = useState(linked ?? '');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<UploadedAttachment[]>([]);
   const [target, setTarget] = useState<Target>(local ? 'local' : 'cloud');
@@ -54,6 +74,8 @@ export function useChat(scope: RichPageContext) {
   const [run, setRun] = useState<Run>();
   const [cursor, setCursor] = useState<Cursor>();
   const [loading, setLoading] = useState(true);
+  // Counts the reads that start a history over, so what was read before them is dropped.
+  const [page, setPage] = useState(0);
   const locked = useRef(false),
     reading = useRef(false),
     revision = useRef(0);
@@ -92,8 +114,13 @@ export function useChat(scope: RichPageContext) {
     const version = ++revision.current;
     setLoading(true);
     try {
-      const page = await command<{ messages: Message[]; before?: Cursor }>('chat-history', {
+      const page = await command<{
+        messages: Message[];
+        thoughts?: Thought[];
+        before?: Cursor;
+      }>('chat-history', {
         conversation_id: id,
+        limit: PAGE,
         ...before,
       });
       const renderingFiles =
@@ -104,19 +131,25 @@ export function useChat(scope: RichPageContext) {
         ? (
             await command<{ attachments: Record<string, MessageFile[]> }>('chat-interactions', {
               conversation_id: id,
+              limit: PAGE,
               ...before,
               view: 'attachments',
             })
           ).attachments
         : {};
       if (version !== revision.current) return;
+      if (!before) setPage((count) => count + 1);
       const rows = page.messages.map((row) => ({
         ...row,
         id: row.id ?? crypto.randomUUID(),
         files: recorded[row.id] ?? [],
       }));
       setMessages((old) => (before ? [...rows, ...old] : rows));
-      setCursor(page.before);
+      setThoughts((old) => (before ? [...(page.thoughts ?? []), ...old] : (page.thoughts ?? [])));
+      // Deleted history can leave an earlier page with nothing to show. That page ends
+      // the history, so the transcript stops offering it.
+      const emptied = !!before && !rows.length && !(page.thoughts ?? []).length;
+      setCursor(emptied ? undefined : page.before);
     } finally {
       if (version === revision.current) setLoading(false);
     }
@@ -181,6 +214,7 @@ export function useChat(scope: RichPageContext) {
     setList((old) => [row, ...old.filter((item) => item.id !== row.id)]);
     setSelected(row.id);
     setMessages([]);
+    setThoughts([]);
     setFiles([]);
     setCursor(undefined);
     return row;
@@ -308,6 +342,14 @@ export function useChat(scope: RichPageContext) {
                   setDraft('');
                   setFiles([]);
                 }
+                if (event.type === 'thought') {
+                  // Reasoning arrives one piece at a time ahead of the answer it leads to.
+                  const after = latest?.();
+                  setThoughts((old) => [
+                    ...old,
+                    { id: crypto.randomUUID(), content: event.text, ...(after ? { after } : {}) },
+                  ]);
+                }
                 if (event.type === 'assistant_message' || event.type === 'text_delta') {
                   setMessages((old) => {
                     const last = old.at(-1),
@@ -374,6 +416,7 @@ export function useChat(scope: RichPageContext) {
       await sdk.navigate(conversationPath(id));
       setSelected(id);
       setMessages([]);
+      setThoughts([]);
       setFiles([]);
       setDraft('');
       await read(id);
@@ -389,6 +432,7 @@ export function useChat(scope: RichPageContext) {
     selected,
     selectedRow,
     messages,
+    thoughts,
     draft,
     setDraft,
     target,
@@ -402,6 +446,7 @@ export function useChat(scope: RichPageContext) {
     stopping,
     error,
     cursor,
+    page,
     writable,
     create,
     rename,

@@ -182,6 +182,7 @@ function ProjectPicker({ token }: { token: string }) {
             key={JSON.stringify([selected.tenant_id, selected.project_id])}
             scope={{ tenantId: selected.tenant_id, projectId: selected.project_id }}
             target="web"
+            diagnostics={params.has('diagnostics')}
             revision={catalogRevision}
             pathname={location.pathname + location.search + location.hash}
             transport={session.transport}

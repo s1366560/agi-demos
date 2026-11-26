@@ -3666,6 +3666,33 @@
         "failurePersistenceDisabled": "记忆运行时已启用，但失败持久化被全局关闭。运行时失败不会写入审计日志。",
         "normal": "智能体运行时模式：{{agentMode}}。记忆运行时模式：{{memoryMode}}。记忆工具模式：{{toolMode}}。"
       }
+    },
+    "analytics": {
+      "active_projects": "活跃项目",
+      "avg_memories": "平均记忆数",
+      "avg_per_project": "平均每个项目",
+      "chart_memories": "记忆",
+      "creation_trend": "记忆创建趋势（最近30天）",
+      "load_error": "加载分析数据失败",
+      "no_data": "暂无数据",
+      "plan": "计划",
+      "project_count": "项目数量",
+      "quota": "存储配额",
+      "storage_distribution": "存储分布（按项目）",
+      "storage_usage": "存储使用",
+      "title": "数据分析",
+      "total_memories": "记忆总数",
+      "trend_down": "较上一周期下降",
+      "trend_flat": "较上一周期持平",
+      "trend_up": "较上一周期增长",
+      "workspace_info": "工作空间信息"
+    },
+    "evolution": {
+      "empty": "暂无演化事件",
+      "filterByType": "按类型筛选",
+      "noInstance": "未提供实例 ID",
+      "title": "演化日志",
+      "trigger": "触发"
     }
   },
   "project": {
@@ -4222,6 +4249,119 @@
         "minutesAgo": "{{count}} 分钟前",
         "hoursAgo": "{{count}} 小时前"
       }
+    },
+    "a2uiIsolated": {
+      "tabDetail": "“{{title}}”渲染失败。你仍可切换到其他标签页。",
+      "tabFallbackTitle": "标签页 {{index}}"
+    },
+    "a2uiProgress": {
+      "progress": "进度"
+    },
+    "a2uiTable": {
+      "noData": "暂无数据"
+    },
+    "a2uiViewer": {
+      "noContent": "暂无内容可显示"
+    },
+    "audioPlayer": {
+      "unsupported": "你的浏览器不支持 audio 元素。"
+    },
+    "jitContext": {
+      "allSources": "全部",
+      "copyFailed": "复制到剪贴板失败",
+      "copySuccess": "已复制到剪贴板",
+      "pin": "固定",
+      "pinned": "已固定 {{count}} 条",
+      "recalled": "召回 {{count}} 条记忆",
+      "scoreTitle": "分数：{{score}}",
+      "showFull": "显示完整内容",
+      "showLess": "收起",
+      "unpin": "取消固定",
+      "viaSource": "来自 {{source}}"
+    },
+    "memoryTimeline": {
+      "captured": "捕获 {{count}} 条记忆"
+    },
+    "timelineItems": {
+      "loadingMarkdown": "加载中…"
     }
+  },
+  "commandPalette": {
+    "title": "命令面板"
+  },
+  "common": {
+    "actions": {
+      "checkHealth": "检查健康",
+      "label": "操作",
+      "retry": "重试"
+    },
+    "add": "添加",
+    "back": "返回",
+    "cancel": "取消",
+    "confirm": "确认",
+    "copy": "复制",
+    "create": "创建",
+    "delete": "删除",
+    "discard": "放弃更改",
+    "edit": "编辑",
+    "eliminated": "已淘汰",
+    "error": "错误",
+    "evaluated": "已评估",
+    "forms": {
+      "model": "模型",
+      "name": "名称",
+      "status": "状态",
+      "type": "类型"
+    },
+    "loading": "加载中…",
+    "noTenant": "未选择租户",
+    "pagination": {
+      "label": "分页",
+      "total": "共 {{total}} 条"
+    },
+    "readOnly": "只读",
+    "ready": "就绪",
+    "refresh": "刷新",
+    "remove": "移除",
+    "retry": "重试",
+    "save": "保存",
+    "search": "搜索",
+    "selected": "已选择",
+    "stats": {
+      "healthStatus": "健康状态"
+    },
+    "status": {
+      "active": "活跃",
+      "all": "所有状态",
+      "configurationValid": "配置已校验",
+      "deprecated": "已弃用",
+      "disabled": "已禁用",
+      "enabled": "已启用",
+      "healthy": "健康",
+      "inactive": "非活跃",
+      "unavailable": "不可用",
+      "unhealthy": "不健康",
+      "unknown": "未知"
+    },
+    "unsavedChanges": "您有未保存的更改。确定放弃并关闭吗？",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}}分钟前",
+      "hoursAgo": "{{count}}小时前",
+      "yesterday": "昨天",
+      "daysAgo": "{{count}}天前",
+      "weeksAgo": "{{count}}周前"
+    }
+  },
+  "comparison": {
+    "compare": "对比"
+  },
+  "nav": {
+    "agentBindings": "智能体绑定",
+    "agentDefinitions": "智能体定义",
+    "agentWorkspace": "智能体工作台",
+    "mcpServers": "MCP",
+    "plugins": "插件",
+    "skills": "技能"
   }
 }

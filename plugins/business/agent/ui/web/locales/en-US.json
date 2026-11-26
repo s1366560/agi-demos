@@ -3645,6 +3645,33 @@
         "failurePersistenceDisabled": "Memory runtime is active, but failure persistence is globally disabled. Runtime failures will not be written into audit logs.",
         "normal": "Agent runtime mode: {{agentMode}}. Memory runtime mode: {{memoryMode}}. Memory tool mode: {{toolMode}}."
       }
+    },
+    "analytics": {
+      "active_projects": "Active Projects",
+      "avg_memories": "Average memories",
+      "avg_per_project": "Avg per Project",
+      "chart_memories": "Memories",
+      "creation_trend": "Creation trend",
+      "load_error": "Failed to load analytics",
+      "no_data": "No data available",
+      "plan": "Plan",
+      "project_count": "Total projects",
+      "quota": "Storage quota",
+      "storage_distribution": "Storage distribution",
+      "storage_usage": "Storage Usage",
+      "title": "Analytics",
+      "total_memories": "Total Memories",
+      "trend_down": "Declining vs previous period",
+      "trend_flat": "Flat vs previous period",
+      "trend_up": "Growing vs previous period",
+      "workspace_info": "Workspace usage statistics and insights"
+    },
+    "evolution": {
+      "empty": "No evolution events found",
+      "filterByType": "Filter by type",
+      "noInstance": "No instance ID provided",
+      "title": "Evolution Log",
+      "trigger": "Trigger"
     }
   },
   "project": {
@@ -4201,6 +4228,119 @@
         "minutesAgo": "{{count}}m ago",
         "hoursAgo": "{{count}}h ago"
       }
+    },
+    "a2uiIsolated": {
+      "tabDetail": "\"{{title}}\" failed to render. You can still switch to other tabs.",
+      "tabFallbackTitle": "Tab {{index}}"
+    },
+    "a2uiProgress": {
+      "progress": "Progress"
+    },
+    "a2uiTable": {
+      "noData": "No data"
+    },
+    "a2uiViewer": {
+      "noContent": "No content to display"
+    },
+    "audioPlayer": {
+      "unsupported": "Your browser does not support the audio element."
+    },
+    "jitContext": {
+      "allSources": "all",
+      "copyFailed": "Failed to copy to clipboard",
+      "copySuccess": "Copied to clipboard",
+      "pin": "Pin",
+      "pinned": "{{count}} pinned",
+      "recalled": "Recalled {{count}} memories",
+      "scoreTitle": "Score: {{score}}",
+      "showFull": "Show full",
+      "showLess": "Show less",
+      "unpin": "Unpin",
+      "viaSource": "via {{source}}"
+    },
+    "memoryTimeline": {
+      "captured": "Captured {{count}} memories"
+    },
+    "timelineItems": {
+      "loadingMarkdown": "Loading…"
     }
+  },
+  "commandPalette": {
+    "title": "Command palette"
+  },
+  "common": {
+    "actions": {
+      "checkHealth": "Check Health",
+      "label": "Actions",
+      "retry": "Retry"
+    },
+    "add": "Add",
+    "back": "Back",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "create": "Create",
+    "delete": "Delete",
+    "discard": "Discard",
+    "edit": "Edit",
+    "eliminated": "Eliminated",
+    "error": "Error",
+    "evaluated": "Evaluated",
+    "forms": {
+      "model": "Model",
+      "name": "Name",
+      "status": "Status",
+      "type": "Type"
+    },
+    "loading": "Loading…",
+    "noTenant": "No tenant selected",
+    "pagination": {
+      "label": "Pagination",
+      "total": "Total {{total}} items"
+    },
+    "readOnly": "Read-only",
+    "ready": "Ready",
+    "refresh": "Refresh",
+    "remove": "Remove",
+    "retry": "Retry",
+    "save": "Save",
+    "search": "Search",
+    "selected": "Selected",
+    "stats": {
+      "healthStatus": "Health Status"
+    },
+    "status": {
+      "active": "Active",
+      "all": "All Status",
+      "configurationValid": "Configuration validated",
+      "deprecated": "Deprecated",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "healthy": "Healthy",
+      "inactive": "Inactive",
+      "unavailable": "Unavailable",
+      "unhealthy": "Unhealthy",
+      "unknown": "Unknown"
+    },
+    "unsavedChanges": "You have unsaved changes. Discard them and close?",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "yesterday": "yesterday",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago"
+    }
+  },
+  "comparison": {
+    "compare": "Compare"
+  },
+  "nav": {
+    "agentBindings": "Agent Bindings",
+    "agentDefinitions": "Agent Definitions",
+    "agentWorkspace": "Agent Workspace",
+    "mcpServers": "MCP",
+    "plugins": "Plugins",
+    "skills": "Skills"
   }
 }

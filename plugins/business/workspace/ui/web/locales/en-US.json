@@ -1391,6 +1391,12 @@
       "backToProjects": "Back to projects",
       "loadFailed": "Unable to load this project.",
       "loadFailedDescription": "The project may have moved, or your account may not have access."
+    },
+    "memories": {
+      "eyebrow": "Project knowledge",
+      "noMemories": "No memories found",
+      "size": "Size",
+      "untitled": "Untitled memory"
     }
   },
   "tenant": {
@@ -1458,6 +1464,63 @@
       "objectivesCount": "{{count}} objectives",
       "tasksCount": "{{count}} tasks",
       "progressLoadFailed": "Progress unavailable"
+    },
+    "overview": {
+      "actions": "Actions",
+      "activeProjects": "Active Projects",
+      "currentPlan": "Current Plan",
+      "last30Days": "Last 30 Days",
+      "latestUsage": "Latest usage",
+      "loadFailed": "Failed to load tenant data",
+      "loading": "Loading tenant information…",
+      "memoryChartAria": "Tenant memory usage history chart",
+      "memoryConsumed": "Memory Consumed",
+      "memoryUsageHistory": "Memory Usage History",
+      "mostActiveProjects": "Most Active Projects",
+      "newMembers": "+{{count}} members added",
+      "newProjectThisWeek": "{{count}} new project this week",
+      "nextBillingDate": "Next Billing Date",
+      "noMemoryHistory": "No memory history yet",
+      "noProjects": "No projects yet",
+      "openProject": "Open project {{name}}",
+      "orgId": "Organization ID",
+      "projectName": "Project Name",
+      "region": "Region",
+      "subtitle": "Welcome back. Here's what's happening in your tenant today.",
+      "teamMembers": "Team Members",
+      "tenantInfo": "Tenant Info",
+      "title": "Overview",
+      "totalStorage": "Total Storage",
+      "viewInvoice": "View Invoice"
+    },
+    "tasks": {
+      "charts": {
+        "current": "Current",
+        "dist_desc": "Task distribution by current status.",
+        "loadFailed": "Failed to load charts",
+        "loading": "Loading chart…",
+        "pending_tasks": "Pending tasks",
+        "queue_depth": "Queue depth",
+        "queue_desc": "Queued task volume over time.",
+        "status_dist": "Status distribution"
+      },
+      "lastUpdated": "Updated {{time}}",
+      "loadFailed": "Failed to load task data",
+      "refresh": "Refresh",
+      "resumeFailed": "Failed to resume pending tasks",
+      "resumePending": "Resume pending",
+      "resumePendingHint": "Resumes up to 5 pending tasks per run",
+      "resumeSubmitted": "Submitted {{count}} pending tasks",
+      "stats": {
+        "failed": "Failed",
+        "pending": "Pending",
+        "rate": "Rate",
+        "throughput": "Throughput",
+        "total": "Total tasks"
+      },
+      "subtitle": "Monitor tenant-level task execution and throughput.",
+      "title": "Task dashboard",
+      "viewDeadLetterQueue": "View dead letter queue"
     }
   },
   "components": {
@@ -1475,6 +1538,110 @@
       "createTenant": "Create Tenant",
       "switchProject": "Switch Project",
       "backToTenant": "Back to Tenant"
+    },
+    "taskList": {
+      "actions": {
+        "retry": "Retry",
+        "stop": "Stop"
+      },
+      "columns": {
+        "duration": "Duration",
+        "entity": "Entity",
+        "status": "Status",
+        "timestamp": "Timestamp",
+        "type": "Type"
+      },
+      "confirmStop": "Are you sure you want to stop this task?",
+      "empty": "No tasks found",
+      "loadFailed": "Failed to load tasks.",
+      "messages": {
+        "retryFailed": "Failed to retry task. Please try again.",
+        "retrySuccess": "Task retry queued.",
+        "stopFailed": "Failed to stop task. Please try again.",
+        "stopSuccess": "Task stopped."
+      },
+      "pagination": {
+        "showing": "Showing {{count}} of {{total}} tasks"
+      },
+      "refresh": "Refresh tasks",
+      "searchAria": "Search tasks",
+      "searchPlaceholder": "Search Task ID or Name…",
+      "status": {
+        "all": "All Statuses",
+        "completed": "Completed",
+        "failed": "Failed",
+        "pending": "Pending",
+        "processing": "Processing"
+      },
+      "statusFilter": "Filter by status",
+      "title": "Tasks"
     }
+  },
+  "agent": {
+    "collab": {
+      "noWorkspace": "No workspace selected"
+    }
+  },
+  "common": {
+    "actions": {
+      "label": "Actions",
+      "next": "Next",
+      "previous": "Previous",
+      "showMore": "Show More",
+      "viewAll": "View All"
+    },
+    "add": "Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "error": "Error",
+    "forms": {
+      "name": "Name",
+      "status": "Status",
+      "type": "Type"
+    },
+    "loading": "Loading…",
+    "moreActions": "More actions",
+    "next": "Next",
+    "no": "No",
+    "pagination": {
+      "page_info": "Page {{page}} of {{total}}"
+    },
+    "previous": "Previous",
+    "ready": "Ready",
+    "refresh": "Refresh",
+    "required": "Required",
+    "retry": "Retry",
+    "save": "Save",
+    "stats": {
+      "activeNodes": "Active Nodes",
+      "collaborators": "Collaborators",
+      "members": "Members",
+      "owner": "Owner",
+      "storageUsed": "Storage Used",
+      "total": "Total",
+      "totalMemories": "Total Memories"
+    },
+    "status": {
+      "active": "Active",
+      "available": "Available",
+      "completed": "Completed",
+      "failed": "Failed",
+      "inactive": "Inactive",
+      "pending": "Pending",
+      "processing": "Processing",
+      "unavailable": "Unavailable"
+    },
+    "time": {
+      "ago": "{{time}} ago",
+      "hours": "h",
+      "justNow": "just now",
+      "minutes": "m",
+      "updated": "Updated {{time}}"
+    },
+    "yes": "Yes"
   }
 }

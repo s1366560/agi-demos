@@ -322,7 +322,14 @@
     "refresh": "刷新",
     "retry": "重试",
     "close": "关闭",
-    "save": "保存"
+    "save": "保存",
+    "actions": {
+      "label": "操作"
+    },
+    "discard": "放弃更改",
+    "done": "完成",
+    "edit": "编辑",
+    "loading": "加载中…"
   },
   "agent": {
     "patternList": {

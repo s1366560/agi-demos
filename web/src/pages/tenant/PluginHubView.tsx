@@ -155,6 +155,8 @@ export function PluginHubView({
             scope={{ tenantId, projectId }}
             target="web"
             locale={i18n.language}
+            // Reviewing a release keeps its digests and load errors in view.
+            diagnostics
             pathname={businessPage}
             navigate={(path) => {
               change({ marketPage: path });

@@ -4,7 +4,9 @@ import { BrainCircuit, Loader2, MessageSquare, Wifi, Wrench } from 'lucide-react
 import { Tooltip } from 'antd';
 import { ContextDetailPanel } from '../../../../../web/src/components/agent/context/ContextDetailPanel';
 import { ContextStatusIndicator } from '../../../../../web/src/components/agent/context/ContextStatusIndicator';
+import { deriveTaskProgress } from '../../../../../web/src/components/agent/tasks/taskProgressDerivation';
 import { useContextStore } from '../../../../../web/src/stores/contextStore';
+import type { AgentTask } from '../../../../../web/src/types/agent';
 import { AgentLifecycleControls, type ActorAction } from '../web/chat/AgentLifecycleControls';
 import { AgentLifecycleBadge } from '../web/chat/AgentLifecycleBadge';
 import type { ProjectAgentLifecycleState } from '../web/hooks/useUnifiedAgentStatus';
@@ -19,18 +21,69 @@ interface LifecycleSnapshot {
   pool_managed?: boolean;
 }
 
+const TONE_DOT = {
+  idle: 'bg-slate-300 dark:bg-slate-600',
+  ok: 'bg-emerald-500',
+  running: 'bg-sky-500 animate-pulse motion-reduce:animate-none',
+  warning: 'bg-amber-500',
+  error: 'bg-rose-500',
+} as const;
+
+/** One status of the work in the conversation, as the original workbench shows it. */
+function StatusSlot({
+  label,
+  value,
+  tone,
+  hint,
+  progressPercent,
+}: {
+  label: string;
+  value: string;
+  tone: keyof typeof TONE_DOT;
+  hint?: string;
+  progressPercent?: number;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-xs text-blue-800 dark:text-slate-200"
+      title={hint ?? `${label}: ${value}`}
+    >
+      <span className={`inline-block h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
+      <span className="text-[var(--color-text-muted)] dark:text-slate-400">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+      {typeof progressPercent === 'number' && (
+        <span
+          aria-hidden="true"
+          className="ml-1 h-1.5 w-16 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        >
+          <span
+            className="block h-full rounded-full bg-emerald-500 transition-[width] duration-300 motion-reduce:transition-none"
+            style={{ width: `${String(progressPercent)}%` }}
+          />
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function WebChatStatus({
   scope,
   conversation,
   count,
+  tasks,
   running,
 }: {
   scope: RichPageContext;
   conversation: string;
+  /** Rows of the conversation timeline that are loaded. */
   count: number;
+  tasks: readonly AgentTask[];
   running: boolean;
 }) {
   const { t } = useTranslation();
+  const taskProgress = deriveTaskProgress(tasks, running);
+  const taskPercent =
+    taskProgress.total > 0 ? Math.round((taskProgress.current / taskProgress.total) * 100) : 0;
   const [snapshot, setSnapshot] = useState<LifecycleSnapshot | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
   const [pending, setPending] = useState(false);
@@ -96,6 +149,21 @@ export function WebChatStatus({
   return (
     <div className="px-4 py-1.5 flex items-center justify-between gap-2 min-w-0">
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        {taskProgress.hasTasks && (
+          <StatusSlot
+            label={t('agent.statusBar.slots.task', 'Task')}
+            value={`${String(taskProgress.current)}/${String(taskProgress.total)} · ${String(taskPercent)}%`}
+            tone={
+              taskProgress.status === 'failed'
+                ? 'error'
+                : taskProgress.status === 'completed'
+                  ? 'ok'
+                  : 'running'
+            }
+            hint={taskProgress.label ?? t('agent.statusBar.slots.taskProgress', 'Task progress')}
+            progressPercent={taskPercent}
+          />
+        )}
         {snapshot && <AgentLifecycleBadge lifecycle={snapshot.lifecycle_state} error={failure} />}
         {(failure || controlError) && (
           <span role="alert" className="truncate text-xs text-red-600">

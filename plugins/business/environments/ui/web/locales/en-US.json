@@ -676,7 +676,198 @@
           "inactive": "Inactive",
           "unknown": "Unknown"
         }
+      },
+      "genes": {
+        "addPolicy": "Add Policy",
+        "addTitle": "Add Gene Policy",
+        "deleteConfirm": "Delete the gene policy \"{{key}}\"? This action cannot be undone.",
+        "deleteError": "Failed to delete gene policy",
+        "deleteSuccess": "Gene policy deleted",
+        "description": "Manage organizational gene policies for agent behavior configuration",
+        "descriptionPlaceholder": "Brief description of this policy",
+        "editTitle": "Edit Gene Policy",
+        "empty": "No gene policies configured",
+        "emptyHint": "Add a policy to configure agent behavior for your organization.",
+        "fetchError": "Failed to load gene policies",
+        "invalidJson": "Policy value must be valid JSON",
+        "keyRequired": "Policy key is required",
+        "policyDescription": "Description",
+        "policyKey": "Policy Key",
+        "policyKeyPlaceholder": "e.g. agent_behavior, memory_retention",
+        "policyValue": "Policy Value (JSON)",
+        "policyValuePlaceholder": "{ \"key\": \"value\" }",
+        "saveError": "Failed to save gene policy",
+        "saveSuccess": "Gene policy saved successfully",
+        "title": "Gene Policies",
+        "updatedAt": "Updated"
       }
+    },
+    "evolution": {
+      "trigger": "Trigger"
+    },
+    "genes": {
+      "actions": {
+        "install": "Install",
+        "rate": "Rate"
+      },
+      "averageRating": "Average Rating",
+      "back": "Back to Market",
+      "commentPlaceholder": "Leave a comment…",
+      "deleteAction": "Delete",
+      "description": "Description",
+      "downloads": "Downloads",
+      "editAction": "Edit",
+      "editGene": "Edit Gene",
+      "empty": "No genes found",
+      "emptyGenomes": "No genomes found",
+      "evolutionHistory": "Evolution History",
+      "fetchError": "Failed to fetch gene details",
+      "filters": {
+        "allCategories": "All Categories",
+        "allStatus": "All Status",
+        "allVisibility": "All Visibility",
+        "catAi": "AI",
+        "catTool": "Tool",
+        "categoryLabel": "Filter genes by category",
+        "genomeVisibilityLabel": "Filter genomes by visibility",
+        "statusLabel": "Filter by publish status",
+        "visPrivate": "Private",
+        "visPublic": "Public",
+        "visUnlisted": "Unlisted",
+        "visibilityLabel": "Filter genes by visibility"
+      },
+      "genesCount": "genes",
+      "installAction": "Install",
+      "installError": "Failed to install gene",
+      "installGene": "Install Gene",
+      "installSuccess": "Gene installed successfully",
+      "instanceLoadError": "Failed to load instances",
+      "invalidJson": "Invalid JSON format",
+      "lastUpdated": "Last updated {{time}}",
+      "listErrorTitle": "Could not load marketplace data",
+      "manifest": "Manifest",
+      "noDescription": "No description available",
+      "noEvolutionEvents": "No evolution events",
+      "noInstances": "No instances available",
+      "noTags": "No tags",
+      "notFound": "Gene not found",
+      "publish": {
+        "category": "Category",
+        "categoryPlaceholder": "tool",
+        "createDraft": "Create Draft",
+        "createDraftError": "Failed to create gene draft",
+        "createDraftSuccess": "Gene draft created",
+        "createGenomeDraft": "Create Genome Draft",
+        "createGenomeDraftError": "Failed to create genome draft",
+        "createGenomeDraftSuccess": "Genome draft created",
+        "descriptionPlaceholder": "Describe what this gene does and when to use it",
+        "geneSlugs": "Included gene slugs",
+        "geneSlugsPlaceholder": "code-review, test-writer",
+        "genomeModalDescription": "Create a draft genome from existing gene slugs, review the bundle, then publish it when it is ready.",
+        "genomeModalTitle": "Create Genome Draft",
+        "modalDescription": "Create a draft marketplace gene, review the generated detail page, then publish it when it is ready.",
+        "modalTitle": "Create Gene Draft",
+        "name": "Name",
+        "namePlaceholder": "Code review assistant",
+        "nameRequired": "Gene name is required",
+        "shortDescription": "Short description",
+        "shortDescriptionPlaceholder": "One-line summary",
+        "slug": "Slug",
+        "slugPlaceholder": "code-review-assistant",
+        "slugRequired": "Gene slug is required",
+        "tags": "Tags",
+        "tagsPlaceholder": "review, quality, automation",
+        "version": "Version",
+        "visibility": "Visibility"
+      },
+      "publishButton": "Publish Gene",
+      "publishGenomeButton": "Create Genome",
+      "ratingRequired": "Rating is required",
+      "searchGenomesPlaceholder": "Search genomes…",
+      "searchPlaceholder": "Search genes…",
+      "statusDraft": "Draft",
+      "statusPublished": "Published",
+      "subtitle": "Discover and install genes for your instances",
+      "tabs": {
+        "genes": "Genes",
+        "genomes": "Genomes"
+      },
+      "tags": "Tags",
+      "title": "Gene Market",
+      "triggeredBy": "Triggered by",
+      "updateError": "Failed to update gene",
+      "updateSuccess": "Gene updated successfully",
+      "versionRequired": "Version is required"
+    },
+    "genomeDetail": {
+      "configOverride": "Configuration Override (JSON)",
+      "configOverridePlaceholder": "{\"key\": \"value\"}",
+      "configTitle": "Configuration",
+      "deleteAction": "Delete",
+      "editAction": "Edit",
+      "editGenome": "Edit Genome",
+      "fields": {
+        "createdAt": "Created At",
+        "description": "Description",
+        "id": "Genome ID",
+        "rating": "Rating",
+        "status": "Status",
+        "updatedAt": "Updated At",
+        "visibility": "Visibility"
+      },
+      "genesTitle": "Included Genes",
+      "installAction": "Install",
+      "loadFailed": "Failed to load genome",
+      "loadingGenes": "Loading included genes…",
+      "missingGenesTitle": "Some referenced genes are unavailable",
+      "noAvailableGenes": "No included genes are available",
+      "noGenes": "No genes in this genome",
+      "notFound": "Genome not found",
+      "rateAction": "Rate",
+      "updateError": "Failed to update genome",
+      "updateSuccess": "Genome updated successfully"
+    },
+    "runtimes": {
+      "autoRefresh": "Auto-refresh 15s",
+      "cards": {
+        "capacityUnavailable": "Tenant capacity unavailable",
+        "hotWarmCold": "Hot / Warm / Cold",
+        "memory": "Memory",
+        "poolTotal": "Pool total",
+        "readyExecuting": "Ready / Executing",
+        "sandboxHealth": "Sandbox health",
+        "sandboxMemory": "Sandbox memory",
+        "sandboxes": "Sandboxes",
+        "unhealthy": "Unhealthy"
+      },
+      "columns": {
+        "health": "Health",
+        "identifier": "Identifier",
+        "kind": "Kind",
+        "lastActivity": "Last activity",
+        "loadMemory": "Load / Memory",
+        "scope": "Tenant / Project",
+        "status": "Status",
+        "tier": "Tier"
+      },
+      "description": "Unified view of agent-pool actors and project sandboxes. This is read-only, use the dedicated pages for lifecycle actions.",
+      "empty": "No runtime instances",
+      "errors": {
+        "poolForbiddenDescription": "Agent pool data is restricted to global administrators. Tenant-scoped accounts cannot view pool status or instances, so automatic refresh has been paused.",
+        "poolForbiddenTitle": "Global administrator role required",
+        "poolInstances": "Pool instances unavailable",
+        "poolStatus": "Pool status unavailable",
+        "projectSandboxes": "Project sandboxes unavailable",
+        "sandboxMetrics": "Sandbox metrics partially unavailable",
+        "sandboxMetricsDescription": "{{count}} running sandbox row(s) loaded without live resource metrics."
+      },
+      "instances": "Instances",
+      "kind": {
+        "poolActor": "Pool Actor",
+        "sandbox": "Sandbox"
+      },
+      "sandboxHealthValue": "{{healthy}} healthy / {{attention}} attention",
+      "title": "Runtimes"
     }
   },
   "admin": {
@@ -849,8 +1040,47 @@
     "retry": "Retry",
     "refresh": "Refresh",
     "actions": {
-      "viewAll": "View All"
-    }
+      "viewAll": "View All",
+      "checkHealth": "Check Health",
+      "label": "Actions",
+      "no": "No",
+      "yes": "Yes"
+    },
+    "back": "Back",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copied": "Copied",
+    "copy": "Copy",
+    "delete": "Delete",
+    "discard": "Discard",
+    "download": "Download",
+    "edit": "Edit",
+    "error": "Error",
+    "forms": {
+      "name": "Name",
+      "status": "Status"
+    },
+    "more": "More",
+    "moreActions": "More actions",
+    "no": "No",
+    "noTenant": "No tenant selected",
+    "notFound": "Not Found",
+    "pagination": {
+      "label": "Pagination",
+      "total": "Total {{total}} items"
+    },
+    "refreshed": "Refreshed",
+    "remove": "Remove",
+    "save": "Save",
+    "search": "Search",
+    "stats": {
+      "nodes": "Nodes"
+    },
+    "time": {
+      "never": "Never"
+    },
+    "view": "View",
+    "yes": "Yes"
   },
   "project": {
     "settings": {
@@ -886,5 +1116,93 @@
       "desktopLabel": "Remote desktop",
       "sandboxNotProvisioned": "Prepare the project sandbox first"
     }
+  },
+  "agent": {
+    "sandbox": {
+      "action": {
+        "refresh": "Refresh",
+        "restart": "Restart",
+        "stop": "Stop",
+        "stopConfirmDesc": "This destroys the sandbox container. Unsaved work inside it will be lost.",
+        "stopConfirmOk": "Stop container",
+        "stopConfirmTitle": "Stop sandbox container?"
+      },
+      "click_to_start": "Click to start sandbox",
+      "duration": {
+        "hours": "h",
+        "minutes": "m",
+        "seconds": "s"
+      },
+      "label": "Sandbox environment",
+      "loading": "Loading…",
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "Memory",
+        "network": "Network",
+        "processes": "Processes",
+        "uptime": "Uptime"
+      },
+      "status": {
+        "creating": "Creating",
+        "creating_desc": "Creating sandbox container",
+        "error": "Error",
+        "error_desc": "Sandbox encountered an error",
+        "not_started": "Not started",
+        "pending_desc": "Sandbox is queued for startup",
+        "running": "Running",
+        "running_desc": "Sandbox is running normally",
+        "starting": "Starting…",
+        "stopped": "Stopped",
+        "stopped_desc": "Sandbox stopped, click to restart",
+        "terminated": "Terminated",
+        "terminated_desc": "Sandbox has been terminated",
+        "unhealthy": "Unhealthy",
+        "unhealthy_desc": "Sandbox health checks are failing",
+        "waiting": "Waiting"
+      },
+      "toast": {
+        "restart_failed": "Failed to restart sandbox",
+        "restarted": "Sandbox restarted",
+        "start_failed": "Failed to start sandbox",
+        "started": "Sandbox started",
+        "stop_failed": "Failed to stop sandbox",
+        "stopped": "Sandbox stopped",
+        "unknown_error": "Unknown error"
+      }
+    },
+    "templates": {
+      "all": "All",
+      "builtIn": "Built-in",
+      "categoryFilter": "Category filter",
+      "install": "Install",
+      "installError": "Failed to install template",
+      "installed": "Installed SubAgent: {{name}}",
+      "installing": "Installing…",
+      "loadError": "Failed to load templates",
+      "marketplace": "Template Marketplace",
+      "marketplaceDesc": "Browse and install SubAgent templates to extend your agent capabilities.",
+      "noDescription": "No description",
+      "noResults": "No templates found",
+      "search": "Search templates…",
+      "seedBuiltin": "Seed Built-in",
+      "seedError": "Failed to seed templates",
+      "seeded": "Seeded {{count}} templates",
+      "seeding": "Seeding…",
+      "viewDetails": "View details of {{name}}"
+    }
+  },
+  "gene": {
+    "deleteReview": "Delete Review",
+    "deleteReviewConfirm": "Are you sure you want to delete this review?",
+    "noReviews": "No reviews yet. Be the first to review!",
+    "reviewContent": "Review Content",
+    "reviewDeleteError": "Failed to delete review",
+    "reviewDeleteSuccess": "Review deleted successfully",
+    "reviewPlaceholder": "Share your thoughts about this gene…",
+    "reviewSubmitError": "Failed to submit review",
+    "reviewSubmitSuccess": "Review submitted successfully",
+    "reviews": "Reviews",
+    "writeReview": "Write a Review",
+    "yourRating": "Your Rating"
   }
 }

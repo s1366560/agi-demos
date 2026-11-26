@@ -529,7 +529,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:12b25764a80ea196c30bf2cf496a6a89fb6a075d7d3106cf9c5bf4a6e1936953"
+        "digest": "sha256:c3fb6ab62ac41dd06de5577c3f73d9942ddab2bf404c7e7903d63125fc71f56c"
       },
       "commands": [
         "chat-list",
@@ -559,7 +559,7 @@
       ],
       "style": {
         "path": "ui/chat-web.css",
-        "digest": "sha256:0660da829fd284d121cdef54036bbb0aa54d1d3c432a352c76bb9415863c0e69"
+        "digest": "sha256:76751fae9078406635e580e473438f16a492f5de4365fbfeed196d429baa0f14"
       },
       "workbench": true,
       "sidebar": {
@@ -643,7 +643,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/web-dashboard.js",
-        "digest": "sha256:730dd4992f99018b128f4f2af6503b6d41e1b8fa21478df8631446b76a6ab6cd"
+        "digest": "sha256:09374c1f134fe5ebdab5bce569cbaee11a7a1a23f02659d6e8efaa93e60faccc"
       },
       "style": {
         "path": "ui/web-dashboard.css",

@@ -496,6 +496,7 @@ export const TenantLayoutView: React.FC<ShellControls> = memo(
                 setMobileSidebarOpen(true);
               }}
               projectId={scope && !location.pathname.includes('/project/') ? params.projectId : projectId}
+              landing={landing}
               onCommandPaletteOpen={() => {
                 setCommandPaletteOpen(true);
               }}

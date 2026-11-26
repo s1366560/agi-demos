@@ -15,7 +15,7 @@ import {
   Check,
 } from 'lucide-react';
 
-import { AgentSection } from '@/components/agent/chat/MessageStream';
+import { AgentSection } from '@/components/agent/chat/AgentSection';
 import { getPersistedToolStatus } from '@/utils/toolCallTimeline';
 
 import { TimeBadge } from './shared';

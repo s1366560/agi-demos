@@ -43,6 +43,9 @@ class ConversationInput(_Input):
 class History(ConversationInput):
     before_time_us: int | None = Field(default=None, ge=0)
     before_counter: int = Field(default=0, ge=0)
+    # A transcript page carries the reasoning and tool steps around its messages,
+    # so the workbench reads wider pages than a single-message caller.
+    limit: int = Field(default=50, ge=1, le=500)
 
 
 class Turn(ConversationInput):
@@ -268,6 +271,49 @@ async def rename(
     return {"id": row["id"], "title": row["title"]}
 
 
+USAGE_KEYS = (
+    ("stepCount", "step_count"),
+    ("artifactCount", "artifact_count"),
+    ("callCount", "call_count"),
+    ("totalCost", "total_cost"),
+    ("totalCostFormatted", "total_cost_formatted"),
+    ("totalTokens", "total_tokens"),
+    ("tasks", "tasks"),
+)
+
+type Counter = int | float | dict[str, Counter]
+
+
+def _counters(value: object) -> Counter | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, dict):
+        return {
+            key: counter
+            for key, child in value.items()
+            if isinstance(key, str) and (counter := _counters(child)) is not None
+        }
+    return None
+
+
+def usage_summary(row: dict[str, Any]) -> dict[str, Any]:
+    """Counters of a finished answer. Nothing else of the message metadata leaves."""
+    summary = (row.get("metadata") or {}).get("executionSummary")
+    if row.get("type") != "assistant_message" or not isinstance(summary, dict):
+        return {}
+    usage: dict[str, Counter | str] = {}
+    for camel, snake in USAGE_KEYS:
+        value = summary.get(camel, summary.get(snake))
+        if camel == "totalCostFormatted":
+            if isinstance(value, str) and len(value) <= 32:
+                usage[camel] = value
+        elif (counter := _counters(value)) is not None:
+            usage[camel] = counter
+    return {"summary": usage} if usage else {}
+
+
 async def history(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
@@ -286,17 +332,33 @@ async def history(
     if (actual and actual.execution_target == "local") or (preferred or {}).get(
         "execution_target"
     ) == "local":
-        return await local_history(ctx, payload, progress)
-    query = (
-        {"before_time_us": data.before_time_us, "before_counter": data.before_counter}
-        if data.before_time_us is not None
-        else None
-    )
+        replay = {key: value for key, value in payload.items() if key != "limit"}
+        return await local_history(ctx, replay, progress)
+    query = {"limit": data.limit}
+    if data.before_time_us is not None:
+        query.update(before_time_us=data.before_time_us, before_counter=data.before_counter)
     result = await _canonical(
         ctx, "GET", f"conversations/{data.conversation_id}/messages", query=query
     )
+
+    # Every row carries its position, because a transcript interleaves messages
+    # with the reasoning and the tool steps of the same turn.
+    def positioned(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: row[key]
+            for key in ("timestamp", "eventTimeUs", "eventCounter")
+            if isinstance(row.get(key), int)
+        }
+
+    text = [
+        (row["id"], row["type"], row["content"], positioned(row), usage_summary(row))
+        for row in result["timeline"]
+        if row.get("type") in {"user_message", "assistant_message", "thought"}
+        and isinstance(row.get("content"), str)
+    ]
     # P5 contains tool arguments and execution authorizations as well as messages.
-    # Only return the text presentation that this capability promises.
+    # Only return the text presentation that this capability promises: reasoning
+    # is part of what a reader sees, while tool arguments belong to interactions.
     return {
         "before": {
             "before_time_us": result["first_time_us"],
@@ -306,18 +368,19 @@ async def history(
         else None,
         "messages": [
             {
-                "id": row["id"],
-                "role": row["type"],
-                "content": row["content"],
-                **{
-                    key: row[key]
-                    for key in ("timestamp", "eventTimeUs")
-                    if isinstance(row.get(key), int)
-                },
+                "id": identifier,
+                "role": kind,
+                "content": content,
+                **position,
+                **usage,
             }
-            for row in result["timeline"]
-            if row.get("type") in {"user_message", "assistant_message"}
-            and isinstance(row.get("content"), str)
+            for identifier, kind, content, position, usage in text
+            if kind != "thought"
+        ],
+        "thoughts": [
+            {"id": identifier, "content": content, **position}
+            for identifier, kind, content, position, _usage in text
+            if kind == "thought"
         ],
     }
 

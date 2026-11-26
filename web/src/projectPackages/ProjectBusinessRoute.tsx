@@ -31,8 +31,11 @@ export function ProjectBusinessRoute({
   const { pathname, search, hash, state } = useLocation();
   const fromMarket = state?.fromPackageMarket === true;
   const showMarketNavigation = !insideWorkbench || fromMarket;
+  // The workbench shell navigates its own pages; a marketplace review still offers the page menu.
+  const showPageMenu = !insideWorkbench || fromMarket;
   const current = useProjectStore((state) => state.currentProject);
   const params = new URLSearchParams(search);
+  const diagnostics = params.has('diagnostics');
   const selected = businessRouteScope(pathname, params, current);
   const token = useSyncExternalStore(subscribeCloudIdentity, getAuthToken);
   const session = useWebPackageSession(token);
@@ -58,6 +61,8 @@ export function ProjectBusinessRoute({
       scope={{ tenantId: tenantOwner, projectId: null }}
       target="web"
       locale={i18n.language}
+      pageMenu={showPageMenu}
+      diagnostics={diagnostics}
       pathname={pathname + search + hash}
       {...(id ? { pluginId: id } : {})}
       backToMarket={showMarketNavigation ? back : null}
@@ -101,6 +106,8 @@ export function ProjectBusinessRoute({
         scope={{ tenantId: tenant, projectId: project }}
         target="web"
         locale={i18n.language}
+        pageMenu={showPageMenu}
+        diagnostics={diagnostics}
         pathname={pathname + search + hash}
         {...(plugin ? { pluginId: plugin } : {})}
         backToMarket={

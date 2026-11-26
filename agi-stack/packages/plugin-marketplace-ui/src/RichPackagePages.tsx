@@ -62,6 +62,10 @@ export interface RichPackagePagesProps {
     ready: boolean;
     error?: string;
   }) => void;
+  /** Offer the installed pages in a menu. A host with its own navigation turns this off. */
+  pageMenu?: boolean;
+  /** Show the selected and loaded release digests below the page. */
+  diagnostics?: boolean;
 }
 
 type Item = { pluginId: string; digest: string; page: PackagePage };
@@ -493,7 +497,7 @@ function PageRelease(props: Selected) {
           {failure.reason}
         </p>
       )}
-      {!props.inSlot && <PageDiagnostics
+      {!props.inSlot && props.diagnostics && <PageDiagnostics
         target={props.target}
         locale={
           props.locale || document.documentElement.lang || navigator.language
@@ -649,18 +653,18 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
   );
   const workbenchReturn = selected?.page.workbench && props.target === "web" && props.management == null
     ? props.backToMarket : null;
+  const pageMenu = props.pageMenu !== false && (!selected?.page.workbench || props.management != null);
   return (
     <div
       className="project-business-pages"
       data-testid="project-business-pages"
     >
-      {(!selected?.page.workbench || (props.backToMarket && !workbenchReturn) || props.management != null) && <nav
+      {(pageMenu || (props.backToMarket && !workbenchReturn) || props.management != null) && <nav
         className="project-business-navigation"
         aria-label={zh ? "项目导航" : "Project navigation"}
       >
         {props.backToMarket}
-        {links.length > 0 &&
-          (!selected?.page.workbench || props.management != null) && (
+        {pageMenu && (
             <label>
               {zh ? "业务页面" : "Applications"}
               <select
