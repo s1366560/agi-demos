@@ -6,11 +6,14 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   explicitWorkbenchProject,
+  pendingWorkspaceSelection,
   resolveWorkbenchScope,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/workbenchModel.js');
 const {
+  PACKAGE_PROJECT_CATALOG_PATH,
   fullMarketProjectId,
   projectCatalogPath,
+  readPackageProjectCatalog,
   readProjectCatalogPage,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/projectCatalog.js');
 
@@ -52,11 +55,12 @@ test('host administration keeps the persisted project and ignores conflicting sc
   );
 });
 
-test('the full host project list uses the same projects collection as the web host', () => {
+test('the project page uses the web catalog and the switcher uses the cross-tenant catalog', () => {
   assert.equal(
     projectCatalogPath('tenant a', 1),
     '/api/v1/projects/?tenant_id=tenant+a&page=1&page_size=100',
   );
+  assert.equal(PACKAGE_PROJECT_CATALOG_PATH, '/api/v1/project-packages/projects/');
   assert.deepEqual(
     readProjectCatalogPage({
       projects: [{ id: 'p', tenant_id: 'tenant a', name: 'Default' }],
@@ -66,13 +70,43 @@ test('the full host project list uses the same projects collection as the web ho
     }),
     { projects: [{ id: 'p', tenant_id: 'tenant a', name: 'Default' }], total: 1, page: 1 },
   );
+  assert.deepEqual(
+    readPackageProjectCatalog([
+      {
+        project_id: 'p',
+        tenant_id: 'other-tenant',
+        project_name: 'Other',
+        tenant_name: 'Other tenant',
+      },
+    ]),
+    [{ id: 'p', tenant_id: 'other-tenant', name: 'Other', tenant_name: 'Other tenant' }],
+  );
   assert.throws(() => readProjectCatalogPage([]), /project_catalog_invalid/);
   const directory = read('../src/fullHost/ProjectDirectory.tsx');
   const settings = read('../src/fullHost/HostSettings.tsx');
   assert.doesNotMatch(directory, /project-packages\/projects/);
-  assert.doesNotMatch(settings, /project-packages\/projects/);
   assert.match(directory, /loadTenantProjects/);
-  assert.match(settings, /loadTenantProjects/);
+  assert.match(settings, /PACKAGE_PROJECT_CATALOG_PATH/);
+  assert.doesNotMatch(settings, /loadTenantProjects/);
+});
+
+test('a later saved workspace still persists the same deep-linked project', () => {
+  const explicit = { tenantId: 'tenant-a', projectId: 'project-b' };
+  assert.equal(
+    pendingWorkspaceSelection(
+      { tenantId: 'tenant-a', projectId: 'project-b' },
+      explicit,
+    ),
+    null,
+  );
+  assert.deepEqual(
+    pendingWorkspaceSelection({ tenantId: 'tenant-a', projectId: 'project-a' }, explicit),
+    explicit,
+  );
+  const workbench = read('../src/fullHost/FullWorkbench.tsx');
+  assert.match(workbench, /pendingWorkspaceSelection/);
+  assert.match(workbench, /workspaceContext\.revision/);
+  assert.doesNotMatch(workbench, /persistedScope/);
 });
 
 test('marketplace scope and the missing-page state match the web host', () => {
@@ -87,7 +121,7 @@ test('marketplace scope and the missing-page state match the web host', () => {
     workbench,
     /desktopProductionRouter\.unavailable\.description/,
   );
-  assert.match(market, /full \? fullMarketProjectId/);
+  assert.match(market, /fullMarketProjectId/);
   assert.match(market, /t\.tenantScope/);
   const i18n = read('../src/i18n.tsx');
   assert.equal(

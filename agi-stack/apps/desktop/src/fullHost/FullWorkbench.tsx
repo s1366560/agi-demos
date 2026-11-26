@@ -22,6 +22,7 @@ import {
   assembleWorkbenchHeader,
   explicitWorkbenchProject,
   headerItemActive,
+  pendingWorkspaceSelection,
   hostSection,
   isShellRoot,
   pathnameOf,
@@ -79,30 +80,37 @@ export function FullWorkbench({
     (chosenTenant || (memberships.length === 1 ? memberships[0]!.tenant_id : ''));
   const project = routed.tenantId === tenant ? routed.projectId : null;
   const explicitProject = explicitWorkbenchProject(hash);
-  const persistedScope = useRef('');
+  const pendingSelection = session
+    ? pendingWorkspaceSelection(session.workspaceContext, explicitProject)
+    : null;
   useEffect(() => {
-    if (!session || !explicitProject) return;
-    if (
-      explicitProject.tenantId === session.workspaceContext.tenantId &&
-      explicitProject.projectId === session.workspaceContext.projectId
-    ) {
-      return;
-    }
-    const key = explicitProject.tenantId + '/' + explicitProject.projectId;
-    if (persistedScope.current === key) return;
-    persistedScope.current = key;
+    if (!session || !pendingSelection) return;
+    let cancelled = false;
     void transport('/api/v1/workspace-context/switch', {
       method: 'POST',
       body: {
-        tenant_id: explicitProject.tenantId,
-        project_id: explicitProject.projectId,
+        tenant_id: pendingSelection.tenantId,
+        project_id: pendingSelection.projectId,
         expected_revision: session.workspaceContext.revision,
         idempotency_key: crypto.randomUUID(),
       },
     })
-      .then(() => reload())
+      .then(() => {
+        if (!cancelled) return reload();
+        return undefined;
+      })
       .catch(() => undefined);
-  }, [explicitProject, reload, session]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingSelection?.tenantId,
+    pendingSelection?.projectId,
+    session?.workspaceContext.tenantId,
+    session?.workspaceContext.projectId,
+    session?.workspaceContext.revision,
+    reload,
+  ]);
   const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [directory, setDirectory] = useState(false);
   const [collapsed, setCollapsed] = useState(

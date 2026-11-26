@@ -8,12 +8,16 @@ import { useI18n } from '../i18n';
 import { transport } from '../packageHost/transport';
 import { messages } from '../packageHost/messages';
 import { DEFAULT_CONFIG } from '../types';
-import { loadTenantProjects, type CatalogProject } from './projectCatalog';
+import {
+  PACKAGE_PROJECT_CATALOG_PATH,
+  readPackageProjectCatalog,
+  type PackageCatalogProject,
+} from './projectCatalog';
 import '../features/settings/SettingsWindow.css';
 import '../features/settings/SettingsForms.css';
 
 export type HostSettingsTab = 'account' | 'workspace' | 'appearance';
-type ListedProject = CatalogProject & { tenant_name: string };
+type ListedProject = PackageCatalogProject;
 export function HostSettings({
   initial,
   session,
@@ -46,23 +50,17 @@ export function HostSettings({
   useEffect(() => {
     if (tab !== 'workspace') return;
     const controller = new AbortController();
-    const scopes = session?.tenants.length
-      ? session.tenants.map((item) => ({ id: item.id, name: item.name }))
-      : memberships.map((item) => ({ id: item.tenant_id, name: item.name }));
-    void Promise.all(
-      scopes.map(async (scope) => {
-        const listed = await loadTenantProjects(transport, scope.id, controller.signal);
-        return listed.map((project) => ({ ...project, tenant_name: scope.name }));
-      }),
-    )
-      .then((groups) => {
-        if (!controller.signal.aborted) setProjects(groups.flat());
+    // The per-tenant /projects/ catalog is limited to the saved workspace tenant.
+    // This picker must list every tenant before the user switches.
+    void transport<unknown>(PACKAGE_PROJECT_CATALOG_PATH, { signal: controller.signal })
+      .then((payload) => {
+        if (!controller.signal.aborted) setProjects(readPackageProjectCatalog(payload));
       })
       .catch((cause) => {
         if (!controller.signal.aborted) setError(String(cause));
       });
     return () => controller.abort();
-  }, [memberships, session, tab]);
+  }, [tab]);
   async function switchProject(project: ListedProject) {
     setBusy(true);
     setError('');

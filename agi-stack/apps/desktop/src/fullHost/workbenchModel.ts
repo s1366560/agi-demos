@@ -238,6 +238,20 @@ export function explicitWorkbenchProject(
   return tenantId && projectId ? { tenantId, projectId } : null;
 }
 
+/**
+ * A deep link should be saved when it names a different project than the
+ * workspace already stored. Callers re-run this after that stored context
+ * changes, including a later switch back to the previous project.
+ */
+export function pendingWorkspaceSelection(
+  saved: { tenantId: string; projectId: string | null },
+  explicit: { tenantId: string; projectId: string } | null,
+): { tenantId: string; projectId: string } | null {
+  if (!explicit) return null;
+  if (explicit.tenantId === saved.tenantId && explicit.projectId === saved.projectId) return null;
+  return { tenantId: explicit.tenantId, projectId: explicit.projectId };
+}
+
 /** Active tenant and project for signed pages, the sidebar, and the title. */
 export function resolveWorkbenchScope(
   address: string,

@@ -23,6 +23,45 @@ export type ProjectCatalogPage = {
   page: number;
 };
 
+/**
+ * One broker-allowed read of every project the user can open.
+ * `/api/v1/projects/?tenant_id=` is limited to the saved workspace tenant.
+ */
+export const PACKAGE_PROJECT_CATALOG_PATH = '/api/v1/project-packages/projects/';
+
+export type PackageCatalogProject = CatalogProject & { tenant_name: string };
+
+export function readPackageProjectCatalog(payload: unknown): PackageCatalogProject[] {
+  if (!Array.isArray(payload)) throw new Error('project_catalog_invalid');
+  return payload.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('project_catalog_invalid');
+    const row = item as {
+      project_id?: unknown;
+      tenant_id?: unknown;
+      project_name?: unknown;
+      tenant_name?: unknown;
+    };
+    if (typeof row.project_id !== 'string' || !row.project_id) {
+      throw new Error('project_catalog_invalid');
+    }
+    if (typeof row.tenant_id !== 'string' || !row.tenant_id) {
+      throw new Error('project_catalog_invalid');
+    }
+    if (typeof row.project_name !== 'string' || !row.project_name) {
+      throw new Error('project_catalog_invalid');
+    }
+    if (typeof row.tenant_name !== 'string' || !row.tenant_name) {
+      throw new Error('project_catalog_invalid');
+    }
+    return {
+      id: row.project_id,
+      tenant_id: row.tenant_id,
+      name: row.project_name,
+      tenant_name: row.tenant_name,
+    };
+  });
+}
+
 export function projectCatalogPath(tenantId: string, page = 1): string {
   const query = new URLSearchParams({
     tenant_id: tenantId,
