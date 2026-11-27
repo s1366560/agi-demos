@@ -1,7 +1,7 @@
 """Run an externally published two-version plugin through either Web host on loopback.
 
 Set MEMSTACK_QA_MARKET_PLUGIN to the fixture plugin ID from rich_page_publisher.
-Each host takes MEMSTACK_QA_MARKET_{THIN,FULL}_{ORIGIN,OWNER}. OWNER names the
+Each host takes MEMSTACK_QA_MARKET_{PACKAGE_HOST,FULL}_{ORIGIN,OWNER}. OWNER names the
 disposable account JSON containing email, password, project_id, and (for full) tenant_id.
 """
 
@@ -66,9 +66,9 @@ def cloud_label(
     expect(page.locator(".pm-spec")).to_be_visible(timeout=30000)
 
 
-@pytest.mark.parametrize("host", ["thin", "full"])
+@pytest.mark.parametrize("host", ["package-host", "full"])
 def test_unknown_npm_release_through_web(host, tmp_path):
-    profile = f"MEMSTACK_QA_MARKET_{host.upper()}"
+    profile = "MEMSTACK_QA_MARKET_" + host.upper().replace("-", "_")
     if not all(
         os.getenv(k) for k in (profile + "_ORIGIN", profile + "_OWNER", "MEMSTACK_QA_MARKET_PLUGIN")
     ):

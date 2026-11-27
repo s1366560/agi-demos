@@ -51,6 +51,21 @@
       ],
       "payload": {
         "plan": "free"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "free"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
       }
     },
     {
@@ -61,6 +76,21 @@
       ],
       "payload": {
         "plan": "pro"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "pro"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
       }
     },
     {
@@ -71,25 +101,54 @@
       ],
       "payload": {
         "plan": "enterprise"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "enterprise"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
       }
     },
     {
       "id": "tenant-account",
       "host_operation": "app.billing.account.read",
       "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
       "permissions": [
         "app.billing.account.read"
       ],
-      "accepts_input": false
+      "accepts_input": false,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-plan",
       "host_operation": "app.billing.plan.write",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.billing.plan.write"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "billing-details",
@@ -97,10 +156,25 @@
       "payload": {
         "full_history": true
       },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "full_history": {
+            "const": true
+          }
+        },
+        "required": [
+          "full_history"
+        ]
+      },
       "permissions": [
         "app.billing.account.read"
       ],
-      "accepts_input": false
+      "accepts_input": false,
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [

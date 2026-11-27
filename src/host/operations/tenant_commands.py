@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from src.host.identity.application_scope import application_actor_scope
 from src.host.operations.project_package_audit import identify_signed_operation, project_operation
 from src.host.operations.remote_application_commands import forward_command
+from src.infrastructure.plugins.v2.command_schema import validate_command_document
 from src.infrastructure.plugins.v2.project_package_execution import with_wasm_runtime
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
@@ -47,32 +48,40 @@ async def tenant_command(
         audit.executor = "application" if c.host_operation else "wasm"
         identify_signed_operation(pkg, command=command_id)
         inputs = dict(c.payload) if payload is None else payload
+        validate_command_document(c.input_schema, inputs, "input_schema")
         if c.host_operation:
             if resolver := getattr(
                 ctx.request.app.state, "resolve_package_application_operation", None
             ):
                 handler: ApplicationHandler = resolver(pkg.plugin_id, c.host_operation, ctx.scope)
                 with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
-                    return await handler(ctx, inputs, None)
-            operations: dict[str, ApplicationHandler] = getattr(
-                ctx.request.app.state, "tenant_package_operations_v1", {}
-            )
-            if c.host_operation in operations:
-                with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
-                    return await operations[c.host_operation](ctx, inputs, None)
-            if origin := getattr(ctx.request.app.state, "package_application_runtime_origin", None):
-                return await forward_command(
-                    origin,
-                    ctx,
-                    plugin=pkg.plugin_id,
-                    digest=pkg.digest,
-                    command=command_id,
-                    payload=payload,
-                    progress=None,
+                    result = await handler(ctx, inputs, None)
+            else:
+                operations: dict[str, ApplicationHandler] = getattr(
+                    ctx.request.app.state, "tenant_package_operations_v1", {}
                 )
-            raise OptionalBusinessError(
-                "runtime_unavailable", "Tenant application capability unavailable"
+                if c.host_operation in operations:
+                    with application_actor_scope(ctx.user.id, ctx.scope.tenant_id):
+                        result = await operations[c.host_operation](ctx, inputs, None)
+                elif origin := getattr(
+                    ctx.request.app.state, "package_application_runtime_origin", None
+                ):
+                    result = await forward_command(
+                        origin,
+                        ctx,
+                        plugin=pkg.plugin_id,
+                        digest=pkg.digest,
+                        command=command_id,
+                        payload=payload,
+                        progress=None,
+                    )
+                else:
+                    raise OptionalBusinessError(
+                        "runtime_unavailable", "Tenant application capability unavailable"
+                    )
+        else:
+            result = await with_wasm_runtime(
+                pkg, lambda runtime: runtime.invoke(pkg.plugin_id, ctx.scope, c.tool, inputs)
             )
-        return await with_wasm_runtime(
-            pkg, lambda runtime: runtime.invoke(pkg.plugin_id, ctx.scope, c.tool, inputs)
-        )
+        validate_command_document(c.output_schema, result, "output_schema")
+        return result

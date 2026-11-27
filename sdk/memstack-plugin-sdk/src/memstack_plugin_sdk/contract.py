@@ -97,6 +97,8 @@ class CommandContribution:
     host_operation: str | None = None
     tool: str
     payload: dict[str, Any]
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
     permissions: frozenset[str]
 
 
@@ -335,6 +337,10 @@ def _command(value: object) -> CommandContribution:
         raise ContractError("command", "command id or tool is invalid")
     if not isinstance(payload, dict):
         raise ContractError("command", "command payload must be an object")
+    input_schema = value.get("input_schema")
+    output_schema = value.get("output_schema")
+    if not isinstance(input_schema, dict) or not isinstance(output_schema, dict):
+        raise ContractError("command_schema", "command schemas must be objects")
     scope = value.get("scope", "shared")
     if scope not in ("project", "tenant", "shared"):
         raise ContractError("command", "unknown command installation scope")
@@ -348,6 +354,8 @@ def _command(value: object) -> CommandContribution:
         host_operation=operation,
         tool=tool,
         payload=payload,
+        input_schema=input_schema,
+        output_schema=output_schema,
         permissions=_permissions(value.get("permissions")),
     )
 

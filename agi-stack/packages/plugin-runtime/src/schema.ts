@@ -70,7 +70,29 @@ function validateNode(schema: Record<string, unknown>, path: string): void {
       validateNode(schemaObject(child, `${path}.$defs.${key}`), `${path}.$defs.${key}`);
     }
   }
+  if (schema.enum !== undefined) {
+    if (!Array.isArray(schema.enum) || schema.enum.length === 0) {
+      fail(`${path}.enum must be a non-empty array`);
+    }
+  }
   if (schema.minLength !== undefined) nonNegativeInteger(schema.minLength, `${path}.minLength`);
+  if (schema.maxLength !== undefined) nonNegativeInteger(schema.maxLength, `${path}.maxLength`);
+  if (
+    typeof schema.minLength === 'number' &&
+    typeof schema.maxLength === 'number' &&
+    schema.minLength > schema.maxLength
+  ) {
+    fail(`${path}.minLength exceeds maxLength`);
+  }
+  if (schema.minItems !== undefined) nonNegativeInteger(schema.minItems, `${path}.minItems`);
+  if (schema.maxItems !== undefined) nonNegativeInteger(schema.maxItems, `${path}.maxItems`);
+  if (
+    typeof schema.minItems === 'number' &&
+    typeof schema.maxItems === 'number' &&
+    schema.minItems > schema.maxItems
+  ) {
+    fail(`${path}.minItems exceeds maxItems`);
+  }
   if (schema.minimum !== undefined) finiteNumber(schema.minimum, `${path}.minimum`);
   if (schema.maximum !== undefined) finiteNumber(schema.maximum, `${path}.maximum`);
   if (
@@ -125,8 +147,22 @@ function validateValue(
   if ('const' in schema && !jsonValuesEqual(value, schema.const)) {
     return `${path} must equal the declared const`;
   }
+  if (
+    Array.isArray(schema.enum) &&
+    !schema.enum.some((candidate) => jsonValuesEqual(value, candidate))
+  ) {
+    return `${path} must be one of the declared enum values`;
+  }
   const scalarIssue = validateScalar(schema, value, path);
   if (scalarIssue) return scalarIssue;
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === 'number' && value.length < schema.minItems) {
+      return `${path} must contain at least ${schema.minItems} items`;
+    }
+    if (typeof schema.maxItems === 'number' && value.length > schema.maxItems) {
+      return `${path} must contain at most ${schema.maxItems} items`;
+    }
+  }
   if (Array.isArray(value) && isObject(schema.items)) {
     for (let index = 0; index < value.length; index += 1) {
       const issue = validateValue(schema.items, value[index], root, `${path}[${index}]`, depth + 1);
@@ -141,6 +177,9 @@ function validateScalar(schema: JsonSchemaV2, value: unknown, path: string): str
   if (typeof value === 'string') {
     if (typeof schema.minLength === 'number' && [...value].length < schema.minLength) {
       return `${path} must have length at least ${schema.minLength}`;
+    }
+    if (typeof schema.maxLength === 'number' && [...value].length > schema.maxLength) {
+      return `${path} must have length at most ${schema.maxLength}`;
     }
     if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern, 'u').test(value)) {
       return `${path} must match ${schema.pattern}`;

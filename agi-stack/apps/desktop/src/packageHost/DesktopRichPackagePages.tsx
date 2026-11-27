@@ -3,10 +3,13 @@ import {
   RichPackagePages as PageHost,
   type RichPackagePagesProps,
 } from '../../../../packages/plugin-marketplace-ui/src/RichPackagePages';
-import type { MarketDetail } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
+import {
+  npmResourcePath,
+  type MarketDetail,
+} from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
 import { DevicePluginSettings } from '../features/settings/DevicePluginSettings';
 import { saveBlobWithDesktopDialog } from '../features/runtime/nativeFileBridge';
-import { packages, transport } from './transport';
+import { transport } from './transport';
 
 type Review = { plugin: string; digest: string; signal: AbortSignal; finish(): void };
 
@@ -40,7 +43,9 @@ export function RichPackagePages(props: RichPackagePagesProps) {
     if (!projectId) throw new Error('device_project_required');
     const scope = { tenant_id: tenantId, project_id: projectId };
     const detail = await transport<MarketDetail>(
-      packages + '/npm/detail?' + new URLSearchParams({ ...scope, plugin_id: review.plugin }),
+      npmResourcePath(projectId, 'detail') +
+        '?' +
+        new URLSearchParams({ ...scope, plugin_id: review.plugin }),
       { signal: review.signal },
     );
     if (
@@ -50,7 +55,7 @@ export function RichPackagePages(props: RichPackagePagesProps) {
     )
       throw new Error('device_plugin_release_changed');
     const result = await transport<{ archive_base64: string; digest: string }>(
-      packages + '/npm/resolve',
+      npmResourcePath(projectId, 'resolve'),
       {
         method: 'POST',
         signal: review.signal,

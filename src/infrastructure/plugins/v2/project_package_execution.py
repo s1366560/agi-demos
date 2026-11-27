@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.configuration.config import get_settings
 from src.host.operations.project_package_audit import identify_signed_operation
+from src.infrastructure.plugins.v2.command_schema import validate_command_document
 from src.infrastructure.plugins.v2.oci_mcp_services import worker_host_callback
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import (
     OptionalBusinessError,
@@ -114,25 +115,30 @@ async def dispatch_project_command(
         raise OptionalBusinessError("forbidden", "command is unavailable for this installation")
     if payload is not None and not command.accepts_input:
         raise OptionalBusinessError("forbidden", "command does not accept user input")
+    supplied = dict(command.payload) if payload is None else payload
+    validate_command_document(command.input_schema, supplied, "input_schema")
     if command.host_operation:
         if application is None or application.scope != scope:
             raise OptionalBusinessError("runtime_unavailable", "application command unavailable")
-        return await application.invoke(
+        result = await application.invoke(
             command.host_operation,
-            dict(command.payload) if payload is None else payload,
+            supplied,
             on_progress,
             plugin=package.plugin_id,
             digest=package.digest,
             command=command_id,
             supplied_payload=payload,
         )
-    return await invoke_project_tool(
-        package,
-        scope,
-        command.tool,
-        dict(command.payload) if payload is None else payload,
-        on_progress,
-    )
+    else:
+        result = await invoke_project_tool(
+            package,
+            scope,
+            command.tool,
+            supplied,
+            on_progress,
+        )
+    validate_command_document(command.output_schema, result, "output_schema")
+    return result
 
 
 def project_page(package: SignedPackageBytesV2, target: str) -> dict[str, Any]:

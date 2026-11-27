@@ -1,6 +1,9 @@
 const profile = process.env.AGISTACK_DESKTOP_PROFILE;
 export const compatibilityProfile = profile === 'compat';
-export const fullDesktopProfile = compatibilityProfile || profile === 'full';
+/** Only the full profile. compat keeps its own shell and must not set this flag. */
+export const fullDesktopProfile = profile === 'full';
+/** full and compat compile the legacy business shell. Unset and package-host do not. */
+export const legacyBusinessProfile = fullDesktopProfile || compatibilityProfile;
 
 export const legacyRendererEntry = {
   name: 'desktop-profile-entry',

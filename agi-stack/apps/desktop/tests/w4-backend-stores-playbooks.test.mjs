@@ -546,7 +546,8 @@ test('Electron vault-bound broker admits only observed tenant/project/workspace 
         method: 'GET',
       },
       cloudRequestDependencies((url) => {
-        if (new URL(url).pathname === '/api/v1/workspace-context') {
+        const target = new URL(url);
+        if (target.pathname === '/api/v1/workspace-context') {
           return jsonResponse({
             context: {
               tenant_id: 'tenant-1',
@@ -555,6 +556,9 @@ test('Electron vault-bound broker admits only observed tenant/project/workspace 
               revision: 5,
             },
           });
+        }
+        if (target.pathname.startsWith('/api/v1/projects/')) {
+          return jsonResponse({ detail: 'missing' }, 404);
         }
         throw new Error('cross-project request must reject before target network access');
       }),
@@ -678,7 +682,8 @@ test('Electron vault-bound broker scopes Agent HTTP cohorts by the observed proj
         method: 'GET',
       },
       cloudRequestDependencies((url) => {
-        if (new URL(url).pathname === '/api/v1/workspace-context') {
+        const target = new URL(url);
+        if (target.pathname === '/api/v1/workspace-context') {
           return jsonResponse({
             context: {
               tenant_id: 'tenant-1',
@@ -687,6 +692,9 @@ test('Electron vault-bound broker scopes Agent HTTP cohorts by the observed proj
               revision: 5,
             },
           });
+        }
+        if (target.pathname.startsWith('/api/v1/projects/')) {
+          return jsonResponse({ detail: 'missing' }, 404);
         }
         throw new Error('cross-project Agent request must not reach the target');
       }),

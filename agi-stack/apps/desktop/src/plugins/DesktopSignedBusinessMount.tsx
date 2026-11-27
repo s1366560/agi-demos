@@ -23,7 +23,7 @@ export function DesktopSignedBusinessMount({
         return;
       const message = event.data;
       if (
-        message?.source === 'memstack-plugin-slot-v2' &&
+        message?.source === 'memstack-plugin-slot' &&
         message.type === 'slot:action' &&
         message.action?.type === 'plugin.ui' &&
         typeof message.action.id === 'string' &&

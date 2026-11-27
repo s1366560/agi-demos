@@ -135,7 +135,15 @@ symlinkSync(join(compiledRoot, 'plugins/business'), join(testNodeModules, '@busi
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 
-const run = spawnSync(process.execPath, ['--import', join(testsDirectory, 'rawAssets.mjs'), '--test', '--test-force-exit', ...testFiles], {
+const run = spawnSync(process.execPath, [
+  '--import',
+  join(testsDirectory, 'fullDesktopFlag.mjs'),
+  '--import',
+  join(testsDirectory, 'rawAssets.mjs'),
+  '--test',
+  '--test-force-exit',
+  ...testFiles,
+], {
   cwd: desktopRoot,
   env: {
     ...process.env,

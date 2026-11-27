@@ -128,10 +128,16 @@
         "total_cpu": 4,
         "used_cpu": 1
       },
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "tools.execute"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "patch-text",
@@ -143,7 +149,13 @@
         "content": "",
         "patch": ""
       },
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "sandbox-status",
@@ -152,7 +164,13 @@
         "app.environments.sandbox.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "prepare-sandbox",
@@ -161,7 +179,13 @@
         "app.environments.sandbox.prepare"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "authorize-run-terminal",
@@ -170,7 +194,13 @@
         "app.environments.terminal.authorize"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "environment-inventory",
@@ -179,7 +209,13 @@
         "app.environments.inventory.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "write-cluster",
@@ -188,7 +224,13 @@
         "app.environments.clusters.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "delete-cluster",
@@ -197,7 +239,13 @@
         "app.environments.clusters.delete"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "restart-sandbox",
@@ -205,7 +253,15 @@
       "permissions": [
         "app.environments.sandbox.restart"
       ],
-      "payload": {}
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "terminate-sandbox",
@@ -213,7 +269,15 @@
       "permissions": [
         "app.environments.sandbox.terminate"
       ],
-      "payload": {}
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "project-terminal",
@@ -222,7 +286,13 @@
         "app.environments.terminal.interact"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "project-desktop",
@@ -231,7 +301,13 @@
         "app.environments.desktop.interact"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-runner-pools",
@@ -240,7 +316,13 @@
         "app.environments.runners.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "create-runner-pool",
@@ -249,7 +331,13 @@
         "app.environments.runners.create"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "register-runner",
@@ -258,7 +346,13 @@
         "app.environments.runners.register"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-deploys",
@@ -267,7 +361,13 @@
         "app.environments.deploys.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-deploy",
@@ -276,7 +376,13 @@
         "app.environments.deploys.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-instance-templates",
@@ -285,7 +391,13 @@
         "app.environments.templates.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-instance-template",
@@ -294,7 +406,13 @@
         "app.environments.templates.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "create-runtime-instance",
@@ -303,7 +421,13 @@
         "app.environments.instances.create"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-runtime-pool",
@@ -312,7 +436,13 @@
         "app.environments.pool.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "control-runtime-pool",
@@ -321,7 +451,13 @@
         "app.environments.pool.control"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "set-runtime-pool-tier",
@@ -330,7 +466,13 @@
         "app.environments.pool.tier"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [

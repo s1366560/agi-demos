@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   pageSearch,
+  routeMatchPaths,
   splitPageLocation,
 } from "../../plugin-slots/src/pageLocation";
 import { connectPage } from "../../plugin-slots/src/richPageBridge";
@@ -588,10 +589,12 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
     : items;
   for (const item of navigable) {
     for (const route of item.page.routes) {
-      const rank = routeRank(route, pathname, scope);
-      if (rank !== null && (bestRank === null || rank > bestRank)) {
-        selected = item;
-        bestRank = rank;
+      for (const candidate of routeMatchPaths(pathname, scope)) {
+        const rank = routeRank(route, candidate, scope);
+        if (rank !== null && (bestRank === null || rank > bestRank)) {
+          selected = item;
+          bestRank = rank;
+        }
       }
     }
   }
@@ -600,7 +603,13 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
     if (!targetPage) throw new Error("page_destination_unavailable");
     if (destination !== undefined) {
       const {pathname, search, hash} = splitPageLocation(destination);
-      if (!targetPage.page.routes.some((route) => routeRank(route, pathname, scope) !== null))
+      if (
+        !targetPage.page.routes.some((route) =>
+          routeMatchPaths(pathname, scope).some(
+            (candidate) => routeRank(route, candidate, scope) !== null,
+          ),
+        )
+      )
         throw new Error("page_navigation_denied");
       const query = pageSearch(search, true, targetPage.page.query_params ?? []);
       props.navigate(pathname + query + hash, {pluginId});

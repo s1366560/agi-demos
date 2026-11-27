@@ -8,7 +8,10 @@ import {
 } from '../fullHost/projectCatalog';
 import { createMarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { marketText } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketText';
-import type { Installation } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
+import {
+  npmResourcePath,
+  type Installation,
+} from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
 import { CloudBusinessPage } from '../features/settings/CloudBusinessPage';
 import { PluginMarket } from '../../../../packages/plugin-marketplace-ui/src/PluginMarket';
 import { RichPackagePages } from './DesktopRichPackagePages';
@@ -17,7 +20,7 @@ import { openFilesWithDesktopDialog } from '../features/runtime/nativeFileBridge
 import { DevicePluginSettings } from '../features/settings/DevicePluginSettings';
 import { devicePageCall } from './device';
 import { messages as t } from './messages';
-import { packages, streamCommand, transport } from './transport';
+import { streamCommand, transport } from './transport';
 
 const currentLocation = () => window.location.hash;
 function subscribe(listener: () => void) {
@@ -147,7 +150,7 @@ export function PackageManagement({
                   const result = await transport<{
                     archive_base64: string;
                     digest: string;
-                  }>(packages + '/npm/resolve', {
+                  }>(npmResourcePath(scopeProject, 'resolve'), {
                     method: 'POST',
                     body: {
                       tenant_id: tenant,

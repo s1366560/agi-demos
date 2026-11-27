@@ -53,6 +53,8 @@ async def test_closed_worker_release_through_project_http(
         "tool": "probe",
         "payload": {},
         "accepts_input": True,
+        "input_schema": {"type": "object"},
+        "output_schema": {"type": "object"},
         "permissions": ["tools.execute"],
     }
     (tmp_path / "contribution.json").write_text(json.dumps({**DOC, "commands": [signed_command]}))

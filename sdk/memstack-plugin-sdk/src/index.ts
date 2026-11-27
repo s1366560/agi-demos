@@ -16,7 +16,9 @@ export const PERMISSIONS = [
   'model.chat.adapt.openai',
   'model.chat.adapt.deepseek',
   'skills.register',
+  'subagents.register',
   'ui.slot',
+  'ui.media.microphone',
   'storage.read',
   'storage.write',
 ] as const;

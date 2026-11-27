@@ -39,7 +39,7 @@ test('packaged opaque iframe exchanges owner context/actions on a private port a
   await page.evaluate(() =>
     window.postMessage(
       {
-        source: 'memstack-plugin-slot-v2',
+        source: 'memstack-plugin-slot',
         type: 'slot:action',
         slotId: 'settings',
         instanceNonce: 'stale',

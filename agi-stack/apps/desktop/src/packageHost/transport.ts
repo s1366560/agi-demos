@@ -14,7 +14,6 @@ export const transport: MarketplaceTransport = async <T>(
     signal: options.signal,
   })) as T;
 };
-export const packages = '/api/v1/platform-plugins/v2/optional-business';
 
 export async function streamCommand(
   path: string,

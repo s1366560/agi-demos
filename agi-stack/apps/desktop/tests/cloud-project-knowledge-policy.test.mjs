@@ -48,6 +48,42 @@ test('Cloud memories list observes trusted project scope before its exact reques
   assert.equal(JSON.stringify(result).includes(trustedSession.credential), false);
 });
 
+test('a catalog-visible project becomes the request scope', async () => {
+  const requests = [];
+  const targetPath = memoryPath.replace('project-1', 'project-2');
+  const result = await executeVaultBoundCloudRequest(
+    { method: 'GET', path: targetPath },
+    {
+      async loadTrustedSession() {
+        return trustedSession;
+      },
+      async fetch(url) {
+        const target = new URL(url);
+        requests.push(target.pathname + target.search);
+        if (target.pathname === '/api/v1/workspace-context') {
+          return new Response(JSON.stringify({
+            context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 7 },
+          }), { headers: { 'Content-Type': 'application/json' } });
+        }
+        if (target.pathname === '/api/v1/projects/project-2') {
+          return new Response(JSON.stringify({ id: 'project-2', tenant_id: 'tenant-1' }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ memories: [], total: 0, page: 1, page_size: 50 }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    },
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(requests, [
+    '/api/v1/workspace-context',
+    '/api/v1/projects/project-2?tenant_id=tenant-1',
+    targetPath,
+  ]);
+});
+
 test('Cloud memories rejects another project before requesting memory data', async () => {
   const requests = [];
   await assert.rejects(
@@ -57,7 +93,10 @@ test('Cloud memories rejects another project before requesting memory data', asy
     ),
     /cloud request project scope mismatch/u,
   );
-  assert.deepEqual(requests, ['/api/v1/workspace-context']);
+  assert.deepEqual(requests, [
+    '/api/v1/workspace-context',
+    '/api/v1/projects/project-2?tenant_id=tenant-1',
+  ]);
 });
 
 for (const [name, input] of [
@@ -100,7 +139,14 @@ for (const path of [
         () => executeVaultBoundCloudRequest({ method: 'GET', path: invalid }, dependencies(rejectedRequests)),
         /cloud request (tenant|project) scope mismatch/u,
       );
-      assert.deepEqual(rejectedRequests, ['/api/v1/workspace-context']);
+      if (invalid.includes('project-2')) {
+        assert.deepEqual(rejectedRequests, [
+          '/api/v1/workspace-context',
+          '/api/v1/projects/project-2?tenant_id=tenant-1',
+        ]);
+      } else {
+        assert.deepEqual(rejectedRequests, ['/api/v1/workspace-context']);
+      }
     }
   });
 }
@@ -117,7 +163,10 @@ for (const path of [
     await assert.rejects(() => executeVaultBoundCloudRequest(
       { method: 'GET', path: path.replace('project-1', 'project-2') }, dependencies(crossScope),
     ), /cloud request project scope mismatch/u);
-    assert.deepEqual(crossScope, ['/api/v1/workspace-context']);
+    assert.deepEqual(crossScope, [
+      '/api/v1/workspace-context',
+      '/api/v1/projects/project-2?tenant_id=tenant-1',
+    ]);
   });
 }
 for (const input of [

@@ -26,8 +26,8 @@ export function createPluginSlotDocumentV2(
   const mediaUrls = [];
   const revokeMedia = () => { for (const url of mediaUrls.splice(0)) URL.revokeObjectURL(url); };
   window.addEventListener('unload', revokeMedia, {once: true});
-  const same = m => m && m.source === 'memstack-plugin-slot-v2' && m.slotId === identity.slotId && m.instanceNonce === identity.instanceNonce && m.generationId === identity.generationId;
-  const send = payload => { if (port && !disposed) port.postMessage({ source: 'memstack-plugin-slot-v2', ...identity, ...payload }); };
+  const same = m => m && m.source === 'memstack-plugin-slot' && m.slotId === identity.slotId && m.instanceNonce === identity.instanceNonce && m.generationId === identity.generationId;
+  const send = payload => { if (port && !disposed) port.postMessage({ source: 'memstack-plugin-slot', ...identity, ...payload }); };
   const button = (label, action, disabled = false) => {
     const node = document.createElement('button'); node.type = 'button'; node.textContent = label;
     node.disabled = disabled; node.onclick = () => send({ type: 'slot:action', action }); root.append(node);

@@ -38,7 +38,14 @@ async def test_signed_command_progress_and_disconnect_reach_project_host(
         image,
         ScopeBindingV2(**scope),
         plugin_id=plugin,
-        command={"id": command, "tool": "probe", "payload": {}, "permissions": ["tools.execute"]},
+        command={
+            "id": command,
+            "tool": "probe",
+            "payload": {},
+            "input_schema": {"type": "object"},
+            "output_schema": {"type": "object"},
+            "permissions": ["tools.execute"],
+        },
     )
     monkeypatch.setattr(get_settings(), "plugin_worker_allowed_registries", (registry,))
     backend._transport.app.state.plugin_marketplace_trusted_public_keys_v2 = (public,)

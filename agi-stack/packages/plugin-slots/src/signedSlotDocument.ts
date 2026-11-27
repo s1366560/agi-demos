@@ -47,7 +47,7 @@ export async function createVerifiedSignedSlotDocumentV2(
         if(!value || typeof value!=='object' || Array.isArray(value))throw new Error();
         action.payload=value;
       }catch{field.setCustomValidity(field.labels[0].firstChild.textContent);field.reportValidity();return}}
-      parent.postMessage({source:'memstack-plugin-slot-v2',type:'slot:action',action},'*');
+      parent.postMessage({source:'memstack-plugin-slot',type:'slot:action',action},'*');
     })
   })</script></body></html>`;
 }

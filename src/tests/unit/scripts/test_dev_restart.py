@@ -102,10 +102,10 @@ def test_full_start_retains_image_reuse_and_workspace_health():
     ("has_env", "standard_owner", "overrides", "expected"),
     [
         (True, False, [], "full"),
-        (False, False, [], "thin"),
-        (True, True, [], "thin"),
+        (False, False, [], "package-host"),
+        (True, True, [], "package-host"),
         (True, True, ["MEMSTACK_DEV_PROFILE=full"], "full"),
-        (True, False, ["AGISTACK_DESKTOP_PROFILE=thin"], "thin"),
+        (True, False, ["AGISTACK_DESKTOP_PROFILE=package-host"], "package-host"),
         (False, False, ["AGISTACK_DESKTOP_PROFILE=full"], "full"),
         (True, False, ["AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE=/operator/trust.json"], "full"),
     ],

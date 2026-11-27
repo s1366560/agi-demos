@@ -103,6 +103,8 @@ def build_release(
                 "tool": "quote",
                 "permissions": permissions,
                 "payload": {"plan": plan},
+                "input_schema": {"type": "object"},
+                "output_schema": {"type": "object"},
             }
             for plan in plans
         ]
@@ -113,6 +115,8 @@ def build_release(
                         "id": "list-invoices",
                         "tool": "invoice.list",
                         "payload": {"limit": 16},
+                        "input_schema": {"type": "object"},
+                        "output_schema": {"type": "object"},
                         "permissions": ["tools.execute", "storage.read"],
                     },
                     {
@@ -120,6 +124,8 @@ def build_release(
                         "tool": "invoice.create",
                         "payload": {},
                         "accepts_input": True,
+                        "input_schema": {"type": "object"},
+                        "output_schema": {"type": "object"},
                         "permissions": ["tools.execute", "storage.read", "storage.write"],
                     },
                 ]
