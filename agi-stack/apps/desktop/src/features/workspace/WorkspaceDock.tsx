@@ -9,7 +9,7 @@ import {
 import { useI18n } from '../../i18n';
 import { Skeleton, SkeletonGroup } from '../../components/Skeleton';
 import { treeSkeletonRows } from '../../components/skeletonModel';
-import { useAgentSocketConnected } from '../../hooks/useAgentSocket';
+import { useAgentSocketConnected } from '../../hooks/agentSocketConnection';
 import type {
   AgentConversation,
   RuntimeNodeLoadState,
@@ -31,7 +31,7 @@ import {
   type ConversationRecencyGroup,
   type WorkspaceTreeSelectionMode,
   type WorkspaceTreeStatusPresentation,
-} from '@business/workspace/ui/desktop/workspace/workspaceTreeModel';
+} from './workspaceTreeModel';
 import {
   ConversationLifecycleDialogs,
   type ConversationLifecycleMode,

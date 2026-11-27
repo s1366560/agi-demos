@@ -2,7 +2,6 @@ import { richPageFramePlugin } from '../../packages/plugin-slots/viteRichPageFra
 import {
   compatibilityProfile,
   fullDesktopProfile,
-  legacyBusinessProfile,
   legacyRendererEntry,
 } from './scripts/legacyRendererProfile';
 import react from '@vitejs/plugin-react';
@@ -39,7 +38,7 @@ export default defineConfig(({ command }) => ({
       // production build would leave Rollup in watch mode forever.
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
-        ...(legacyBusinessProfile ? {} : {
+        ...(fullDesktopProfile ? {} : {
           treeshake: { moduleSideEffects: (id: string) => !id.includes('/electron/main/iab/') },
         }),
         input: {
@@ -60,7 +59,7 @@ export default defineConfig(({ command }) => ({
       rollupOptions: {
         input: {
           index: resolve(desktopRoot, 'electron/preload/index.ts'),
-          ...(legacyBusinessProfile ? {
+          ...(fullDesktopProfile ? {
             iab: resolve(desktopRoot, 'electron/preload/iabPreload.ts'),
             mcpAppGuest: resolve(desktopRoot, 'electron/preload/mcpAppGuestPreload.ts'),
           } : {}),
@@ -79,13 +78,12 @@ export default defineConfig(({ command }) => ({
       rendererRootHotReload(desktopRoot),
       react(),
       richPageFramePlugin(),
-      ...(legacyBusinessProfile ? [legacyRendererEntry] : []),
+      legacyRendererEntry,
     ],
     resolve: {
       dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'],
       alias: {
         '@desktop': resolve(desktopRoot, 'src'),
-        ...(legacyBusinessProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
         '@agistack/plugin-runtime': resolve(
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
@@ -107,7 +105,7 @@ export default defineConfig(({ command }) => ({
       outDir: resolve(desktopRoot, desktopOutput, 'renderer'),
       emptyOutDir: true,
       rollupOptions: {
-        input: { index: resolve(desktopRoot, 'index.html'), ...(legacyBusinessProfile
+        input: { index: resolve(desktopRoot, 'index.html'), ...(fullDesktopProfile
           ? { mcpApp: resolve(desktopRoot, 'mcp-app.html') } : {}) },
       },
     },
