@@ -1,29 +1,10 @@
-"""Map admitted command names onto host capabilities."""
+"""Map admitted command names onto guest shapers."""
 
 from __future__ import annotations
 
-from plugins.business.guest_runtime.binding import bind_operation
+from plugins.business.workspace.guest.commands import OPERATIONS
 
-OPERATIONS = {
-    name: bind_operation(name)
-    for name in (
-        "app.workspace.directory.read",
-        "app.workspace.detail.read",
-        "app.workspace.create",
-        "app.workspace.settings.update",
-        "app.workspace.members.read",
-        "app.workspace.members.write",
-        "app.workspace.posts.read",
-        "app.workspace.posts.write",
-        "app.workspace.tasks.read",
-        "app.workspace.tasks.write",
-        "app.workspace.blackboard.read",
-        "app.workspace.blackboard.write",
-        "app.workspace.overview.read",
-        "app.workspace.chat.read",
-        "app.workspace.chat.send",
-    )
-}
+__all__ = ["OPERATIONS", "TOOLS"]
 
 TOOLS = {
     "workspace.list-directory": "app.workspace.directory.read",

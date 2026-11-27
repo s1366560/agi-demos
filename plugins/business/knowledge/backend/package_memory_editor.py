@@ -50,8 +50,8 @@ async def _require_memory(ctx: "PackageOperationContext", memory_id: str) -> Mem
     return row
 
 
-async def read_memory(ctx: "PackageOperationContext", payload: dict[str, Any]) -> dict[str, Any]:
-    memory = await _require_memory(ctx, MemorySelection.model_validate(payload).id)
+async def raw_memory_record(ctx: "PackageOperationContext", memory_id: str) -> dict[str, Any]:
+    memory = await _require_memory(ctx, memory_id)
     return {
         "id": memory.id,
         "title": memory.title,
@@ -59,52 +59,15 @@ async def read_memory(ctx: "PackageOperationContext", payload: dict[str, Any]) -
         "version": memory.version,
         "tags": memory.tags,
         "processing_status": memory.processing_status,
+        "author_id": memory.author_id,
+        "project_id": memory.project_id,
     }
 
 
 async def save_memory(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    if set(payload) == {"draft"}:
-        from .memory_drafts import write_draft
+    from plugins.business.knowledge.guest.commands import save_memory as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-        return await write_draft(ctx, payload["draft"])
-    edit = _Edit.model_validate(payload)
-    scope = {"tenant_id": ctx.scope.tenant_id, "project_id": ctx.scope.project_id}
-    body: dict[str, Any] = {"title": edit.title, "content": edit.content}
-    if edit.tags is not None:
-        body["tags"] = edit.tags
-    if edit.metadata is not None:
-        body["metadata"] = edit.metadata
-    if edit.id:
-        await _require_memory(ctx, edit.id)
-        body["version"] = edit.version
-        method, path = "PATCH", f"/api/v1/memories/{edit.id}"
-    else:
-        body["project_id"] = ctx.scope.project_id
-        method, path = "POST", "/api/v1/memories/"
-    from src.host.operations.admitted_loopback import admitted_client
-
-    headers: dict[str, str] = {}
-    async with admitted_client(ctx) as api:
-        response = await api.request(method, path, params=scope, json=body, headers=headers)
-        if response.status_code == 428:
-            # The enrolled path rejects its first request before touching memory data.
-            headers.update(
-                {"Idempotency-Key": edit.change_id, "X-Memory-Expected-Revision": str(edit.version)}
-            )
-            response = await api.request(method, path, params=scope, json=body, headers=headers)
-    if not response.is_success:
-        if response.status_code == 409:
-            raise HTTPException(409, _("Memory changed. Reload before editing again."))
-        raise HTTPException(response.status_code, _("Memory operation failed"))
-    result = response.json()
-    if result["project_id"] != ctx.scope.project_id:
-        raise HTTPException(502, _("Memory response scope mismatch"))
-    saved = {
-        key: result[key]
-        for key in ("id", "title", "content", "version", "tags", "processing_status")
-    }
-    if result.get("task_id"):
-        saved["task_id"] = result["task_id"]
-    return saved
+    return await call_in_guest(ctx, shaped, payload, progress)

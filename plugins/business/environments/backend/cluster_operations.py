@@ -12,8 +12,6 @@ from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 im
 from src.infrastructure.adapters.primary.web.routers import clusters
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 
-from .inventory_operations import project_inventory_row
-
 if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
@@ -48,9 +46,7 @@ class _Update(_Key):
     data: _Settings
 
 
-async def write_cluster(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_write_cluster(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     from pydantic import TypeAdapter
 
     change: _Create | _Edit | _Update = TypeAdapter(
@@ -73,19 +69,32 @@ async def write_cluster(
             )
         else:
             row = await clusters.get_cluster(change.id, authority)
-        result = project_inventory_row(row, tenant)
-        result["provider_config"] = row.provider_config
-        return {"item": result}
+    return {"row": row.model_dump(mode="json")}
 
 
-async def delete_cluster(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    key = _Key.model_validate(payload)
+async def raw_delete_cluster(ctx: "TenantPackageContext", cluster_id: str) -> dict[str, Any]:
     tenant = ctx.scope.tenant_id
     await require_tenant_access(ctx.db, ctx.user, tenant, require_admin=True)
     async with asynccontextmanager(cluster_application_authority_dependency_v2)(
         ctx.request, ctx.user, tenant, ctx.db
     ) as authority:
-        await clusters.delete_cluster(key.id, authority)
+        await clusters.delete_cluster(cluster_id, authority)
     return {}
+
+
+async def write_cluster(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import write_cluster as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def delete_cluster(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import delete_cluster as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

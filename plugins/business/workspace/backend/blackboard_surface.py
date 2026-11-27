@@ -193,33 +193,18 @@ async def _call(ctx: "PackageOperationContext", args: SurfaceQuery) -> dict[str,
 
 
 async def read_surface(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    query = SurfaceQuery.model_validate(payload)
-    if query.resource == "blackboard/files/:id/download" and len(query.ids) == 1:
-        from .board_file_transfer import download
+    from plugins.business.workspace.guest.commands import read_surface as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-        return await download(ctx, query.workspace_id, query.ids[0], _progress)
-    if query.resource in {"published-genes", "board-conversations"} and not query.ids:
-        from .board_projections import read_projection
-
-        return await read_projection(ctx, query.workspace_id, query.resource, query.query)
-    return await _call(ctx, query)
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def change_surface(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    change = SurfaceChange.model_validate(payload)
-    if change.method == "POST" and change.resource.startswith("file-transfer/") and not change.ids:
-        from .board_file_transfer import upload
+    from plugins.business.workspace.guest.commands import change_surface as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-        return await upload(
-            ctx,
-            change.workspace_id,
-            change.resource.removeprefix("file-transfer/"),
-            UUID(change.request_id),
-            change.revision,
-            change.fields or {},
-        )
-    return await _call(ctx, change)
+    return await call_in_guest(ctx, shaped, payload, progress)

@@ -243,12 +243,18 @@ async def _exchange(
 
 
 async def project_terminal(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _exchange(ctx, payload, "terminal")
+    from plugins.business.environments.guest.commands import project_terminal as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def project_desktop(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _exchange(ctx, payload, "desktop")
+    from plugins.business.environments.guest.commands import project_desktop as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

@@ -1,19 +1,14 @@
 """Signed workspace collaboration commands backed by the existing Workspace Core authority."""
 
-import json
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.domain.model.workspace.blackboard_post import BlackboardPostStatus
 from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-from src.infrastructure.i18n import gettext as _
-
-from .workspace_directory_export import _body, _request_core, read_workspace_operation
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext
@@ -95,62 +90,12 @@ def _operation(topic: Topic, *, write: bool) -> Callable[..., Awaitable[dict[str
     async def invoke(
         ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
     ) -> dict[str, Any]:
-        path = _PATHS[topic]
-        data = None
-        method: Literal["GET", "POST", "PATCH", "DELETE"] = "GET"
-        try:
-            args = (
-                Change.model_validate(payload)
-                if write
-                else CollectionRequest.model_validate(payload)
-            )
-            if isinstance(args, Change):
-                method, data = _mutation(topic, args)
-                if args.id:
-                    path += (args.id,)
-        except (ValidationError, ValueError) as exc:
-            raise HTTPException(422, _("Invalid workspace collaboration request")) from exc
-        # Task routes omit project IDs. Resolve every workspace through the scoped authority first.
-        await read_workspace_operation(ctx, {"workspace_id": args.workspace_id}, None)
-        result = await _request_core(
-            ctx,
-            workspace=args.workspace_id,
-            child=path,
-            task_route=topic == "tasks",
-            query=f"offset={args.offset}&limit={args.limit}".encode()
-            if isinstance(args, CollectionRequest)
-            else b"",
-            method=method,
-            data=data,
-            request_id=args.request_id if isinstance(args, Change) else None,
-            expected_revision=args.expected_revision if isinstance(args, Change) else None,
+        from plugins.business.workspace.guest.commands import collaboration_handler
+        from src.host.operations.business_guest.loopback import call_in_guest
+
+        return await call_in_guest(
+            ctx, collaboration_handler(topic, write=write), payload, _progress
         )
-        try:
-            if not 200 <= result.status_code < 300:
-                try:
-                    error = json.loads(await _body(result))
-                except ValueError:
-                    error = None
-                reason = error.get("detail") if isinstance(error, dict) else None
-                raise HTTPException(
-                    result.status_code,
-                    reason
-                    if isinstance(reason, str)
-                    else _("Workspace Core rejected this operation"),
-                )
-            body = await _body(result)
-            value = json.loads(body) if body else {}
-            if write:
-                return {"saved": True}
-            rows = value if isinstance(value, list) else value.get("items", value.get(topic))
-            if not isinstance(rows, list) or any(
-                not isinstance(row, dict) or row.get("workspace_id") != args.workspace_id
-                for row in rows
-            ):
-                raise HTTPException(502, _("Invalid workspace collaboration response"))
-            return {"items": rows}
-        finally:
-            await result.aclose()
 
     return invoke
 

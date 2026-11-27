@@ -28,16 +28,13 @@ class _Plan(_AccountRequest):
     plan: Literal["free", "pro", "enterprise"]
 
 
-async def read_account(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    view = _AccountView.model_validate(payload)
+async def raw_account_parts(ctx: "PackageOperationContext", full_history: bool) -> dict[str, Any]:
     async with billing_application_authority_context_v2(
         request=ctx.request, current_user=ctx.user, db=ctx.db, tenant_id=ctx.scope.tenant_id
     ) as authority:
         account = await get_billing_info(ctx.scope.tenant_id, authority)
-        if not view.full_history:
-            return account
+        if not full_history:
+            return {"account": account, "invoices": None, "role": None}
         invoices = await list_invoices(ctx.scope.tenant_id, authority)
         try:
             await authority.services.billing.entitlements.authorize_quota_change()
@@ -45,17 +42,32 @@ async def read_account(
             role = "admin"
         else:
             role = "owner"
-        return {**account, **invoices, "membership_role": role}
+        return {"account": account, "invoices": invoices, "role": role}
 
 
-async def change_plan(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    plan = _Plan.model_validate(payload)
+async def raw_change_plan(ctx: "PackageOperationContext", plan: dict[str, Any]) -> dict[str, Any]:
     async with billing_application_authority_context_v2(
         request=ctx.request, current_user=ctx.user, db=ctx.db, tenant_id=ctx.scope.tenant_id
     ) as authority:
-        return await upgrade_plan(ctx.scope.tenant_id, plan.model_dump(), authority)
+        return await upgrade_plan(ctx.scope.tenant_id, plan, authority)
+
+
+async def read_account(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.billing.guest.commands import read_account as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def change_plan(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.billing.guest.commands import change_plan as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 BILLING_OPERATIONS: dict[str, "Operation"] = {

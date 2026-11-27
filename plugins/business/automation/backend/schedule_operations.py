@@ -162,9 +162,7 @@ def _workbench_job(job: CronJobResponse) -> dict[str, Any]:
     return public
 
 
-async def schedules(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_schedules(ctx: "PackageOperationContext", payload: dict[str, Any]) -> dict[str, Any]:
     query = PageQuery.model_validate(payload)
     project = ctx.scope.project_id
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
@@ -247,8 +245,8 @@ def _edit_fields(edit: ScheduleEdit) -> dict[str, Any]:
     return values
 
 
-async def save_schedule(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+async def raw_save_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any]
 ) -> dict[str, Any]:
     edit = ScheduleEdit.model_validate(payload)
     project = ctx.scope.project_id
@@ -292,8 +290,8 @@ async def save_schedule(
     return _row(job)
 
 
-async def run_schedule(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+async def raw_run_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any]
 ) -> dict[str, Any]:
     run = RunRevision.model_validate(payload)
     if run.conversation_id:
@@ -307,14 +305,11 @@ async def run_schedule(
     )
     async with cron_authority(ctx.request, ctx.user, ctx.db, project, _scope(ctx)) as authority:
         receipt = await cron.trigger_manual_run(project, run.job_id, body, authority)
-    return receipt.model_dump(
-        mode="json",
-        include={"receipt_id", "run_id", "job_id", "job_revision", "status", "duplicate"},
-    )
+    return {"receipt": receipt.model_dump(mode="json")}
 
 
-async def delete_schedule(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+async def raw_delete_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any]
 ) -> dict[str, Any]:
     edit = Revision.model_validate(payload)
     project = ctx.scope.project_id
@@ -322,7 +317,43 @@ async def delete_schedule(
         await cron.delete_cron_job(
             project, edit.job_id, edit.expected_revision, edit.idempotency_key, authority
         )
-    return {"id": edit.job_id}
+    return {"id": edit.job_id, "revision": edit.expected_revision}
+
+
+async def run_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.automation.guest.commands import run_schedule as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def delete_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.automation.guest.commands import delete_schedule as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def schedules(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.automation.guest.commands import schedules as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def save_schedule(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.automation.guest.commands import save_schedule as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 SCHEDULE_OPERATIONS: dict[str, "Operation"] = {

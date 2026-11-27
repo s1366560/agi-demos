@@ -1,15 +1,10 @@
 """Workspace Core access for the signed group chat pane."""
 
-import asyncio
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.infrastructure.i18n import gettext as _
-
-from .blackboard_surface import change_surface, read_surface
 from .collaboration import Identifier
 
 if TYPE_CHECKING:
@@ -33,52 +28,18 @@ class Send(BaseModel):
 
 
 async def read_chat(
-    ctx: "PackageOperationContext", payload: dict[str, "Any"], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, "Any"], progress: "Progress | None"
 ) -> dict[str, "Any"]:
-    args = Read.model_validate(payload)
+    from plugins.business.workspace.guest.commands import read_chat as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-    async def rows(resource: str) -> list[dict[str, "Any"]]:
-        result = await read_surface(
-            ctx, {"workspace_id": args.workspace_id, "resource": resource}, None
-        )
-        data = result["data"]
-        items = (
-            data
-            if isinstance(data, list)
-            else data.get("items", data.get(resource))
-            if isinstance(data, dict)
-            else None
-        )
-        if not isinstance(items, list) or any(
-            not isinstance(row, dict) or row.get("workspace_id") != args.workspace_id
-            for row in items
-        ):
-            raise HTTPException(502, _("Invalid workspace collaboration response"))
-        return items
-
-    if args.view == "messages":
-        return {"messages": await rows("messages"), "principal_id": ctx.user.id}
-    members, agents = await asyncio.gather(rows("members"), rows("agents"))
-    return {"members": members, "agents": agents}
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def send_chat(
-    ctx: "PackageOperationContext", payload: dict[str, "Any"], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, "Any"], progress: "Progress | None"
 ) -> dict[str, "Any"]:
-    args = Send.model_validate(payload)
-    authority = await read_surface(
-        ctx, {"workspace_id": args.workspace_id, "resource": "collaboration/authority"}, None
-    )
-    result = await change_surface(
-        ctx,
-        {
-            "workspace_id": args.workspace_id,
-            "resource": "messages",
-            "method": "POST",
-            "revision": authority["data"]["revision"],
-            "request_id": str(args.request_id),
-            "fields": {"content": args.content, "mentions": args.mentions, "sender_type": "human"},
-        },
-        None,
-    )
-    return {"message": result["data"]}
+    from plugins.business.workspace.guest.commands import send_chat as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

@@ -35,6 +35,14 @@ class CommandPort(Protocol):
         *,
         body: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def data(
+        self,
+        name: str,
+        params: dict[str, Any],
+        progress: Progress | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -56,10 +64,5 @@ def reset(token: Token[CommandPort | None]) -> None:
     _port.reset(token)
 
 
-def bind_operation(operation: str) -> Callable[..., Awaitable[dict[str, Any]]]:
-    async def handler(
-        _ctx: object, payload: dict[str, Any], _progress: object
-    ) -> dict[str, Any]:
-        return await current().call(operation, payload)
-
-    return handler
+def bound() -> bool:
+    return _port.get() is not None

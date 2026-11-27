@@ -20,6 +20,7 @@ def context():
     return SimpleNamespace(
         scope=SimpleNamespace(tenant_id="current"),
         request=SimpleNamespace(app=app, headers={}),
+        user=SimpleNamespace(id="user"),
     )
 
 

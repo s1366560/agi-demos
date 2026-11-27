@@ -48,30 +48,51 @@ async def _authority(
         yield authority
 
 
-async def list_pools(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_list_pools(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     key = _Cluster.model_validate(payload)
     async with _authority(ctx, admin=False) as authority:
         pools = await clusters.list_cluster_acp_runner_pools(key.id, authority)
     return {"items": [pool.model_dump(mode="json", by_alias=True) for pool in pools]}
 
 
-async def create_pool(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_create_pool(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     change = _CreatePool.model_validate(payload)
     async with _authority(ctx, admin=True) as authority:
         pool = await clusters.create_cluster_acp_runner_pool(change.id, change.data, authority)
     return {"item": pool.model_dump(mode="json", by_alias=True)}
 
 
-async def issue_token(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_issue_token(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     change = _IssueToken.model_validate(payload)
     async with _authority(ctx, admin=True) as authority:
         result = await clusters.create_cluster_acp_runner_registration_token(
             change.id, change.pool_key, change.data, authority
         )
-    return result.model_dump(mode="json", by_alias=True)
+    return {"token": result.model_dump(mode="json", by_alias=True)}
+
+
+async def list_pools(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import list_pools as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def create_pool(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import create_pool as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def issue_token(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import issue_token as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

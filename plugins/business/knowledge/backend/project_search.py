@@ -2,11 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
-
-from src.host.operations.remote_application_commands import application_result
-from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -19,21 +15,9 @@ class Search(BaseModel):
 
 
 async def search(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    request = Search.model_validate(payload)
-    if not ctx.scope.tenant_id or not ctx.scope.project_id:
-        raise HTTPException(403, _("Project membership is required"))
-    scope = {"tenant_id": ctx.scope.tenant_id, "project_id": ctx.scope.project_id}
-    if any(request.parameters.get(key, value) != value for key, value in scope.items()):
-        raise HTTPException(403, _("Search scope does not match the project"))
-    from src.host.operations.admitted_loopback import admitted_client
+    from plugins.business.knowledge.guest.commands import search as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-    async with admitted_client(ctx) as client:
-        response = await client.post(
-            "/api/v1/search-enhanced/" + request.mode,
-            json={**request.parameters, **scope},
-        )
-    if not response.is_success:
-        raise HTTPException(response.status_code, _("Failed to search the project"))
-    return application_result(response.json())
+    return await call_in_guest(ctx, shaped, payload, progress)

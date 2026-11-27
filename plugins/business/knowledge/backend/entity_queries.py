@@ -2,11 +2,7 @@
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-
-from src.host.operations.remote_application_commands import application_result
-from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -27,40 +23,31 @@ class _Relationships(_Query):
     limit: int = Field(default=50, ge=1, le=200)
 
 
-async def _read(ctx: "PackageOperationContext", path: str, query: _Query) -> dict[str, Any]:
-    if not ctx.scope.project_id or not ctx.scope.tenant_id:
-        raise HTTPException(403, _("Project membership is required"))
-    params = {
-        **query.model_dump(exclude_none=True, exclude={"entity_id"}),
-        "project_id": ctx.scope.project_id,
-        "tenant_id": ctx.scope.tenant_id,
-    }
-    from src.host.operations.admitted_loopback import admitted_client
-
-    async with admitted_client(ctx) as client:
-        response = await client.get("/api/v1/graph/entities/" + path, params=params)
-    if not response.is_success:
-        raise HTTPException(response.status_code, _("Failed to read the project graph"))
-    return application_result(response.json())
-
-
 async def list_entities(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _read(ctx, "", _Entities.model_validate(payload))
+    from plugins.business.knowledge.guest.commands import list_entities as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def entity_types(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _read(ctx, "types", _Query.model_validate(payload))
+    from plugins.business.knowledge.guest.commands import entity_types as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def entity_relationships(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    query = _Relationships.model_validate(payload)
-    return await _read(ctx, f"{query.entity_id}/relationships", query)
+    from plugins.business.knowledge.guest.commands import entity_relationships as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 ENTITY_OPERATIONS = {

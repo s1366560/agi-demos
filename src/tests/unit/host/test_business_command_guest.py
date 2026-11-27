@@ -65,15 +65,30 @@ async def test_guest_process_reads_a_directory_without_a_bearer_or_database_url(
     monkeypatch.setenv("AUTHORIZATION", "Bearer secret")
     captured: dict[str, object] = {}
 
-    async def call(self, name, payload, progress=None):  # type: ignore[no-untyped-def]
-        del self, payload, progress
+    async def data(self, name, params, progress=None):  # type: ignore[no-untyped-def]
+        del self, progress
         captured["name"] = name
-        return {"items": [{"id": "w", "name": "Guest"}]}
+        captured["params"] = params
+        return {
+            "status": 200,
+            "body": [
+                {
+                    "tenant_id": "t",
+                    "project_id": "p",
+                    "id": "w",
+                    "name": "Guest",
+                    "office_status": "open",
+                    "is_archived": False,
+                    "secret": "hidden",
+                }
+            ],
+            "headers": {},
+        }
 
     from src.host.operations.business_guest import bridge as bridge_module
 
-    original = bridge_module.HostBridge.call
-    bridge_module.HostBridge.call = call  # type: ignore[method-assign]
+    original = bridge_module.HostBridge.data
+    bridge_module.HostBridge.data = data  # type: ignore[method-assign]
     real_spawn = __import__("asyncio").create_subprocess_exec
 
     async def spy(*args, **kwargs):  # type: ignore[no-untyped-def]
@@ -88,9 +103,15 @@ async def test_guest_process_reads_a_directory_without_a_bearer_or_database_url(
             _application(), "memstack-workspace", "app.workspace.directory.read", {}, None
         )
     finally:
-        bridge_module.HostBridge.call = original  # type: ignore[method-assign]
-    assert result["items"][0]["name"] == "Guest"
-    assert captured["name"] == "app.workspace.directory.read"
+        bridge_module.HostBridge.data = original  # type: ignore[method-assign]
+    assert result["rows"][0] == {
+        "id": "w",
+        "name": "Guest",
+        "office_status": "open",
+        "is_archived": False,
+    }
+    assert "secret" not in result["rows"][0]
+    assert captured["name"] == "workspace.core"
     env = captured["env"]
     assert isinstance(env, dict)
     assert "DATABASE_URL" not in env
@@ -101,21 +122,38 @@ async def test_guest_process_reads_a_directory_without_a_bearer_or_database_url(
 async def test_guest_process_returns_a_page_larger_than_the_default_pipe_limit() -> None:
     title = "话" * 40_000
 
-    async def call(self, name, payload, progress=None):  # type: ignore[no-untyped-def]
-        del self, name, payload, progress
-        return {"items": [{"id": "w", "name": title}]}
+    async def data(self, name, params, progress=None):  # type: ignore[no-untyped-def]
+        del self, params, progress
+        assert name == "knowledge.memories.rows"
+        return {
+            "rows": [
+                {
+                    "id": "m",
+                    "title": title,
+                    "content": "x" * 400,
+                    "content_type": "text",
+                    "project_id": "p",
+                }
+            ]
+        }
 
     from src.host.operations.business_guest import bridge as bridge_module
 
-    original = bridge_module.HostBridge.call
-    bridge_module.HostBridge.call = call  # type: ignore[method-assign]
+    original = bridge_module.HostBridge.data
+    bridge_module.HostBridge.data = data  # type: ignore[method-assign]
     try:
         result = await run_business_command(
-            _application(), "memstack-knowledge", "app.knowledge.memories.read", {}, None
+            _application(),
+            "memstack-knowledge",
+            "app.knowledge.memories.read",
+            {"search": "guest"},
+            None,
         )
     finally:
-        bridge_module.HostBridge.call = original  # type: ignore[method-assign]
-    assert result["items"][0]["name"] == title
+        bridge_module.HostBridge.data = original  # type: ignore[method-assign]
+    assert result["items"][0]["title"] == title
+    assert set(result["items"][0]) == {"id", "title", "excerpt", "content_type"}
+    assert result["items"][0]["excerpt"] == "x" * 320
 
 
 async def test_standalone_kernel_forwards_business_commands_without_a_local_guest(
@@ -240,31 +278,37 @@ async def test_tenant_dispatch_forwards_billing_before_starting_a_guest(
 
 
 async def test_guest_forwards_capability_progress_to_the_caller() -> None:
-    from src.host.operations.business_guest.capabilities import CAPABILITIES
+    from src.host.operations.business_guest import bridge as bridge_module
 
     events: list[dict[str, object]] = []
 
     async def publish(frame: dict[str, object]) -> None:
         events.append(frame)
 
-    async def capability(_ctx, _payload, progress):  # type: ignore[no-untyped-def]
+    async def data(self, name, params, progress=None):  # type: ignore[no-untyped-def]
+        del self, params
+        assert name == "workspace.file.chunks"
         assert progress is not None
-        await progress({"content": "YQ=="})
-        return {"size": 1}
+        await progress({"raw": "YQ=="})
+        return {"size": 1, "mime": "text/plain"}
 
-    original = CAPABILITIES["app.workspace.blackboard.read"]
-    CAPABILITIES["app.workspace.blackboard.read"] = capability
+    original = bridge_module.HostBridge.data
+    bridge_module.HostBridge.data = data  # type: ignore[method-assign]
     try:
         result = await run_business_command(
             _application(),
             "memstack-workspace",
             "app.workspace.blackboard.read",
-            {},
+            {
+                "workspace_id": "w",
+                "resource": "blackboard/files/:id/download",
+                "ids": ["file"],
+            },
             publish,
         )
     finally:
-        CAPABILITIES["app.workspace.blackboard.read"] = original
-    assert result == {"size": 1}
+        bridge_module.HostBridge.data = original  # type: ignore[method-assign]
+    assert result == {"size": 1, "mime": "text/plain"}
     assert events == [{"content": "YQ=="}]
 
 

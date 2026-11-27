@@ -2,14 +2,12 @@
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.application.use_cases.memory.list_memories import ListMemoriesQuery, ListMemoriesUseCase
 from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
     SqlMemoryRepository,
 )
-from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -23,25 +21,9 @@ class _Search(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
 
 
-async def list_project_memories(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    """Use the authenticated package invocation's project as the only data scope."""
-    if not ctx.scope.project_id or not ctx.scope.tenant_id:
-        raise HTTPException(403, _("Project membership is required"))
-    if payload == {"draft": True}:
-        from .memory_drafts import read_draft
-
-        return await read_draft(ctx)
-    if "page" in payload or "detail" in payload:
-        from .memory_workbench import query_memory_workbench
-
-        return await query_memory_workbench(ctx, payload)
-    if "id" in payload:
-        from plugins.business.knowledge.backend.package_memory_editor import read_memory
-
-        return await read_memory(ctx, payload)
-    query = _Search.model_validate(payload)
+async def raw_memory_rows(ctx: "PackageOperationContext", params: dict[str, Any]) -> dict[str, Any]:
+    """Return full memory rows. The guest projects excerpts and drops scope fields."""
+    query = _Search.model_validate(params)
     rows = await ListMemoriesUseCase(SqlMemoryRepository(ctx.db)).execute(
         ListMemoriesQuery(
             project_id=ctx.scope.project_id,
@@ -51,14 +33,24 @@ async def list_project_memories(
         )
     )
     return {
-        "items": [
+        "rows": [
             {
                 "id": row.id,
                 "title": row.title,
-                "excerpt": row.content[:320],
+                "content": row.content,
                 "content_type": row.content_type,
+                "project_id": ctx.scope.project_id,
             }
-            for row in rows[: query.limit]
-        ],
-        "has_more": len(rows) > query.limit,
+            for row in rows
+        ]
     }
+
+
+async def list_project_memories(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    """Use the authenticated package invocation's project as the only data scope."""
+    from plugins.business.knowledge.guest.commands import list_project_memories as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

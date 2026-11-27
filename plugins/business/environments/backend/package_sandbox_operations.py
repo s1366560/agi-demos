@@ -141,97 +141,51 @@ async def _capability(ctx: "PackageOperationContext") -> _Capability:
 
 
 def _sandbox(ctx: "PackageOperationContext", value: dict[str, Any] | None) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    try:
-        sandbox = _Sandbox.model_validate(value)
-    except ValidationError as exc:
-        raise OptionalBusinessError("runtime_unavailable", "Invalid sandbox state") from exc
-    if (sandbox.tenant_id, sandbox.project_id) != (ctx.scope.tenant_id, ctx.scope.project_id):
-        raise OptionalBusinessError("forbidden", "Sandbox scope mismatch")
-    return sandbox.model_dump(exclude={"project_id", "tenant_id"}, exclude_none=True)
+    from plugins.business.environments.guest.sandbox import project_sandbox
+
+    return project_sandbox(ctx.scope.tenant_id, ctx.scope.project_id, value)
+
+
+async def _shaped(
+    ctx: "PackageOperationContext",
+    name: str,
+    payload: dict[str, Any],
+    progress: "Progress | None",
+) -> dict[str, Any]:
+    from plugins.business.environments.guest import commands
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, getattr(commands, name), payload, progress)
 
 
 async def read_sandbox(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    query = _Read.model_validate(payload)
-    if query.metrics_for:
-        sandbox = _sandbox(ctx, await _request(ctx, "GET", "", absent_ok=True))
-        if not sandbox or sandbox["sandbox_id"] != query.metrics_for:
-            raise OptionalBusinessError("conflict", "The selected sandbox has changed")
-        try:
-            stats = _Stats.model_validate(await _request(ctx, "GET", "/stats"))
-        except ValidationError as exc:
-            raise OptionalBusinessError("runtime_unavailable", "Invalid sandbox metrics") from exc
-        if (stats.project_id, stats.sandbox_id) != (ctx.scope.project_id, query.metrics_for):
-            raise OptionalBusinessError("forbidden", "Sandbox metrics scope mismatch")
-        return {
-            "metrics": stats.model_dump(exclude={"project_id", "sandbox_id"}, exclude_none=True)
-        }
-    capability = await _capability(ctx)
-    return {
-        "sandbox": _sandbox(ctx, await _request(ctx, "GET", "", absent_ok=True)),
-        "terminal": capability.model_dump(),
-    }
+    return await _shaped(ctx, "read_sandbox", payload, progress)
 
 
 async def prepare_sandbox(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    data = _Prepare.model_validate(payload)
-    return {"sandbox": _sandbox(ctx, await _request(ctx, "POST", "", data.model_dump()))}
+    return await _shaped(ctx, "prepare_sandbox", payload, progress)
 
 
 async def restart_sandbox(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    _Input.model_validate(payload)
-    response = await _request(ctx, "POST", "/restart")
-    if not response or response.get("success") is not True:
-        raise OptionalBusinessError("runtime_unavailable", "Sandbox restart failed")
-    return {"success": True}
+    return await _shaped(ctx, "restart_sandbox", payload, progress)
 
 
 async def terminate_sandbox(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    _Input.model_validate(payload)
-    response = await _request(ctx, "DELETE", "")
-    if not response or response.get("success") is not True:
-        raise OptionalBusinessError("runtime_unavailable", "Sandbox termination failed")
-    return {"success": True}
+    return await _shaped(ctx, "terminate_sandbox", payload, progress)
 
 
 async def authorize_terminal(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    run = _RunAuthorization.model_validate(payload)
-    capability = await _capability(ctx)
-    if capability.availability != "available":
-        raise OptionalBusinessError(
-            "runtime_unavailable", capability.reason_code or "terminal_authority_unavailable"
-        )
-    try:
-        response = await _request(
-            ctx, "POST", "/terminal/sessions", run.model_dump(exclude={"open_channel"})
-        )
-        grant = (_PrivateGrant if run.open_channel else _Grant).model_validate(response)
-    except ValidationError as exc:
-        raise OptionalBusinessError(
-            "runtime_unavailable", "Invalid terminal authorization"
-        ) from exc
-    if (grant.project_id, grant.run_id, grant.run_revision) != (
-        ctx.scope.project_id,
-        run.run_id,
-        run.expected_run_revision,
-    ):
-        raise OptionalBusinessError("forbidden", "Terminal grant scope mismatch")
-    if isinstance(grant, _PrivateGrant):
-        from .interaction_channel import open_run_terminal
-
-        return await open_run_terminal(ctx, grant.session_id, grant.resume_token)
-    return grant.model_dump()
+    return await _shaped(ctx, "authorize_terminal", payload, progress)
 
 
 SANDBOX_OPERATIONS: dict[str, "Operation"] = {

@@ -1,8 +1,6 @@
 """Project overview from the authenticated project and installed Knowledge authorities."""
 
-import asyncio
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException
@@ -41,64 +39,9 @@ def _recent(page: dict[str, Any], project: str) -> dict[str, Any]:
 
 
 async def read_overview(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    tenant, project = ctx.scope.tenant_id, ctx.scope.project_id
-    if not tenant or not project:
-        raise HTTPException(403, _("Project membership is required"))
-    if payload:
-        raise HTTPException(422, _("Project overview does not accept parameters"))
-    path = "/api/v1/projects/" + quote(project, safe="")
-    scope = {"tenant_id": tenant, "project_id": project}
-    packages = "/api/v1/platform-plugins/v2/optional-business"
-    from src.host.operations.admitted_loopback import admitted_client
+    from plugins.business.workspace.guest.commands import read_overview as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-    async with admitted_client(ctx) as client:
-        meta, stats, available = await asyncio.gather(
-            client.get(path, params={"tenant_id": tenant}),
-            client.get(path + "/stats"),
-            client.get(packages + "/", params=scope),
-        )
-        info = _read(meta)
-        if (info["id"], info["tenant_id"]) != (project, tenant):
-            raise HTTPException(403, _("Project scope mismatch"))
-        counters = _read(stats)
-        knowledge = next(
-            (
-                row
-                for row in _read(available)["items"]
-                if row["plugin_id"] == "memstack-knowledge" and row["status"] == "enabled"
-            ),
-            None,
-        )
-        recent = None
-        if knowledge:
-            response = await client.post(
-                packages + "/memstack-knowledge/commands",
-                json={
-                    **scope,
-                    "expected_digest": knowledge["actual_digest"],
-                    "command_id": "list-memories",
-                    "payload": {"page": 1, "page_size": 5},
-                },
-            )
-            # A removed, changed or older Knowledge release may not provide this optional projection.
-            if response.status_code not in {400, 403, 404, 409, 410, 422}:
-                recent = _recent(_read(response), project)
-    return {
-        "project": {
-            k: info.get(k)
-            for k in ("id", "tenant_id", "name", "description", "created_at", "updated_at")
-        },
-        "stats": {
-            k: counters[k]
-            for k in (
-                "memory_count",
-                "storage_used",
-                "storage_limit",
-                "active_nodes",
-                "collaborators",
-            )
-        },
-        "recent": recent,
-    }
+    return await call_in_guest(ctx, shaped, payload, progress)

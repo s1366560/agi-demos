@@ -1,16 +1,10 @@
-"""Map admitted command names onto host capabilities."""
+"""Map admitted command names onto guest shapers."""
 
 from __future__ import annotations
 
-from plugins.business.guest_runtime.binding import bind_operation
+from plugins.business.billing.guest.commands import OPERATIONS
 
-OPERATIONS = {
-    name: bind_operation(name)
-    for name in (
-        "app.billing.account.read",
-        "app.billing.plan.write",
-    )
-}
+__all__ = ["OPERATIONS", "TOOLS"]
 
 TOOLS = {
     "billing.tenant-account": "app.billing.account.read",

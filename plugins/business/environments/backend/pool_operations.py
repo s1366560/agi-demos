@@ -1,13 +1,8 @@
 """Tenant-bound commands for the original runtime pool dashboard."""
 
 from typing import TYPE_CHECKING, Any, Literal
-from urllib.parse import quote
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-
-from src.host.operations.remote_application_commands import application_result
-from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -36,60 +31,28 @@ class Tier(PoolInput):
     tier: Literal["hot", "warm", "cold"]
 
 
-async def _request(
-    ctx: "PackageOperationContext",
-    method: str,
-    path: str,
-    *,
-    params: dict[str, Any] | None = None,
-    body: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    if not ctx.scope.tenant_id:
-        raise HTTPException(403, _("Tenant membership is required"))
-    from src.host.operations.admitted_loopback import admitted_client
-
-    async with admitted_client(ctx) as client:
-        response = await client.request(
-            method,
-            f"/api/v1/admin/pool/{path}",
-            params={**(params or {}), "scope": "tenant", "tenant_id": ctx.scope.tenant_id},
-            json=body,
-        )
-    if response.status_code == 403:
-        # Preserve the original dashboard's permission state across the signed command channel.
-        return {"forbidden": True}
-    if not response.is_success:
-        raise HTTPException(response.status_code, _("Runtime pool operation failed"))
-    return application_result(response.json())
-
-
 async def read(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    query = Read.model_validate(payload)
-    params = query.model_dump(exclude={"resource"}, exclude_none=True)
-    return await _request(
-        ctx, "GET", query.resource, params=params if query.resource == "instances" else None
-    )
+    from plugins.business.environments.guest.commands import read_pool
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, read_pool, payload, progress)
 
 
 async def control(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    command = Control.model_validate(payload)
-    key = command.instance_key
-    if key in {".", ".."}:
-        raise HTTPException(422, _("Invalid instance key"))
-    path = f"instances/{quote(key, safe='')}"
-    if command.action == "terminate":
-        return await _request(ctx, "DELETE", path, params={"graceful": command.graceful})
-    return await _request(ctx, "POST", f"{path}/{command.action}")
+    from plugins.business.environments.guest.commands import control_pool
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, control_pool, payload, progress)
 
 
 async def set_tier(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    command = Tier.model_validate(payload)
-    return await _request(
-        ctx, "POST", f"projects/{command.project_id}/tier", body={"tier": command.tier}
-    )
+    from plugins.business.environments.guest.commands import set_tier as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
