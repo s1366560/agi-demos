@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from plugins.business.agent.backend.chat_operations import (
     ConversationInput,
@@ -20,15 +20,17 @@ class ActivityView(_Input):
     view: Literal["items", "receipts"]
 
 
-class ActivityReadEntry(_Input):
-    model_config = ConfigDict(extra="forbid")
+class ActivityReadEntry(BaseModel):
+    """ISO strings from the signed page parse the same way the previous request model did."""
+
+    model_config = ConfigDict(extra="forbid", strict=False)
     entry_id: str = Field(min_length=1, max_length=255)
     entry_revision: int = Field(ge=0)
     read_at: datetime
 
 
-class ReceiptUpdate(_Input):
-    model_config = ConfigDict(extra="forbid")
+class ReceiptUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=False)
     expected_authority_revision: int = Field(ge=0)
     entries: list[ActivityReadEntry] = Field(default_factory=list, max_length=500)
 
@@ -41,7 +43,9 @@ class RunDetail(_Input):
     turn_id: str | None = Field(default=None, max_length=255)
 
 
-async def activity(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
+async def activity(
+    ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None
+) -> dict[str, Any]:
     data = ActivityView.model_validate(payload)
     path = "my-work" if data.view == "items" else "activity/read-state"
     result = await _canonical(ctx, "GET", path, project_route=True)

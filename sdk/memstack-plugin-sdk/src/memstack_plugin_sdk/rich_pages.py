@@ -88,6 +88,7 @@ class RichPage:
 
     sidebar: dict[str, object] | None = None
     navigation_actions: tuple[str, ...] = ()
+    navigation_routes: tuple[str, ...] = ()
     voice_authorization: str | None = None
 
     @property
@@ -104,6 +105,7 @@ class RichPage:
             ),
             **({"sidebar": self.sidebar} if self.sidebar else {}),
             **({"navigation_actions": self.navigation_actions} if self.navigation_actions else {}),
+            **({"navigation_routes": self.navigation_routes} if self.navigation_routes else {}),
             **({"workbench": True} if self.workbench else {}),
             **({"scope": self.scope} if self.scope == "tenant" else {}),
             "title": self.title,
@@ -212,6 +214,13 @@ def _anchored_slots(
     return tuple(anchors.items())
 
 
+def _navigation_routes(value: dict[str, object]) -> tuple[str, ...]:
+    routes = _strings(value.get("navigation_routes", []), _ROUTE)
+    for route in routes:
+        _check_route(route)
+    return routes
+
+
 def _page_flag(value: dict[str, object], name: str) -> bool:
     flag = value.get(name, False)
     if not isinstance(flag, bool):
@@ -240,6 +249,7 @@ def _parse_page(value: object, commands: set[str]) -> RichPage:
         "contributes_to",
         "sidebar",
         "navigation_actions",
+        "navigation_routes",
         "voice_authorization",
     }:
         raise ValueError("unsupported rich page declaration")
@@ -284,6 +294,7 @@ def _parse_page(value: object, commands: set[str]) -> RichPage:
         or home
     ):
         raise ValueError("tenant pages require tenant routes and cloud commands")
+    navigation_routes = _navigation_routes(value)
     navigation_actions = _strings(value.get("navigation_actions", []), _IDENTIFIER)
     if navigation_actions and (
         not routes or not set(navigation_actions) <= {"primary-create", "group-create"}
@@ -302,6 +313,7 @@ def _parse_page(value: object, commands: set[str]) -> RichPage:
     return RichPage(
         voice_authorization=voice,
         navigation_actions=navigation_actions,
+        navigation_routes=navigation_routes,
         sidebar=parse_sidebar(value.get("sidebar", {}), commands, routes),
         scope=scope,
         workbench=workbench,

@@ -10,6 +10,9 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBu
 
 type Progress = Callable[[dict[str, Any]], Awaitable[None]]
 
+# One JSON line carries a transcript page. The default 64 KiB stream buffer is too small.
+RPC_LINE_LIMIT = 32 * 1024 * 1024
+
 
 class CommandScope(Protocol):
     tenant_id: str

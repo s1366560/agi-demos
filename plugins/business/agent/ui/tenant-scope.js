@@ -19,7 +19,13 @@ window.memstack.getContext().then(async (scope) => {
       button.type = "button";
       button.textContent = item.title || item.id;
       button.addEventListener("click", () => {
-        const destination = `/project/${item.project_id}/agent/chat?conversation=${item.id}`;
+        const destination =
+          "/tenant/" +
+          encodeURIComponent(scope.tenantId) +
+          "/project/" +
+          encodeURIComponent(item.project_id) +
+          "/agent-workspace/" +
+          encodeURIComponent(item.id);
         window.memstack.navigate(destination).catch(() => {
           status.textContent = text("无法打开这个会话。", "This session could not be opened.");
         });

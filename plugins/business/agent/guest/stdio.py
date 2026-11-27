@@ -8,7 +8,7 @@ import sys
 from collections.abc import Awaitable, Callable  # noqa: TC003
 from typing import Any
 
-from plugins.business.agent.guest.binding import CommandError, Progress, bind, reset
+from plugins.business.agent.guest.binding import RPC_LINE_LIMIT, CommandError, Progress, bind, reset
 from plugins.business.agent.guest.dispatch import OPERATIONS, TOOLS
 
 _PROGRESS: Callable[[dict[str, Any]], Awaitable[None]] | None = None
@@ -204,7 +204,7 @@ async def _run(start: dict[str, Any], reader: asyncio.StreamReader) -> None:
 
 async def main() -> None:
     loop = asyncio.get_running_loop()
-    reader = asyncio.StreamReader()
+    reader = asyncio.StreamReader(limit=RPC_LINE_LIMIT)
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
     line = await reader.readline()
     if not line:

@@ -44,6 +44,24 @@ async def test_receipts_require_revision_and_pass_authority_conflict(ctx, monkey
     )
 
 
+async def test_receipts_accept_iso_read_timestamps(ctx, monkeypatch):
+    authority = AsyncMock(return_value={"authority_revision": 5})
+    monkeypatch.setattr(operations, "_canonical", authority)
+    payload = {
+        "expected_authority_revision": 4,
+        "entries": [
+            {
+                "entry_id": "item",
+                "entry_revision": 2,
+                "read_at": "2026-11-27T06:00:00Z",
+            }
+        ],
+    }
+    assert await operations.mark_read(ctx, payload, None) == {"authority_revision": 5}
+    body = authority.await_args.kwargs["body"]
+    assert body["entries"][0]["read_at"].startswith("2026-11-27T06:00:00")
+
+
 @pytest.mark.parametrize("values", [[None], ["other-conversation", None]])
 async def test_run_detail_rejects_foreign_project_or_owner(ctx, monkeypatch, values):
     authority = AsyncMock()
@@ -53,7 +71,11 @@ async def test_run_detail_rejects_foreign_project_or_owner(ctx, monkeypatch, val
         return values[0]
 
     monkeypatch.setattr(operations, "_run_conversation", missing)
-    monkeypatch.setattr(operations, "_own_conversation", AsyncMock(side_effect=OptionalBusinessError("forbidden", "owned")))
+    monkeypatch.setattr(
+        operations,
+        "_own_conversation",
+        AsyncMock(side_effect=OptionalBusinessError("forbidden", "owned")),
+    )
     with pytest.raises(OptionalBusinessError):
         await operations.run_detail(ctx, {"run_id": "run", "view": "summary"}, None)
     authority.assert_not_awaited()

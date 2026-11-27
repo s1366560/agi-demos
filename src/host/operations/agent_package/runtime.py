@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+from plugins.business.agent.guest.binding import RPC_LINE_LIMIT
 from plugins.business.agent.guest.dispatch import TOOLS
 from src.host.operations.agent_package.bridge import HostBridge
 from src.host.operations.application_commands import PackageOperationContext
@@ -22,6 +23,7 @@ type Progress = Callable[[dict[str, Any]], Awaitable[None]]
 class _Command(Protocol):
     tool: str
     host_operation: str | None
+
 
 _ROOT = Path(__file__).resolve().parents[4]
 _KNOWN = set(TOOLS.values()) | set(TOOLS)
@@ -68,6 +70,7 @@ async def run_agent_command(
         stderr=asyncio.subprocess.PIPE,
         cwd=str(_ROOT),
         env=env,
+        limit=RPC_LINE_LIMIT,
     )
     assert process.stdin is not None
     assert process.stdout is not None

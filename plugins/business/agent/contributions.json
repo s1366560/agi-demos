@@ -1246,8 +1246,11 @@
       "device_tools": [],
       "entry": {
         "path": "ui/tenant-scope.js",
-        "digest": "sha256:5e96bcc22ebbba4f63e63419d4c90612f75fb22c186a65d50f79ad7b3e779570"
-      }
+        "digest": "sha256:e4b67445abde8b49bce3f9ea3cc21e57f70a6671d81cc386f33065ed123a0081"
+      },
+      "navigation_routes": [
+        "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId"
+      ]
     },
     {
       "id": "dashboard",
