@@ -78,6 +78,46 @@ describe('connectPage appearance', () => {
     disconnect();
   });
 
+  it('authorizes the tenant chat address against the project route when a project is named', () => {
+    const posted: Record<string, unknown>[] = [];
+    const navigate = vi.fn();
+    const port = {
+      postMessage: (message: Record<string, unknown>) => {
+        posted.push(message);
+      },
+      close: vi.fn(),
+      onmessage: null as ((event: MessageEvent) => void) | null,
+    };
+    const page: RichPage = {
+      ...signedPage(true),
+      routes: ['/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId'],
+      navigation_routes: [
+        '/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId',
+      ],
+    };
+    const disconnect = connectPage(port as unknown as MessagePort, page, {
+      scope: { tenantId: 't', projectId: 'p' },
+      target: 'web',
+      pathname: '/tenant/t/agent-workspace',
+      locale: 'en',
+      status: vi.fn(),
+      navigate,
+      invoke: vi.fn(),
+    });
+    port.onmessage?.({
+      data: {
+        id: 'nav-1',
+        method: 'navigate',
+        path: '/tenant/t/agent-workspace/conversation',
+      },
+    } as MessageEvent);
+    expect(navigate).toHaveBeenCalledWith('/tenant/t/agent-workspace/conversation', {
+      replace: false,
+    });
+    disconnect();
+    expect(posted.some((message) => message.error === 'page_navigation_denied')).toBe(false);
+  });
+
   it('stops mirroring the theme once the page is released', async () => {
     const { posted, disconnect } = connectedPort(signedPage(false));
     disconnect();

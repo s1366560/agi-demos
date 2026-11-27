@@ -1,5 +1,5 @@
 import type { PageScope, PageTarget, RichPage } from "./richPage";
-import { pageSearch, splitPageLocation } from "./pageLocation";
+import { pageSearch, routeMatchPaths, splitPageLocation } from "./pageLocation";
 import { routeRank } from "./richPage";
 
 type Operation = (
@@ -130,9 +130,10 @@ export function connectPage(
         const location = splitPageLocation(path);
         pageSearch(location.search, true);
         if (
-          !(page.navigation_routes ?? page.routes).some(
-            (route) =>
-              routeRank(route, location.pathname, bridge.scope) !== null,
+          !(page.navigation_routes ?? page.routes).some((route) =>
+            routeMatchPaths(location.pathname, bridge.scope).some(
+              (candidate) => routeRank(route, candidate, bridge.scope) !== null,
+            ),
           )
         )
           throw new Error("page_navigation_denied");

@@ -407,6 +407,7 @@
     {
       "id": "tenant-directory",
       "title": "Workspace directory",
+      "scope": "tenant",
       "routes": [
         "/tenant/:tenantId/workspaces"
       ],
@@ -414,72 +415,12 @@
         "web",
         "desktop-renderer"
       ],
-      "entry": {
-        "path": "ui/workspaces-web.js",
-        "digest": "sha256:7a931dcff242ffea08a1113195412d06d290087c5b6094a17737d9d139c8dba0"
-      },
-      "commands": [
-        "list-directory"
-      ],
+      "commands": [],
       "device_tools": [],
-      "style": {
-        "path": "ui/workspaces-web.css",
-        "digest": "sha256:05d000975c016ebfd45585ef70db794a5ffceb247860244e4f4e7565cd8ab098"
-      },
-      "workbench": true,
-      "query_params": [
-        "q",
-        "page"
-      ],
-      "sidebar": {
-        "groups": {
-          "command": "list-directory",
-          "inputs": {
-            "offset": "offset",
-            "limit": "limit"
-          },
-          "constants": {
-            "cards": true
-          },
-          "collection": "rows",
-          "fields": {
-            "id": "id",
-            "label": "name"
-          },
-          "match": {
-            "tenant_id": "tenant",
-            "project_id": "project",
-            "is_archived": "inactive"
-          }
-        },
-        "group": {
-          "command": "read-workspace",
-          "inputs": {
-            "workspace_id": "id"
-          },
-          "fields": {
-            "id": "id",
-            "label": "name"
-          }
-        },
-        "children": {
-          "command": "list-tasks",
-          "inputs": {
-            "workspace_id": "id",
-            "offset": "offset",
-            "limit": "limit"
-          },
-          "collection": "items",
-          "fields": {
-            "id": "id",
-            "label": "title"
-          },
-          "match": {
-            "workspace_id": "id"
-          }
-        }
-      },
-      "scope": "tenant"
+      "entry": {
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+      }
     },
     {
       "id": "directory-export",
@@ -568,6 +509,7 @@
     {
       "id": "tenant-create",
       "title": "Create workspace",
+      "scope": "tenant",
       "routes": [
         "/tenant/:tenantId/workspaces/new"
       ],
@@ -575,23 +517,12 @@
         "web",
         "desktop-renderer"
       ],
-      "entry": {
-        "path": "ui/workspace-create-web.js",
-        "digest": "sha256:2e8153d46cdd7ce46ed5ae45e4500b8eb9e4f12775d288f173568208effdb7d2"
-      },
-      "commands": [
-        "create-workspace"
-      ],
+      "commands": [],
       "device_tools": [],
-      "style": {
-        "path": "ui/workspace-create-web.css",
-        "digest": "sha256:4ab38188dbf00b35acd443c86b6443d055c4c7534a2abf620f793aaf3c5ee5db"
-      },
-      "workbench": true,
-      "navigation_actions": [
-        "group-create"
-      ],
-      "scope": "tenant"
+      "entry": {
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+      }
     },
     {
       "id": "settings",

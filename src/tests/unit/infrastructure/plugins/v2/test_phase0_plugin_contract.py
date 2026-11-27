@@ -35,6 +35,14 @@ def test_business_pages_scope_tenant_routes_and_publish_command_schemas():
                 parts = route.split("/")
                 if len(parts) >= 3 and parts[1] == "tenant" and ":projectId" not in parts:
                     assert page.scope == "tenant", route
+        for page in parsed.pages:
+            if page.id in {"tenant-chat", "tenant-directory", "tenant-create"}:
+                assert page.commands == ()
+                assert page.entry is not None
+                assert page.entry.path == "ui/tenant-scope.js"
+                script = (path.parent / page.entry.path).read_text()
+                assert "invoke" not in script
+                assert "project_required" not in script
 
 
 def test_command_schema_rejects_values_outside_the_draft_2020_12_contract():

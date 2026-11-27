@@ -776,6 +776,7 @@
     {
       "id": "tenant-chat",
       "title": "Agent chat",
+      "scope": "tenant",
       "routes": [
         "/tenant/:tenantId/agent-workspace",
         "/tenant/:tenantId/agent-workspace/:conversationId"
@@ -784,87 +785,12 @@
         "web",
         "desktop-renderer"
       ],
+      "commands": [],
+      "device_tools": [],
       "entry": {
-        "path": "ui/chat-web.js",
-        "digest": "sha256:c3fb6ab62ac41dd06de5577c3f73d9942ddab2bf404c7e7903d63125fc71f56c"
-      },
-      "commands": [
-        "chat-list",
-        "chat-create",
-        "chat-history",
-        "chat-turn",
-        "chat-cancel",
-        "chat-rename",
-        "chat-interactions",
-        "chat-respond",
-        "chat-upload",
-        "chat-attached-turn",
-        "activity-list",
-        "activity-mark",
-        "review-latest",
-        "review-details"
-      ],
-      "style": {
-        "path": "ui/chat-web.css",
-        "digest": "sha256:76751fae9078406635e580e473438f16a492f5de4365fbfeed196d429baa0f14"
-      },
-      "workbench": true,
-      "sidebar": {
-        "rows": {
-          "command": "chat-list",
-          "collection": "items",
-          "fields": {
-            "id": "id",
-            "label": "title",
-            "target": "execution_target",
-            "group": "workspace_id",
-            "child": "linked_workspace_task_id",
-            "groupLabel": "workspace_name",
-            "updatedAt": "updated_at",
-            "createdAt": "created_at",
-            "active": "sidebar_active",
-            "role": "sidebar_role",
-            "hidden": "sidebar_hidden"
-          },
-          "route": "/tenant/:tenantId/agent-workspace",
-          "row_route": "/tenant/:tenantId/agent-workspace/:conversationId",
-          "row_param": "conversationId",
-          "group_query": "workspaceId",
-          "constants": {
-            "workbench": true,
-            "limit": 10
-          }
-        },
-        "create": {
-          "command": "chat-create",
-          "inputs": {
-            "title": "label",
-            "workspace_id": "group"
-          },
-          "fields": {
-            "id": "id"
-          }
-        },
-        "rename": {
-          "command": "chat-rename",
-          "inputs": {
-            "conversation_id": "id",
-            "title": "label"
-          }
-        }
-      },
-      "query_params": [
-        "workspaceId",
-        "conversationId"
-      ],
-      "page_links": [
-        "memstack-environments/sandbox-interaction",
-        "memstack-workspace/workspace-posts"
-      ],
-      "navigation_actions": [
-        "primary-create"
-      ],
-      "scope": "tenant"
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+      }
     },
     {
       "id": "dashboard",
