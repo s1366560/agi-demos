@@ -20,15 +20,29 @@ test('light and dark both publish the class signed pages already listen for', ()
   }
 });
 
-test('the 256px column yields when the sidebar is collapsed or the window is narrow', () => {
+test('the sidebar width is draggable and the narrow overlay sits flush under the titlebar', () => {
+  assert.match(css, /--desktop-sidebar-preferred-width:\s*256px/);
   assert.match(css, /:not\(\.sidebar-collapsed\)/);
   assert.match(css, /@media \(max-width: 767px\)/);
   assert.match(css, /height: 100dvh/);
-  assert.match(css, /top: 36px/);
+  assert.match(css, /--desktop-sidebar-width:\s*0px/);
+  assert.match(css, /top:\s*0;/);
+  assert.match(css, /\.app-shell:has\(\.desktop-workbench-header\) \.workbench \{\s*grid-column:\s*2;/);
+  assert.doesNotMatch(css, /top:\s*36px/);
+  assert.match(
+    css,
+    /width:\s*min\(var\(--desktop-sidebar-preferred-width, 256px\), calc\(100vw - 2rem\)\)/,
+  );
   assert.doesNotMatch(
     css.slice(0, css.indexOf(':not(.sidebar-collapsed)')),
     /--desktop-sidebar-width:\s*256px/,
   );
+  assert.match(shell, /useResizablePanelWidth/);
+  assert.match(shell, /FULL_HOST_SIDEBAR_CONSTRAINTS/);
+  assert.match(shell, /ResizeHandle/);
+  assert.match(shell, /--desktop-sidebar-preferred-width/);
+  assert.match(shell, /signedSidebarLoadPhase/);
+  assert.match(shell, /scopeReady \? project : null/);
 });
 
 test('full workbench surfaces follow the web light and dark shell colors', () => {

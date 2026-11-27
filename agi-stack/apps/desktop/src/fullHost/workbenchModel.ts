@@ -1,5 +1,5 @@
 import { scopedPageLocation, splitPageLocation } from '../../../../packages/plugin-slots/src/pageLocation';
-import { menuPath, type PackagePage } from '../../../../packages/plugin-slots/src/richPage';
+import { menuPath, routeRank, type PackagePage } from '../../../../packages/plugin-slots/src/richPage';
 import {
   groupWorkbenchHeader,
   layoutWorkbenchHeader,
@@ -23,6 +23,13 @@ export type HostSection =
   | 'audit-logs'
   | 'settings'
   | 'org-settings';
+
+/** Full workbench matches the web shell until the user drags the sidebar. */
+export const FULL_HOST_SIDEBAR_CONSTRAINTS = {
+  min: 200,
+  max: 400,
+  default: 256,
+} as const;
 
 export function shellLanding(tenant: string): string {
   return tenantBase(tenant) + '/projects';
@@ -171,6 +178,42 @@ export function selectWorkbenchSurface(
 
 export function pathnameOf(address: string): string {
   return splitPageLocation(address).pathname;
+}
+
+/**
+ * A signed page binds only at the scope the address names.
+ * Tenant routes stay on tenant installations. A project installation must
+ * not satisfy `/workspaces` just because its route omits `:projectId`.
+ */
+export function pageInstallationMatches(
+  address: string,
+  installationProjectId: string | null,
+): boolean {
+  const explicit = explicitWorkbenchProject(address);
+  if (!explicit) return installationProjectId === null;
+  return installationProjectId === explicit.projectId;
+}
+
+export function selectInstalledPage<
+  T extends { projectId: string | null; page: { routes: readonly string[] } },
+>(entries: readonly T[], tenantId: string, address: string): T | null {
+  const { pathname } = splitPageLocation(address);
+  let winner: T | null = null;
+  let best = '';
+  for (const entry of entries) {
+    if (!pageInstallationMatches(address, entry.projectId)) continue;
+    for (const route of entry.page.routes) {
+      const rank = routeRank(route, pathname, {
+        tenantId,
+        projectId: entry.projectId,
+      });
+      if (rank !== null && (!winner || rank > best)) {
+        winner = entry;
+        best = rank;
+      }
+    }
+  }
+  return winner;
 }
 
 const HOST_SECTIONS = new Set([

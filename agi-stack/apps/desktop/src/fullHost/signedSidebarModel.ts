@@ -33,6 +33,25 @@ export type ConversationSource = {
 
 const UNBOUND = '';
 
+export type SignedSidebarLoadPhase = 'ready' | 'wait' | 'blocked';
+
+/**
+ * Hold the session tree while the saved workspace is catching up to the URL,
+ * or while the page catalog for that project is still loading. Fetching early
+ * asks the cloud broker for the new project and it rejects the old scope.
+ */
+export function signedSidebarLoadPhase(input: {
+  project: string | null;
+  scopeBlocked: boolean;
+  pagesLoading: boolean;
+  switchFailed: boolean;
+}): SignedSidebarLoadPhase {
+  if (!input.project) return 'ready';
+  if (input.switchFailed) return 'blocked';
+  if (input.scopeBlocked || input.pagesLoading) return 'wait';
+  return 'ready';
+}
+
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }

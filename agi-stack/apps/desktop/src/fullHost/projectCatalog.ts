@@ -11,10 +11,21 @@ export function fullMarketProjectId(search: string): string | null {
 export const PROJECT_CATALOG_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
+export type CatalogProjectStats = {
+  memory_count: number;
+  storage_used: number;
+  storage_limit: number;
+  node_count: number;
+  member_count: number;
+  last_active: string | null;
+};
+
 export type CatalogProject = {
   id: string;
   tenant_id: string;
   name: string;
+  is_public?: boolean;
+  stats?: CatalogProjectStats;
 };
 
 export type ProjectCatalogPage = {
@@ -77,20 +88,7 @@ export function readProjectCatalogPage(payload: unknown): ProjectCatalogPage {
   if (!Array.isArray(body.projects) || typeof body.total !== 'number' || body.total < 0) {
     throw new Error('project_catalog_invalid');
   }
-  const projects = body.projects.map((item) => {
-    if (!item || typeof item !== 'object') throw new Error('project_catalog_invalid');
-    const row = item as { id?: unknown; tenant_id?: unknown; name?: unknown };
-    if (
-      typeof row.id !== 'string' ||
-      !row.id ||
-      typeof row.tenant_id !== 'string' ||
-      !row.tenant_id
-    ) {
-      throw new Error('project_catalog_invalid');
-    }
-    if (typeof row.name !== 'string' || !row.name) throw new Error('project_catalog_invalid');
-    return { id: row.id, tenant_id: row.tenant_id, name: row.name };
-  });
+  const projects = body.projects.map((item) => readCatalogProject(item));
   return {
     projects,
     total: body.total,
@@ -99,6 +97,59 @@ export function readProjectCatalogPage(payload: unknown): ProjectCatalogPage {
 }
 
 type CatalogRequest = <T>(path: string, init: { signal?: AbortSignal }) => Promise<T>;
+
+function finiteNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readCatalogStats(value: unknown): CatalogProjectStats | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const stats = value as {
+    memory_count?: unknown;
+    storage_used?: unknown;
+    storage_limit?: unknown;
+    node_count?: unknown;
+    member_count?: unknown;
+    last_active?: unknown;
+  };
+  return {
+    memory_count: finiteNumber(stats.memory_count),
+    storage_used: finiteNumber(stats.storage_used),
+    storage_limit: finiteNumber(stats.storage_limit, 1024 * 1024 * 1024),
+    node_count: finiteNumber(stats.node_count),
+    member_count: finiteNumber(stats.member_count),
+    last_active:
+      typeof stats.last_active === 'string' && stats.last_active ? stats.last_active : null,
+  };
+}
+
+function readCatalogProject(item: unknown): CatalogProject {
+  if (!item || typeof item !== 'object') throw new Error('project_catalog_invalid');
+  const row = item as {
+    id?: unknown;
+    tenant_id?: unknown;
+    name?: unknown;
+    is_public?: unknown;
+    stats?: unknown;
+  };
+  if (
+    typeof row.id !== 'string' ||
+    !row.id ||
+    typeof row.tenant_id !== 'string' ||
+    !row.tenant_id
+  ) {
+    throw new Error('project_catalog_invalid');
+  }
+  if (typeof row.name !== 'string' || !row.name) throw new Error('project_catalog_invalid');
+  const stats = readCatalogStats(row.stats);
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    name: row.name,
+    ...(typeof row.is_public === 'boolean' ? { is_public: row.is_public } : {}),
+    ...(stats ? { stats } : {}),
+  };
+}
 
 /** Follows the web project service: `/api/v1/projects/?tenant_id=`, one tenant at a time. */
 export async function loadTenantProjects(

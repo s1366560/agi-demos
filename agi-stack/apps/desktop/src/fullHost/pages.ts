@@ -6,11 +6,10 @@ import {
 } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
 import {
   menuPath,
-  routeRank,
   type PackagePage,
 } from '../../../../packages/plugin-slots/src/richPage';
-import { splitPageLocation } from '../../../../packages/plugin-slots/src/pageLocation';
 import { transport } from '../packageHost/transport';
+import { selectInstalledPage } from './workbenchModel';
 
 export type InstalledPage = {
   enabled: boolean;
@@ -22,22 +21,7 @@ export type InstalledPage = {
   path: string | null;
 };
 export function matchPage(entries: readonly InstalledPage[], tenantId: string, address: string) {
-  const { pathname } = splitPageLocation(address);
-  let winner: InstalledPage | null = null;
-  let best = '';
-  for (const entry of entries) {
-    for (const route of entry.page.routes) {
-      const rank = routeRank(route, pathname, {
-        tenantId,
-        projectId: entry.projectId,
-      });
-      if (rank !== null && (!winner || rank > best)) {
-        winner = entry;
-        best = rank;
-      }
-    }
-  }
-  return winner;
+  return selectInstalledPage(entries, tenantId, address);
 }
 export function useInstalledPages(tenantId: string, projectId: string | null) {
   const key = JSON.stringify([tenantId, projectId]);

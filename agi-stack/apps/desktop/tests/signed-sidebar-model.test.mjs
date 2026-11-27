@@ -13,6 +13,7 @@ const {
   readConversationSources,
   settledWorkspaceNodes,
   signedDeepLink,
+  signedSidebarLoadPhase,
   workspacePagePath,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/signedSidebarModel.js');
 
@@ -166,4 +167,17 @@ test('the sidebar follows the signed page that owns the open route', () => {
     linkForAction([chat], [{ id: 'p/memstack-agent/chat', path: '/chat?businessPackage=memstack-agent' }], 't', 'primary-create'),
     '/chat?businessPackage=memstack-agent',
   );
+});
+
+test('the session tree waits out a project switch instead of showing an empty project', () => {
+  const base = { project: 'project-next', scopeBlocked: false, pagesLoading: false, switchFailed: false };
+  assert.equal(signedSidebarLoadPhase({ ...base, scopeBlocked: true }), 'wait');
+  assert.equal(signedSidebarLoadPhase({ ...base, pagesLoading: true }), 'wait');
+  assert.equal(signedSidebarLoadPhase({ ...base, switchFailed: true, scopeBlocked: true }), 'blocked');
+  assert.equal(signedSidebarLoadPhase(base), 'ready');
+  assert.equal(signedSidebarLoadPhase({ ...base, project: null, pagesLoading: true }), 'ready');
+  const hook = readFileSync(new URL('../src/fullHost/useSignedSidebar.ts', import.meta.url), 'utf8');
+  assert.match(hook, /phase === 'wait'/);
+  assert.match(hook, /phase === 'blocked'/);
+  assert.match(hook, /setLoading\(true\)/);
 });

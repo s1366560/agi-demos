@@ -50,14 +50,18 @@ export function HostSettings({
   useEffect(() => {
     if (tab !== 'workspace') return;
     const controller = new AbortController();
+    setError('');
     // The per-tenant /projects/ catalog is limited to the saved workspace tenant.
     // This picker must list every tenant before the user switches.
     void transport<unknown>(PACKAGE_PROJECT_CATALOG_PATH, { signal: controller.signal })
       .then((payload) => {
         if (!controller.signal.aborted) setProjects(readPackageProjectCatalog(payload));
       })
-      .catch((cause) => {
-        if (!controller.signal.aborted) setError(String(cause));
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setProjects([]);
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
       });
     return () => controller.abort();
   }, [tab]);
@@ -115,6 +119,7 @@ export function HostSettings({
             ))}
           </aside>
           <div className="settings-window-content">
+            {error ? <p role="alert">{error}</p> : null}
             {tab === 'account' && (
               <AccountSettingsPage
                 auth={{
@@ -196,7 +201,6 @@ export function HostSettings({
                 </label>
               </section>
             )}
-            {error && <p role="alert">{error}</p>}
             {!session && tab === 'workspace' && (
               <button onClick={signOut}>{messages.signOut}</button>
             )}

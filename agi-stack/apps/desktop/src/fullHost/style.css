@@ -3,7 +3,9 @@
   min-height: 0;
 }
 
-/* Full workbench chrome matches the installed web shell. Thin and compat keep 220px. */
+/* Full workbench chrome matches the installed web shell. Thin and compat keep 220px.
+   256px is only the unset default. The shell writes the dragged width inline, and
+   that declaration wins over this fallback. */
 .app-shell:has(.desktop-workbench-header) {
   --desktop-sidebar-preferred-width: 256px;
   --desktop-bg: #0a0a0a;
@@ -42,18 +44,39 @@
   --desktop-sidebar-width: var(--desktop-sidebar-preferred-width);
 }
 
+/* The profile menu and the drag handle sit on the sidebar edge. The session
+   list keeps its own scrollport, so the shell can let those controls paint. */
+.app-shell:has(.desktop-workbench-header) .desktop-design-sidebar {
+  overflow: visible;
+}
+
+.app-shell:has(.desktop-workbench-header) .desktop-design-toolbar,
+.app-shell:has(.desktop-workbench-header) .desktop-design-profile-wrap {
+  position: relative;
+  z-index: 6;
+}
+
 @media (max-width: 767px) {
   .app-shell:has(.desktop-workbench-header):not(.sidebar-collapsed) {
     --desktop-sidebar-width: 0px;
   }
 
+  /* Below 760px the shared chrome puts .workbench in column 1. The full
+     host keeps a 0px sidebar track, so the page has to stay in the 1fr track
+     or the main area collapses. */
+  .app-shell:has(.desktop-workbench-header) .workbench {
+    grid-column: 2;
+  }
+
+  /* Row 2 already starts under the 36px titlebar. top is offset from that
+     grid area, so 0 sits flush beneath it. A 36px top adds a second gap. */
   .app-shell:has(.desktop-workbench-header):not(.sidebar-collapsed) .desktop-design-sidebar {
     position: absolute;
     z-index: 40;
-    top: 36px;
+    top: 0;
     bottom: 0;
     left: 0;
-    width: min(256px, calc(100vw - 2rem));
+    width: min(var(--desktop-sidebar-preferred-width, 256px), calc(100vw - 2rem));
     height: auto;
     box-shadow: var(--desktop-shadow-popover);
   }
@@ -147,4 +170,83 @@
   padding: 0;
   display: grid;
   gap: 0.35rem;
+}
+
+.desktop-host-administration .desktop-project-catalog {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.desktop-project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 11rem;
+  padding: 1rem;
+  border: 1px solid var(--desktop-border);
+  border-radius: 0.75rem;
+  background: var(--desktop-sidebar-bg);
+  color: var(--desktop-text);
+  text-align: left;
+  box-shadow: var(--desktop-shadow-popover);
+}
+
+.desktop-project-card[aria-current='true'] {
+  border-color: var(--desktop-text);
+}
+
+.desktop-project-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.desktop-project-card-heading strong,
+.desktop-project-card-heading small {
+  display: block;
+}
+
+.desktop-project-card-heading small,
+.desktop-project-card-meta {
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+
+.desktop-project-card-badge {
+  flex: none;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--desktop-nav-hover-bg);
+  color: var(--desktop-muted);
+  font-size: 0.75rem;
+}
+
+.desktop-project-card-usage {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.desktop-project-card-meter {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--desktop-nav-hover-bg);
+}
+
+.desktop-project-card-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--desktop-text);
+}
+
+.desktop-project-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }

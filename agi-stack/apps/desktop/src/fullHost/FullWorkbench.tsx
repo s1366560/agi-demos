@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { CubeIcon, GearIcon, GridIcon } from '@radix-ui/react-icons';
 import type { CloudSessionProjection } from '../api/cloudSessionProjectionClient';
 import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
+import { ResizeHandle, useResizablePanelWidth } from '../components/ResizeHandle';
+import { SIDEBAR_WIDTH_STORAGE_KEY } from '../appShellTypes';
 import { DesktopSidebarFrame } from '../features/navigation/DesktopSidebarFrame';
 import {
   CommandPaletteSurface,
@@ -21,6 +23,7 @@ import { WorkbenchHeader } from './WorkbenchHeader';
 import {
   assembleWorkbenchHeader,
   explicitWorkbenchProject,
+  FULL_HOST_SIDEBAR_CONSTRAINTS,
   headerItemActive,
   pendingWorkspaceSelection,
   hostSection,
@@ -30,6 +33,7 @@ import {
   selectWorkbenchSurface,
   shellLanding,
 } from './workbenchModel';
+import { signedSidebarLoadPhase } from './signedSidebarModel';
 import './style.css';
 
 function subscribe(listener: () => void) {
@@ -83,9 +87,18 @@ export function FullWorkbench({
   const pendingSelection = session
     ? pendingWorkspaceSelection(session.workspaceContext, explicitProject)
     : null;
+  const [settings, setSettings] = useState<HostSettingsTab | null>(null);
+  const [switchFailure, setSwitchFailure] = useState('');
+  const sidebarWidth = useResizablePanelWidth(
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    FULL_HOST_SIDEBAR_CONSTRAINTS,
+  );
+  const scopeSwitchError = pendingSelection ? switchFailure : '';
+  const scopeReady = !pendingSelection;
   useEffect(() => {
     if (!session || !pendingSelection) return;
     let cancelled = false;
+    setSwitchFailure('');
     void transport('/api/v1/workspace-context/switch', {
       method: 'POST',
       body: {
@@ -99,7 +112,9 @@ export function FullWorkbench({
         if (!cancelled) return reload();
         return undefined;
       })
-      .catch(() => undefined);
+      .catch((cause: unknown) => {
+        if (!cancelled) setSwitchFailure(cause instanceof Error ? cause.message : String(cause));
+      });
     return () => {
       cancelled = true;
     };
@@ -111,7 +126,6 @@ export function FullWorkbench({
     session?.workspaceContext.revision,
     reload,
   ]);
-  const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [directory, setDirectory] = useState(false);
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== 'undefined' && window.matchMedia(NARROW_SHELL_QUERY).matches,
@@ -119,16 +133,34 @@ export function FullWorkbench({
   const [query, setQuery] = useState('');
   const trigger = useRef<HTMLElement | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const { entries, error, loading, refresh } = useInstalledPages(tenant, project);
+  const { entries, error, loading, refresh } = useInstalledPages(
+    tenant,
+    scopeReady ? project : null,
+  );
   const base = '/tenant/' + encodeURIComponent(tenant);
   const market = base + '/plugins';
   const pathname = pathnameOf(hash);
   const root = isShellRoot(pathname, tenant);
   const address = root && tenant ? shellLanding(tenant) : hash;
-  const selected = matchPage(entries, tenant, address);
+  const section = tenant ? hostSection(pathnameOf(address), tenant) : null;
+  const waitingForPage = Boolean(tenant) && (!scopeReady || loading) && !section;
+  const selected = scopeReady && !loading ? matchPage(entries, tenant, address) : null;
   const surface = tenant ? selectWorkbenchSurface(pathnameOf(address), tenant, Boolean(selected)) : 'empty';
   const header = tenant ? assembleWorkbenchHeader(entries, tenant, project, pathnameOf(address)) : [];
-  const sidebar = useSignedSidebar(tenant, project, entries, address);
+  const sidebarGate = signedSidebarLoadPhase({
+    project,
+    scopeBlocked: !scopeReady,
+    pagesLoading: loading,
+    switchFailed: Boolean(scopeSwitchError),
+  });
+  const sidebar = useSignedSidebar(
+    tenant,
+    project,
+    entries,
+    address,
+    sidebarGate,
+    scopeSwitchError,
+  );
   const newTask = sidebar.canCreate || sidebar.openChatPath;
   const createWorkspace = sidebar.createWorkspacePath;
   const tenantName =
@@ -222,12 +254,16 @@ export function FullWorkbench({
       : activeHeader
         ? t(activeHeader.label)
         : (selected?.page.title ?? projectName);
-  const administration = tenant ? hostSection(pathnameOf(address), tenant) : null;
   return (
     <div
       className={
         'app-shell hierarchy-shell runtime-mode desktop-window' +
         (collapsed ? ' sidebar-collapsed' : '')
+      }
+      style={
+        {
+          '--desktop-sidebar-preferred-width': `${Math.round(sidebarWidth.width)}px`,
+        } as CSSProperties
       }
     >
       <DesktopTitlebar
@@ -260,6 +296,18 @@ export function FullWorkbench({
           onOpenAccountSettings={() => setSettings('account')}
           onSwitchWorkspace={() => setSettings('workspace')}
           onSignOut={signOut}
+          resizeHandle={
+            collapsed ? null : (
+              <ResizeHandle
+                side="trailing"
+                width={sidebarWidth.width}
+                constraints={FULL_HOST_SIDEBAR_CONSTRAINTS}
+                label={t('layout.resizeSidebar')}
+                onResize={sidebarWidth.resize}
+                onReset={sidebarWidth.reset}
+              />
+            )
+          }
           workspaceDock={
             <WorkspaceDock
               workspaces={sidebar.workspaces}
@@ -303,15 +351,25 @@ export function FullWorkbench({
             <WorkbenchHeader items={header} pathname={pathnameOf(address)} onNavigate={navigate} />
           ) : null}
           <div className="workbench-content">
-            {surface === 'market' && tenant ? (
+            {scopeSwitchError ? (
+              <main className="desktop-package-workbench">
+                <h1>{project ? projectName : tenantName}</h1>
+                <p role="alert">{scopeSwitchError}</p>
+              </main>
+            ) : waitingForPage ? (
+              <main className="desktop-package-workbench">
+                <h1>{project ? projectName : tenantName}</h1>
+                <p role="status">{messages.loading}</p>
+              </main>
+            ) : surface === 'market' && tenant ? (
               <DesktopPackageWorkbench
                 {...props}
                 workbench={{ kind: 'market' }}
                 onChanged={refresh}
               />
-            ) : surface === 'host' && tenant && administration && administration !== 'plugins' ? (
+            ) : surface === 'host' && tenant && section && section !== 'plugins' ? (
               <HostAdministration
-                section={administration}
+                section={section}
                 tenant={tenant}
                 project={project}
                 session={session}
