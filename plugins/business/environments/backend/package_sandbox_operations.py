@@ -99,14 +99,19 @@ async def _request(
     if not ctx.scope.project_id or ctx.scope.project_id in {".", ".."}:
         raise OptionalBusinessError("forbidden", "Invalid project scope")
     try:
-        async with httpx.AsyncClient(
-            base_url=str(origin) if origin else "http://localhost",
-            transport=None if origin else httpx.ASGITransport(app=ctx.request.app),
-            headers={"Authorization": ctx.request.headers.get("Authorization", "")},
-            trust_env=False,
-            follow_redirects=False,
-            timeout=60,
-        ) as client:
+        from src.host.operations.admitted_loopback import admitted_client
+
+        if origin:
+            # A remote sandbox authority is a host capability. The caller bearer stays here.
+            client_cm = httpx.AsyncClient(
+                base_url=str(origin),
+                trust_env=False,
+                follow_redirects=False,
+                timeout=60,
+            )
+        else:
+            client_cm = admitted_client(ctx)
+        async with client_cm as client:
             response = await client.request(method, path, json=body)
     except httpx.HTTPError as exc:
         raise OptionalBusinessError("runtime_unavailable", "Sandbox authority unavailable") from exc

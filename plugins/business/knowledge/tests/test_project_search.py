@@ -24,6 +24,7 @@ async def test_search_uses_the_signed_project_and_forwards_original_parameters(m
     ctx = SimpleNamespace(
         scope=SimpleNamespace(tenant_id="t", project_id="p"),
         request=SimpleNamespace(app=app, headers={}),
+        user=SimpleNamespace(id="user"),
     )
     payload = {"mode": mode, "parameters": {"query": "sprint"}}
     assert await search(ctx, payload, None) == {"results": [], "total": 0}

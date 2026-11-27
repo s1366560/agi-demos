@@ -140,7 +140,7 @@ async def _socket(
     )
     return await connect(
         url,
-        additional_headers={"Authorization": ctx.request.headers.get("Authorization", "")},
+        additional_headers={},
         subprotocols=protocols,
         proxy=None,
         open_timeout=10,

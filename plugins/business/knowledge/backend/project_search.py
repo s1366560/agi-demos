@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Any, Literal
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 
@@ -28,15 +27,12 @@ async def search(
     scope = {"tenant_id": ctx.scope.tenant_id, "project_id": ctx.scope.project_id}
     if any(request.parameters.get(key, value) != value for key, value in scope.items()):
         raise HTTPException(403, _("Search scope does not match the project"))
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        trust_env=False,
-    ) as client:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as client:
         response = await client.post(
             "/api/v1/search-enhanced/" + request.mode,
             json={**request.parameters, **scope},
-            headers={"authorization": ctx.request.headers.get("authorization", "")},
         )
     if not response.is_success:
         raise HTTPException(response.status_code, _("Failed to search the project"))

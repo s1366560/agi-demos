@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,17 +46,14 @@ async def _request(
 ) -> dict[str, Any]:
     if not ctx.scope.tenant_id:
         raise HTTPException(403, _("Tenant membership is required"))
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        trust_env=False,
-    ) as client:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as client:
         response = await client.request(
             method,
             f"/api/v1/admin/pool/{path}",
             params={**(params or {}), "scope": "tenant", "tenant_id": ctx.scope.tenant_id},
             json=body,
-            headers={"authorization": ctx.request.headers.get("authorization", "")},
         )
     if response.status_code == 403:
         # Preserve the original dashboard's permission state across the signed command channel.

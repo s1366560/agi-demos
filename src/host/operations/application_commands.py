@@ -40,6 +40,12 @@ class PackageOperationContext:
         command: str,
         supplied_payload: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        from src.host.operations.business_guest.runtime import runs_outside_process
+
+        if runs_outside_process(name):
+            raise OptionalBusinessError(
+                "runtime_unavailable", "Application capability runs outside the host process"
+            )
         if resolver := getattr(
             self.request.app.state, "resolve_package_application_operation", None
         ):

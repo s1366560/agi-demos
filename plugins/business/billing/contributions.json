@@ -40,6 +40,51 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "billing.tenant-account",
+      "abi": "invoke",
+      "description": "Run the signed tenant-account command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.account.read"
+      ]
+    },
+    {
+      "name": "billing.change-plan",
+      "abi": "invoke",
+      "description": "Run the signed change-plan command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.plan.write"
+      ]
+    },
+    {
+      "name": "billing.billing-details",
+      "abi": "invoke",
+      "description": "Run the signed billing-details command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.account.read"
+      ]
     }
   ],
   "commands": [
@@ -120,7 +165,6 @@
     },
     {
       "id": "tenant-account",
-      "host_operation": "app.billing.account.read",
       "payload": {},
       "input_schema": {
         "type": "object",
@@ -133,11 +177,11 @@
       "accepts_input": false,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "billing.tenant-account"
     },
     {
       "id": "change-plan",
-      "host_operation": "app.billing.plan.write",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -148,11 +192,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "billing.change-plan"
     },
     {
       "id": "billing-details",
-      "host_operation": "app.billing.account.read",
       "payload": {
         "full_history": true
       },
@@ -174,7 +218,8 @@
       "accepts_input": false,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "billing.billing-details"
     }
   ],
   "ui": [

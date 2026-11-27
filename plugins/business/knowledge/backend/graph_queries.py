@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Annotated, Any
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,11 +45,9 @@ async def _project_graph(ctx: "PackageOperationContext", query: GraphRead) -> di
         "tenant_id": ctx.scope.tenant_id,
         "project_id": ctx.scope.project_id,
     }
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        headers={"authorization": ctx.request.headers.get("authorization", "")},
-    ) as client:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as client:
         if isinstance(query, SubgraphRead):
             response = await client.post("/api/v1/graph/memory/graph/subgraph", json=data)
         else:

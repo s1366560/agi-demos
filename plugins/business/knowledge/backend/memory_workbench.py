@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Any, Literal
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,18 +41,10 @@ async def query_memory_workbench(
     else:
         params.update(MemoryPageQuery.model_validate(payload).model_dump(exclude_none=True))
         path = "/api/v1/memories/"
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        trust_env=False,
-    ) as api:
-        result = await api.get(
-            path,
-            params=params,
-            headers={
-                "Authorization": ctx.request.headers.get("Authorization", ""),
-            },
-        )
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as api:
+        result = await api.get(path, params=params)
     if not result.is_success:
         raise HTTPException(result.status_code, _("Memory operation failed"))
     data = application_result(result.json())

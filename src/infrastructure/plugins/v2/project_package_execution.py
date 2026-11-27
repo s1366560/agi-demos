@@ -118,7 +118,12 @@ async def dispatch_project_command(
     supplied = dict(command.payload) if payload is None else payload
     validate_command_document(command.input_schema, supplied, "input_schema")
     from src.host.operations.agent_package.runtime import guest_operation, run_agent_command
+    from src.host.operations.business_guest.runtime import (
+        guest_operation as business_guest_operation,
+        run_business_command,
+    )
 
+    business = business_guest_operation(package.plugin_id, command)
     if operation := guest_operation(package.plugin_id, command):
         if application is None or application.scope != scope:
             raise OptionalBusinessError("runtime_unavailable", "application command unavailable")
@@ -137,6 +142,27 @@ async def dispatch_project_command(
             )
             if origin
             else await run_agent_command(application, operation, supplied, on_progress)
+        )
+    elif business:
+        if application is None or application.scope != scope:
+            raise OptionalBusinessError("runtime_unavailable", "application command unavailable")
+        from src.host.operations.remote_application_commands import forward_command
+
+        origin = getattr(application.request.app.state, "package_application_runtime_origin", None)
+        result = (
+            await forward_command(
+                origin,
+                application,
+                plugin=package.plugin_id,
+                digest=package.digest,
+                command=command_id,
+                payload=payload,
+                progress=on_progress,
+            )
+            if origin
+            else await run_business_command(
+                application, package.plugin_id, business, supplied, on_progress
+            )
         )
     elif command.host_operation:
         if application is None or application.scope != scope:

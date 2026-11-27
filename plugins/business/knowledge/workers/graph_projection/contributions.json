@@ -168,6 +168,201 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "knowledge.list-memories",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-memories command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.read"
+      ]
+    },
+    {
+      "name": "knowledge.read-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.read"
+      ]
+    },
+    {
+      "name": "knowledge.save-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed save-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.write"
+      ]
+    },
+    {
+      "name": "knowledge.list-entities",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-entities command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.list"
+      ]
+    },
+    {
+      "name": "knowledge.entity-types",
+      "abi": "mcp.stdio",
+      "description": "Run the signed entity-types command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.types"
+      ]
+    },
+    {
+      "name": "knowledge.entity-relationships",
+      "abi": "mcp.stdio",
+      "description": "Run the signed entity-relationships command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.relationships"
+      ]
+    },
+    {
+      "name": "knowledge.delete-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.delete"
+      ]
+    },
+    {
+      "name": "knowledge.reindex-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed reindex-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.reindex"
+      ]
+    },
+    {
+      "name": "knowledge.index-status",
+      "abi": "mcp.stdio",
+      "description": "Run the signed index-status command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.index_status"
+      ]
+    },
+    {
+      "name": "knowledge.optimize-content",
+      "abi": "mcp.stdio",
+      "description": "Run the signed optimize-content command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.optimize"
+      ]
+    },
+    {
+      "name": "knowledge.read-graph",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-graph command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.graph.read"
+      ]
+    },
+    {
+      "name": "knowledge.read-subgraph",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-subgraph command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.graph.subgraph"
+      ]
+    },
+    {
+      "name": "knowledge.search-project",
+      "abi": "mcp.stdio",
+      "description": "Run the signed search-project command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.search"
+      ]
     }
   ],
   "commands": [
@@ -192,7 +387,6 @@
     },
     {
       "id": "list-memories",
-      "host_operation": "app.knowledge.memories.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -203,11 +397,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.list-memories"
     },
     {
       "id": "read-memory",
-      "host_operation": "app.knowledge.memories.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -218,11 +412,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.read-memory"
     },
     {
       "id": "save-memory",
-      "host_operation": "app.knowledge.memories.write",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -233,11 +427,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.save-memory"
     },
     {
       "id": "list-entities",
-      "host_operation": "app.knowledge.entities.list",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -248,11 +442,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.list-entities"
     },
     {
       "id": "entity-types",
-      "host_operation": "app.knowledge.entities.types",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -263,11 +457,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.entity-types"
     },
     {
       "id": "entity-relationships",
-      "host_operation": "app.knowledge.entities.relationships",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -278,11 +472,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.entity-relationships"
     },
     {
       "id": "delete-memory",
-      "host_operation": "app.knowledge.memories.delete",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -293,11 +487,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.delete-memory"
     },
     {
       "id": "reindex-memory",
-      "host_operation": "app.knowledge.memories.reindex",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -308,11 +502,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.reindex-memory"
     },
     {
       "id": "index-status",
-      "host_operation": "app.knowledge.memories.index_status",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -323,11 +517,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.index-status"
     },
     {
       "id": "optimize-content",
-      "host_operation": "app.knowledge.memories.optimize",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -338,11 +532,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.optimize-content"
     },
     {
       "id": "read-graph",
-      "host_operation": "app.knowledge.graph.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -353,11 +547,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.read-graph"
     },
     {
       "id": "read-subgraph",
-      "host_operation": "app.knowledge.graph.subgraph",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -368,11 +562,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.read-subgraph"
     },
     {
       "id": "search-project",
-      "host_operation": "app.knowledge.search",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -383,7 +577,8 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "knowledge.search-project"
     }
   ],
   "ui": [
