@@ -558,7 +558,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:592d1fb3387545943c3e4dca2936a39cd7d1603eba408017f4413dccf7b2e530"
+        "digest": "sha256:72d1803bb1426506a23289fde23a665eef7b166c652aca2cbf7e760f1c06ee23"
       },
       "commands": [
         "chat-list",
