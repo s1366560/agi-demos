@@ -32,15 +32,19 @@ describe('entry document per build mode', () => {
     expect(await transform(entryDocument)).toBe(entryDocument);
   });
 
-  it.each([
-    ['full', '/src/fullHost/main.tsx'],
-    ['compat', '/src/main.tsx'],
-  ])('gives the %s workbench the original entry and title', async (mode, entry) => {
-    const html = await (await entryTransformer(mode))(entryDocument);
+  it('gives the full workbench the signed host entry and title', async () => {
+    const html = await (await entryTransformer('full'))(entryDocument);
 
-    expect(html).toContain(`src="${entry}"`);
+    expect(html).toContain('src="/src/fullHost/main.tsx"');
     expect(html).not.toContain('/src/projectPackages/main.tsx');
     expect(html).toContain(`<title>${WORKBENCH_TITLE}</title>`);
+  });
+
+  it('keeps compat on the package host instead of the deleted business shell', async () => {
+    const html = await (await entryTransformer('compat'))(entryDocument);
+
+    expect(html).toContain('src="/src/projectPackages/main.tsx"');
+    expect(html).not.toContain('/src/main.tsx');
   });
 
   it('keeps the original document head that the workbench modes open', async () => {

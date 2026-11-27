@@ -64,6 +64,231 @@
       "permissions": [
         "tools.execute"
       ]
+    },
+    {
+      "name": "workspace.list-directory",
+      "abi": "invoke",
+      "description": "Run the signed list-directory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.directory.read"
+      ]
+    },
+    {
+      "name": "workspace.read-workspace",
+      "abi": "invoke",
+      "description": "Run the signed read-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.detail.read"
+      ]
+    },
+    {
+      "name": "workspace.create-workspace",
+      "abi": "invoke",
+      "description": "Run the signed create-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.create"
+      ]
+    },
+    {
+      "name": "workspace.update-workspace",
+      "abi": "invoke",
+      "description": "Run the signed update-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.settings.update"
+      ]
+    },
+    {
+      "name": "workspace.list-members",
+      "abi": "invoke",
+      "description": "Run the signed list-members command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.members.read"
+      ]
+    },
+    {
+      "name": "workspace.change-members",
+      "abi": "invoke",
+      "description": "Run the signed change-members command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.members.write"
+      ]
+    },
+    {
+      "name": "workspace.list-posts",
+      "abi": "invoke",
+      "description": "Run the signed list-posts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.posts.read"
+      ]
+    },
+    {
+      "name": "workspace.change-posts",
+      "abi": "invoke",
+      "description": "Run the signed change-posts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.posts.write"
+      ]
+    },
+    {
+      "name": "workspace.list-tasks",
+      "abi": "invoke",
+      "description": "Run the signed list-tasks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.tasks.read"
+      ]
+    },
+    {
+      "name": "workspace.change-tasks",
+      "abi": "invoke",
+      "description": "Run the signed change-tasks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.tasks.write"
+      ]
+    },
+    {
+      "name": "workspace.blackboard-read",
+      "abi": "invoke",
+      "description": "Run the signed blackboard-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.blackboard.read"
+      ]
+    },
+    {
+      "name": "workspace.blackboard-change",
+      "abi": "invoke",
+      "description": "Run the signed blackboard-change command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.blackboard.write"
+      ]
+    },
+    {
+      "name": "workspace.read-project-overview",
+      "abi": "invoke",
+      "description": "Run the signed read-project-overview command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.overview.read"
+      ]
+    },
+    {
+      "name": "workspace.read-group-chat",
+      "abi": "invoke",
+      "description": "Run the signed read-group-chat command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.chat.read"
+      ]
+    },
+    {
+      "name": "workspace.send-group-message",
+      "abi": "invoke",
+      "description": "Run the signed send-group-message command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.chat.send"
+      ]
     }
   ],
   "commands": [
@@ -87,7 +312,6 @@
     },
     {
       "id": "list-directory",
-      "host_operation": "app.workspace.directory.read",
       "permissions": [
         "app.workspace.directory.read"
       ],
@@ -98,11 +322,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.list-directory"
     },
     {
       "id": "read-workspace",
-      "host_operation": "app.workspace.detail.read",
       "permissions": [
         "app.workspace.detail.read"
       ],
@@ -113,11 +337,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.read-workspace"
     },
     {
       "id": "create-workspace",
-      "host_operation": "app.workspace.create",
       "permissions": [
         "app.workspace.create"
       ],
@@ -128,11 +352,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.create-workspace"
     },
     {
       "id": "update-workspace",
-      "host_operation": "app.workspace.settings.update",
       "permissions": [
         "app.workspace.settings.update"
       ],
@@ -143,11 +367,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.update-workspace"
     },
     {
       "id": "list-members",
-      "host_operation": "app.workspace.members.read",
       "permissions": [
         "app.workspace.members.read"
       ],
@@ -158,11 +382,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.list-members"
     },
     {
       "id": "change-members",
-      "host_operation": "app.workspace.members.write",
       "permissions": [
         "app.workspace.members.write"
       ],
@@ -173,11 +397,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.change-members"
     },
     {
       "id": "list-posts",
-      "host_operation": "app.workspace.posts.read",
       "permissions": [
         "app.workspace.posts.read"
       ],
@@ -188,11 +412,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.list-posts"
     },
     {
       "id": "change-posts",
-      "host_operation": "app.workspace.posts.write",
       "permissions": [
         "app.workspace.posts.write"
       ],
@@ -203,11 +427,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.change-posts"
     },
     {
       "id": "list-tasks",
-      "host_operation": "app.workspace.tasks.read",
       "permissions": [
         "app.workspace.tasks.read"
       ],
@@ -218,11 +442,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.list-tasks"
     },
     {
       "id": "change-tasks",
-      "host_operation": "app.workspace.tasks.write",
       "permissions": [
         "app.workspace.tasks.write"
       ],
@@ -233,11 +457,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.change-tasks"
     },
     {
       "id": "blackboard-read",
-      "host_operation": "app.workspace.blackboard.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -248,11 +472,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.blackboard-read"
     },
     {
       "id": "blackboard-change",
-      "host_operation": "app.workspace.blackboard.write",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -263,11 +487,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.blackboard-change"
     },
     {
       "id": "read-project-overview",
-      "host_operation": "app.workspace.overview.read",
       "permissions": [
         "app.workspace.overview.read"
       ],
@@ -279,11 +503,11 @@
       },
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.read-project-overview"
     },
     {
       "id": "read-group-chat",
-      "host_operation": "app.workspace.chat.read",
       "permissions": [
         "app.workspace.chat.read"
       ],
@@ -294,11 +518,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.read-group-chat"
     },
     {
       "id": "send-group-message",
-      "host_operation": "app.workspace.chat.send",
       "permissions": [
         "app.workspace.chat.send"
       ],
@@ -309,7 +533,8 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "workspace.send-group-message"
     }
   ],
   "ui": [

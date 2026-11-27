@@ -42,7 +42,9 @@ def guest_operation(plugin_id: str, command: _Command) -> str | None:
 
 
 def is_guest_tool(name: str) -> bool:
-    return name in TOOLS
+    from src.host.operations.business_guest.runtime import is_business_guest_tool
+
+    return name in TOOLS or is_business_guest_tool(name)
 
 
 async def run_agent_command(

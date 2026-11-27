@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Any
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,17 +35,10 @@ async def _read(ctx: "PackageOperationContext", path: str, query: _Query) -> dic
         "project_id": ctx.scope.project_id,
         "tenant_id": ctx.scope.tenant_id,
     }
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        follow_redirects=False,
-        trust_env=False,
-    ) as client:
-        response = await client.get(
-            "/api/v1/graph/entities/" + path,
-            params=params,
-            headers={"authorization": ctx.request.headers.get("authorization", "")},
-        )
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as client:
+        response = await client.get("/api/v1/graph/entities/" + path, params=params)
     if not response.is_success:
         raise HTTPException(response.status_code, _("Failed to read the project graph"))
     return application_result(response.json())

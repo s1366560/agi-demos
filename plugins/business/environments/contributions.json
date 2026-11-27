@@ -117,6 +117,321 @@
       "permissions": [
         "tools.execute"
       ]
+    },
+    {
+      "name": "environments.sandbox-status",
+      "abi": "mcp.stdio",
+      "description": "Run the signed sandbox-status command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.read"
+      ]
+    },
+    {
+      "name": "environments.prepare-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed prepare-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.prepare"
+      ]
+    },
+    {
+      "name": "environments.authorize-run-terminal",
+      "abi": "mcp.stdio",
+      "description": "Run the signed authorize-run-terminal command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.terminal.authorize"
+      ]
+    },
+    {
+      "name": "environments.environment-inventory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed environment-inventory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.inventory.read"
+      ]
+    },
+    {
+      "name": "environments.write-cluster",
+      "abi": "mcp.stdio",
+      "description": "Run the signed write-cluster command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.clusters.write"
+      ]
+    },
+    {
+      "name": "environments.delete-cluster",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-cluster command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.clusters.delete"
+      ]
+    },
+    {
+      "name": "environments.restart-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed restart-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.restart"
+      ]
+    },
+    {
+      "name": "environments.terminate-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed terminate-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.terminate"
+      ]
+    },
+    {
+      "name": "environments.project-terminal",
+      "abi": "mcp.stdio",
+      "description": "Run the signed project-terminal command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.terminal.interact"
+      ]
+    },
+    {
+      "name": "environments.project-desktop",
+      "abi": "mcp.stdio",
+      "description": "Run the signed project-desktop command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.desktop.interact"
+      ]
+    },
+    {
+      "name": "environments.list-runner-pools",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-runner-pools command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.read"
+      ]
+    },
+    {
+      "name": "environments.create-runner-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-runner-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.create"
+      ]
+    },
+    {
+      "name": "environments.register-runner",
+      "abi": "mcp.stdio",
+      "description": "Run the signed register-runner command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.register"
+      ]
+    },
+    {
+      "name": "environments.read-deploys",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-deploys command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.deploys.read"
+      ]
+    },
+    {
+      "name": "environments.change-deploy",
+      "abi": "mcp.stdio",
+      "description": "Run the signed change-deploy command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.deploys.write"
+      ]
+    },
+    {
+      "name": "environments.read-instance-templates",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-instance-templates command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.templates.read"
+      ]
+    },
+    {
+      "name": "environments.change-instance-template",
+      "abi": "mcp.stdio",
+      "description": "Run the signed change-instance-template command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.templates.write"
+      ]
+    },
+    {
+      "name": "environments.create-runtime-instance",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-runtime-instance command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.instances.create"
+      ]
+    },
+    {
+      "name": "environments.read-runtime-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-runtime-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.read"
+      ]
+    },
+    {
+      "name": "environments.control-runtime-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed control-runtime-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.control"
+      ]
+    },
+    {
+      "name": "environments.set-runtime-pool-tier",
+      "abi": "mcp.stdio",
+      "description": "Run the signed set-runtime-pool-tier command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.tier"
+      ]
     }
   ],
   "commands": [
@@ -159,7 +474,6 @@
     },
     {
       "id": "sandbox-status",
-      "host_operation": "app.environments.sandbox.read",
       "permissions": [
         "app.environments.sandbox.read"
       ],
@@ -170,11 +484,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.sandbox-status"
     },
     {
       "id": "prepare-sandbox",
-      "host_operation": "app.environments.sandbox.prepare",
       "permissions": [
         "app.environments.sandbox.prepare"
       ],
@@ -185,11 +499,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.prepare-sandbox"
     },
     {
       "id": "authorize-run-terminal",
-      "host_operation": "app.environments.terminal.authorize",
       "permissions": [
         "app.environments.terminal.authorize"
       ],
@@ -200,11 +514,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.authorize-run-terminal"
     },
     {
       "id": "environment-inventory",
-      "host_operation": "app.environments.inventory.read",
       "permissions": [
         "app.environments.inventory.read"
       ],
@@ -215,11 +529,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.environment-inventory"
     },
     {
       "id": "write-cluster",
-      "host_operation": "app.environments.clusters.write",
       "permissions": [
         "app.environments.clusters.write"
       ],
@@ -230,11 +544,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.write-cluster"
     },
     {
       "id": "delete-cluster",
-      "host_operation": "app.environments.clusters.delete",
       "permissions": [
         "app.environments.clusters.delete"
       ],
@@ -245,11 +559,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.delete-cluster"
     },
     {
       "id": "restart-sandbox",
-      "host_operation": "app.environments.sandbox.restart",
       "permissions": [
         "app.environments.sandbox.restart"
       ],
@@ -261,11 +575,11 @@
       },
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.restart-sandbox"
     },
     {
       "id": "terminate-sandbox",
-      "host_operation": "app.environments.sandbox.terminate",
       "permissions": [
         "app.environments.sandbox.terminate"
       ],
@@ -277,11 +591,11 @@
       },
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.terminate-sandbox"
     },
     {
       "id": "project-terminal",
-      "host_operation": "app.environments.terminal.interact",
       "permissions": [
         "app.environments.terminal.interact"
       ],
@@ -292,11 +606,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.project-terminal"
     },
     {
       "id": "project-desktop",
-      "host_operation": "app.environments.desktop.interact",
       "permissions": [
         "app.environments.desktop.interact"
       ],
@@ -307,11 +621,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.project-desktop"
     },
     {
       "id": "list-runner-pools",
-      "host_operation": "app.environments.runners.read",
       "permissions": [
         "app.environments.runners.read"
       ],
@@ -322,11 +636,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.list-runner-pools"
     },
     {
       "id": "create-runner-pool",
-      "host_operation": "app.environments.runners.create",
       "permissions": [
         "app.environments.runners.create"
       ],
@@ -337,11 +651,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.create-runner-pool"
     },
     {
       "id": "register-runner",
-      "host_operation": "app.environments.runners.register",
       "permissions": [
         "app.environments.runners.register"
       ],
@@ -352,11 +666,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.register-runner"
     },
     {
       "id": "read-deploys",
-      "host_operation": "app.environments.deploys.read",
       "permissions": [
         "app.environments.deploys.read"
       ],
@@ -367,11 +681,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.read-deploys"
     },
     {
       "id": "change-deploy",
-      "host_operation": "app.environments.deploys.write",
       "permissions": [
         "app.environments.deploys.write"
       ],
@@ -382,11 +696,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.change-deploy"
     },
     {
       "id": "read-instance-templates",
-      "host_operation": "app.environments.templates.read",
       "permissions": [
         "app.environments.templates.read"
       ],
@@ -397,11 +711,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.read-instance-templates"
     },
     {
       "id": "change-instance-template",
-      "host_operation": "app.environments.templates.write",
       "permissions": [
         "app.environments.templates.write"
       ],
@@ -412,11 +726,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.change-instance-template"
     },
     {
       "id": "create-runtime-instance",
-      "host_operation": "app.environments.instances.create",
       "permissions": [
         "app.environments.instances.create"
       ],
@@ -427,11 +741,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.create-runtime-instance"
     },
     {
       "id": "read-runtime-pool",
-      "host_operation": "app.environments.pool.read",
       "permissions": [
         "app.environments.pool.read"
       ],
@@ -442,11 +756,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.read-runtime-pool"
     },
     {
       "id": "control-runtime-pool",
-      "host_operation": "app.environments.pool.control",
       "permissions": [
         "app.environments.pool.control"
       ],
@@ -457,11 +771,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.control-runtime-pool"
     },
     {
       "id": "set-runtime-pool-tier",
-      "host_operation": "app.environments.pool.tier",
       "permissions": [
         "app.environments.pool.tier"
       ],
@@ -472,7 +786,8 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "environments.set-runtime-pool-tier"
     }
   ],
   "ui": [

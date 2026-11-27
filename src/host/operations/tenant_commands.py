@@ -50,8 +50,14 @@ async def tenant_command(
         inputs = dict(c.payload) if payload is None else payload
         validate_command_document(c.input_schema, inputs, "input_schema")
         from src.host.operations.agent_package.runtime import guest_operation, run_agent_command
+        from src.host.operations.business_guest.runtime import (
+            guest_operation as business_guest_operation,
+            run_business_command,
+        )
 
+        business = business_guest_operation(pkg.plugin_id, c)
         if operation := guest_operation(pkg.plugin_id, c):
+            audit.executor = "application"
             origin = getattr(ctx.request.app.state, "package_application_runtime_origin", None)
             result = (
                 await forward_command(
@@ -65,6 +71,22 @@ async def tenant_command(
                 )
                 if origin
                 else await run_agent_command(ctx, operation, inputs, None)
+            )
+        elif business:
+            audit.executor = "application"
+            origin = getattr(ctx.request.app.state, "package_application_runtime_origin", None)
+            result = (
+                await forward_command(
+                    origin,
+                    ctx,
+                    plugin=pkg.plugin_id,
+                    digest=pkg.digest,
+                    command=command_id,
+                    payload=payload,
+                    progress=None,
+                )
+                if origin
+                else await run_business_command(ctx, pkg.plugin_id, business, inputs, None)
             )
         elif c.host_operation:
             if resolver := getattr(

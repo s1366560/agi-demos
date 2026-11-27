@@ -51,12 +51,9 @@ async def read_overview(
     path = "/api/v1/projects/" + quote(project, safe="")
     scope = {"tenant_id": tenant, "project_id": project}
     packages = "/api/v1/platform-plugins/v2/optional-business"
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        headers={"Authorization": ctx.request.headers.get("Authorization", "")},
-        trust_env=False,
-    ) as client:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as client:
         meta, stats, available = await asyncio.gather(
             client.get(path, params={"tenant_id": tenant}),
             client.get(path + "/stats"),

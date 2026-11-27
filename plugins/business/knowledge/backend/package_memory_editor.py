@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 from uuid import UUID
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
@@ -84,13 +83,10 @@ async def save_memory(
     else:
         body["project_id"] = ctx.scope.project_id
         method, path = "POST", "/api/v1/memories/"
-    headers = {"Authorization": ctx.request.headers.get("Authorization", "")}
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        trust_env=False,
-        follow_redirects=False,
-    ) as api:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    headers: dict[str, str] = {}
+    async with admitted_client(ctx) as api:
         response = await api.request(method, path, params=scope, json=body, headers=headers)
         if response.status_code == 428:
             # The enrolled path rejects its first request before touching memory data.

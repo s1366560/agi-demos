@@ -3,7 +3,7 @@ import { CubeIcon, GearIcon, GridIcon } from '@radix-ui/react-icons';
 import type { CloudSessionProjection } from '../api/cloudSessionProjectionClient';
 import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { ResizeHandle, useResizablePanelWidth } from '../components/ResizeHandle';
-import { SIDEBAR_WIDTH_STORAGE_KEY } from '../appShellTypes';
+import { SIDEBAR_WIDTH_STORAGE_KEY } from '../sidebarWidth';
 import { DesktopSidebarFrame } from '../features/navigation/DesktopSidebarFrame';
 import {
   CommandPaletteSurface,

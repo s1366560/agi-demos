@@ -8,7 +8,8 @@ test('compat does not set the full desktop flag and a missing flag stays closed'
   const vite = readFileSync(new URL('../electron.vite.config.ts', import.meta.url), 'utf8');
   const makefile = readFileSync(new URL('../../../Makefile', import.meta.url), 'utf8');
   assert.match(profile, /fullDesktopProfile = profile === 'full'/);
-  assert.match(profile, /legacyBusinessProfile = fullDesktopProfile \|\| compatibilityProfile/);
+  assert.match(profile, /legacyBusinessProfile = false/);
+  assert.doesNotMatch(vite, /@business/);
   assert.match(vite, /__AGISTACK_FULL_DESKTOP__: JSON\.stringify\(fullDesktopProfile\)/);
   assert.doesNotMatch(makefile, /AGISTACK_DESKTOP_PROFILE \?= .*\bthin\b/);
   const result = spawnSync(

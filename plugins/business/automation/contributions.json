@@ -385,6 +385,231 @@
         "tools.execute",
         "storage.read"
       ]
+    },
+    {
+      "name": "automation.list-playbooks",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-playbooks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.playbooks.read"
+      ]
+    },
+    {
+      "name": "automation.list-schedules",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-schedules command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.read"
+      ]
+    },
+    {
+      "name": "automation.save-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed save-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.write"
+      ]
+    },
+    {
+      "name": "automation.run-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed run-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.run"
+      ]
+    },
+    {
+      "name": "automation.delete-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.delete"
+      ]
+    },
+    {
+      "name": "automation.list-patterns",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-patterns command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.patterns.read"
+      ]
+    },
+    {
+      "name": "automation.delete-pattern",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-pattern command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.patterns.delete"
+      ]
+    },
+    {
+      "name": "automation.list-verdicts",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-verdicts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.verdicts.read"
+      ]
+    },
+    {
+      "name": "automation.read-events",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-events command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.events.read"
+      ]
+    },
+    {
+      "name": "automation.event-types",
+      "abi": "mcp.stdio",
+      "description": "Run the signed event-types command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.events.types"
+      ]
+    },
+    {
+      "name": "automation.list-webhooks",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-webhooks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.read"
+      ]
+    },
+    {
+      "name": "automation.create-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.create"
+      ]
+    },
+    {
+      "name": "automation.update-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed update-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.update"
+      ]
+    },
+    {
+      "name": "automation.delete-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.delete"
+      ]
+    },
+    {
+      "name": "automation.schedule-conversations",
+      "abi": "mcp.stdio",
+      "description": "Run the signed schedule-conversations command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.conversations.read"
+      ]
     }
   ],
   "commands": [
@@ -428,7 +653,6 @@
     },
     {
       "id": "list-playbooks",
-      "host_operation": "app.automation.playbooks.read",
       "permissions": [
         "app.automation.playbooks.read"
       ],
@@ -440,11 +664,11 @@
       },
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.list-playbooks"
     },
     {
       "id": "list-schedules",
-      "host_operation": "app.automation.schedules.read",
       "permissions": [
         "app.automation.schedules.read"
       ],
@@ -455,11 +679,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.list-schedules"
     },
     {
       "id": "save-schedule",
-      "host_operation": "app.automation.schedules.write",
       "permissions": [
         "app.automation.schedules.write"
       ],
@@ -470,11 +694,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.save-schedule"
     },
     {
       "id": "run-schedule",
-      "host_operation": "app.automation.schedules.run",
       "permissions": [
         "app.automation.schedules.run"
       ],
@@ -485,7 +709,8 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.run-schedule"
     },
     {
       "id": "save-workflow",
@@ -538,7 +763,6 @@
     },
     {
       "id": "delete-schedule",
-      "host_operation": "app.automation.schedules.delete",
       "permissions": [
         "app.automation.schedules.delete"
       ],
@@ -549,11 +773,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.delete-schedule"
     },
     {
       "id": "list-patterns",
-      "host_operation": "app.automation.patterns.read",
       "permissions": [
         "app.automation.patterns.read"
       ],
@@ -564,11 +788,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.list-patterns"
     },
     {
       "id": "delete-pattern",
-      "host_operation": "app.automation.patterns.delete",
       "permissions": [
         "app.automation.patterns.delete"
       ],
@@ -579,11 +803,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.delete-pattern"
     },
     {
       "id": "list-verdicts",
-      "host_operation": "app.automation.verdicts.read",
       "permissions": [
         "app.automation.verdicts.read"
       ],
@@ -595,11 +819,11 @@
       },
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.list-verdicts"
     },
     {
       "id": "read-events",
-      "host_operation": "app.automation.events.read",
       "permissions": [
         "app.automation.events.read"
       ],
@@ -610,11 +834,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.read-events"
     },
     {
       "id": "event-types",
-      "host_operation": "app.automation.events.types",
       "permissions": [
         "app.automation.events.types"
       ],
@@ -625,11 +849,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.event-types"
     },
     {
       "id": "list-webhooks",
-      "host_operation": "app.automation.webhooks.read",
       "permissions": [
         "app.automation.webhooks.read"
       ],
@@ -640,11 +864,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.list-webhooks"
     },
     {
       "id": "create-webhook",
-      "host_operation": "app.automation.webhooks.create",
       "permissions": [
         "app.automation.webhooks.create"
       ],
@@ -655,11 +879,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.create-webhook"
     },
     {
       "id": "update-webhook",
-      "host_operation": "app.automation.webhooks.update",
       "permissions": [
         "app.automation.webhooks.update"
       ],
@@ -670,11 +894,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.update-webhook"
     },
     {
       "id": "delete-webhook",
-      "host_operation": "app.automation.webhooks.delete",
       "permissions": [
         "app.automation.webhooks.delete"
       ],
@@ -685,11 +909,11 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.delete-webhook"
     },
     {
       "id": "schedule-conversations",
-      "host_operation": "app.automation.conversations.read",
       "permissions": [
         "app.automation.conversations.read"
       ],
@@ -700,7 +924,8 @@
       "accepts_input": true,
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "automation.schedule-conversations"
     }
   ],
   "ui": [

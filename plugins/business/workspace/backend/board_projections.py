@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Any
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,16 +45,13 @@ async def read_projection(
             "project_id": ctx.scope.project_id,
             "status": "active",
         }
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
-    ) as api:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as api:
         result = await api.get(
             path,
             params=params,
-            headers={
-                "Authorization": ctx.request.headers.get("Authorization", ""),
-                "X-Tenant-ID": str(ctx.scope.tenant_id),
-            },
+            headers={"X-Tenant-ID": str(ctx.scope.tenant_id)},
         )
     if not result.is_success:
         raise HTTPException(result.status_code, _("Workspace projection is unavailable"))

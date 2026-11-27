@@ -138,9 +138,12 @@ async def _socket(
             "",
         )
     )
+    from src.host.operations.sandbox_proxy_ticket import issue_sandbox_proxy_ticket
+
+    ticket = issue_sandbox_proxy_ticket(ctx.request.app, str(ctx.user.id))
     return await connect(
         url,
-        additional_headers={"Authorization": ctx.request.headers.get("Authorization", "")},
+        additional_headers={"Authorization": f"Bearer {ticket}"},
         subprotocols=protocols,
         proxy=None,
         open_timeout=10,

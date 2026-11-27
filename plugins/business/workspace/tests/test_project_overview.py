@@ -39,7 +39,7 @@ async def test_overview_uses_actor_project_and_only_enabled_knowledge(installed,
 
     @app.post("/api/v1/platform-plugins/v2/optional-business/memstack-knowledge/commands")
     async def memory(req: Request):
-        assert req.headers["Authorization"] == "Bearer fixture"
+        assert "authorization" not in {key.lower() for key in req.headers}
         commands.append(await req.json())
         if changed:
             raise HTTPException(409, "Release changed")
@@ -47,6 +47,7 @@ async def test_overview_uses_actor_project_and_only_enabled_knowledge(installed,
 
     ctx = SimpleNamespace(
         request=SimpleNamespace(app=app, headers={"Authorization": "Bearer fixture"}),
+        user=SimpleNamespace(id="user"),
         scope=SimpleNamespace(tenant_id="t", project_id="p"),
     )
     with pytest.raises(HTTPException, match="does not accept parameters"):

@@ -1,6 +1,10 @@
-import type { GeneResponse } from '../../../environments/ui/web/services/geneMarketService';
 import { boardLocation } from './boardLocation';
 import { readDirectory } from './readDirectory';
+
+interface GeneResponse {
+  id: string;
+  name: string;
+}
 
 async function boardProjection(resource: string, workspace: string, query: Record<string, string>) {
   const reply = (await window.memstack.invoke('blackboard-read', {

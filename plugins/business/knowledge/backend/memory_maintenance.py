@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,10 +27,10 @@ async def delete_memory(
     UUID(args.change_id)
     path = f"/api/v1/memories/{args.id}"
     query: dict[str, str | int] = {"project_id": ctx.scope.project_id, "version": args.version}
-    headers = {"Authorization": ctx.request.headers.get("Authorization", "")}
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
-    ) as api:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    headers: dict[str, str] = {}
+    async with admitted_client(ctx) as api:
         response = await api.delete(path, params=query, headers=headers)
         if response.status_code == 428:
             headers.update(
@@ -48,13 +47,10 @@ async def reindex_memory(
 ) -> dict[str, Any]:
     args = MemorySelection.model_validate(payload)
     await _require_memory(ctx, args.id)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
-    ) as api:
-        response = await api.post(
-            f"/api/v1/memories/{args.id}/reprocess",
-            headers={"Authorization": ctx.request.headers.get("Authorization", "")},
-        )
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as api:
+        response = await api.post(f"/api/v1/memories/{args.id}/reprocess")
     if not response.is_success:
         raise HTTPException(response.status_code, _("Memory operation failed"))
     result = application_result(response.json())
@@ -80,13 +76,10 @@ async def read_index_task(
     )
     if not found:
         raise HTTPException(404, _("Task not found"))
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
-    ) as api:
-        response = await api.get(
-            f"/api/v1/tasks/{task_id}",
-            headers={"Authorization": ctx.request.headers.get("Authorization", "")},
-        )
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as api:
+        response = await api.get(f"/api/v1/tasks/{task_id}")
     if not response.is_success:
         raise HTTPException(response.status_code, _("Task read failed"))
     data = response.json()
@@ -102,16 +95,13 @@ async def optimize_content(
     ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
 ) -> dict[str, Any]:
     body = OptimizeContent.model_validate(payload)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app), base_url="http://localhost"
-    ) as api:
+    from src.host.operations.admitted_loopback import admitted_client
+
+    async with admitted_client(ctx) as api:
         response = await api.post(
             "/api/v1/ai/optimize",
             json=body.model_dump(),
-            headers={
-                "Authorization": ctx.request.headers.get("Authorization", ""),
-                "X-Tenant-ID": str(ctx.scope.tenant_id),
-            },
+            headers={"X-Tenant-ID": str(ctx.scope.tenant_id)},
         )
     if not response.is_success:
         raise HTTPException(response.status_code, _("Memory operation failed"))

@@ -23,6 +23,7 @@ async def test_uses_the_installed_project_and_existing_graph_authorization(subgr
     ctx = SimpleNamespace(
         scope=SimpleNamespace(tenant_id="tenant", project_id="project"),
         request=SimpleNamespace(app=app, headers={}),
+        user=SimpleNamespace(id="user"),
     )
     operation = read_subgraph if subgraph else read_graph
     arguments = {"node_uuids": ["episode"], "limit": 1} if subgraph else {"limit": 500}

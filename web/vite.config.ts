@@ -11,11 +11,11 @@ const PACKAGE_HOST_ENTRY = '/src/projectPackages/main.tsx';
 const PACKAGE_HOST_TITLE = 'MemStack · Project packages';
 const WORKBENCH_TITLE = 'MemStack - AI Memory Cloud Platform';
 
-/** Full and compatibility workbenches open the original entry and document title. */
+/** The full workbench opens the signed-page host. compat no longer mounts the business shell. */
 export function workbenchDocument(html: string, mode: string) {
-  if (!['full', 'compat'].includes(mode)) return html;
+  if (mode !== 'full') return html;
   return html
-    .replace(PACKAGE_HOST_ENTRY, mode === 'full' ? '/src/fullHost/main.tsx' : '/src/main.tsx')
+    .replace(PACKAGE_HOST_ENTRY, '/src/fullHost/main.tsx')
     .replace(`<title>${PACKAGE_HOST_TITLE}</title>`, `<title>${WORKBENCH_TITLE}</title>`);
 }
 
@@ -73,7 +73,6 @@ export default defineConfig(({ mode }) => {
       alias: {
       '@copilotkit/a2ui-renderer/dist': path.resolve(__dirname, './node_modules/@copilotkit/a2ui-renderer/dist'),
         '@': path.resolve(__dirname, './src'),
-        ...(['compat', 'test'].includes(mode) ? { '@business': path.resolve(__dirname, '../plugins/business') } : {}),
         '@agistack/plugin-slots': path.resolve(
           __dirname,
           '../agi-stack/packages/plugin-slots/src/index.ts'

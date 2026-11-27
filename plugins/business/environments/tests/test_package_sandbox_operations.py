@@ -34,7 +34,7 @@ def authority(monkeypatch):
 
     @app.api_route("/api/v1/projects/p/sandbox{suffix:path}", methods=["GET", "POST"])
     async def dispatch(suffix: str, request: Request):
-        assert request.headers["authorization"] == "Bearer test"
+        assert "authorization" not in {key.lower() for key in request.headers}
         calls.append((suffix, request.method))
         if suffix == "/capabilities":
             return {
@@ -52,6 +52,7 @@ def authority(monkeypatch):
     )
     ctx = SimpleNamespace(
         request=SimpleNamespace(app=app, headers={"Authorization": "Bearer test"}),
+        user=SimpleNamespace(id="user"),
         scope=SimpleNamespace(tenant_id="t", project_id="p"),
     )
     return ctx, state, capability, calls
