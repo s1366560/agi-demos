@@ -1,11 +1,11 @@
 """Selected-tenant instance template reads, editing, and creation from the original wizard."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 
+from plugins.business.environments.command_models import TemplateChange, TemplateRead
 from src.application.schemas.instance_schemas import InstanceCreate
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
 from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
@@ -25,25 +25,6 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBu
 if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
-
-type Identifier = Annotated[str, Field(min_length=1, max_length=128)]
-
-
-class TemplateRead(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    view: Literal["list", "detail", "items", "names"]
-    id: Identifier | None = None
-    page: int = Field(1, ge=1)
-    page_size: int = Field(20, ge=1, le=100)
-    is_published: bool | None = None
-
-
-class TemplateChange(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["create", "publish", "clone", "delete"]
-    id: Identifier | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
-
 
 async def raw_read_templates(
     ctx: "TenantPackageContext", payload: dict[str, Any]

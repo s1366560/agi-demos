@@ -1,11 +1,9 @@
 """Tenant-scoped runner-pool operations for the signed cluster detail page."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from src.application.schemas.acp_runner_schemas import ACPRunnerPoolCreate, ACPRunnerTokenRequest
+from plugins.business.environments.command_models import _Cluster, _CreatePool, _IssueToken
 from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
     cluster_application_authority_dependency_v2,
 )
@@ -20,20 +18,6 @@ if TYPE_CHECKING:
     from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
         ClusterApplicationAuthorityV2,
     )
-
-
-class _Cluster(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: Annotated[str, Field(min_length=1, max_length=128)]
-
-
-class _CreatePool(_Cluster):
-    data: ACPRunnerPoolCreate
-
-
-class _IssueToken(_Cluster):
-    pool_key: Annotated[str, Field(min_length=1, max_length=120)]
-    data: ACPRunnerTokenRequest
 
 
 @asynccontextmanager

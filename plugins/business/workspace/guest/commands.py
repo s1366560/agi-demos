@@ -140,7 +140,7 @@ async def read_directory(ctx: object, payload: dict[str, Any], _progress: object
     tenant, project = _scope(ctx)
     try:
         if "summary_for" in payload:
-            from plugins.business.workspace.backend.directory_cards import SummaryQuery
+            from plugins.business.workspace.command_models import SummaryQuery
 
             return await _summary(ctx, SummaryQuery.model_validate(payload).summary_for)
         query = DirectoryQuery.model_validate(payload)
@@ -152,7 +152,7 @@ async def read_directory(ctx: object, payload: dict[str, Any], _progress: object
     if raw["status"] != 200:
         raise HTTPException(raw["status"], _("Workspace directory unavailable"))
     if query.cards:
-        from plugins.business.workspace.backend.directory_cards import Card, directory_card
+        from plugins.business.workspace.command_models import Card, directory_card
 
         cards = TypeAdapter(list[Card]).validate_python(raw["body"])
         return {"rows": [directory_card(card, ctx.scope) for card in cards]}
@@ -224,11 +224,11 @@ async def _summary(ctx: object, workspace: str) -> dict[str, Any]:
 
 
 async def read_workspace(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.workspace.backend.workspace_directory_export import _WorkspaceRead
+    from plugins.business.workspace.command_models import WorkspaceRead
 
     tenant, project = _scope(ctx)
     try:
-        query = _WorkspaceRead.model_validate(payload)
+        query = WorkspaceRead.model_validate(payload)
     except ValidationError as exc:
         raise HTTPException(422, _("Invalid workspace detail query")) from exc
     revision = None
@@ -256,11 +256,11 @@ async def read_workspace(ctx: object, payload: dict[str, Any], _progress: object
 async def create_workspace(
     ctx: object, payload: dict[str, Any], _progress: object
 ) -> dict[str, Any]:
-    from plugins.business.workspace.backend.workspace_directory_export import _CreateRequest
+    from plugins.business.workspace.command_models import CreateWorkspace
 
     tenant, project = _scope(ctx)
     try:
-        data = _CreateRequest.model_validate(payload)
+        data = CreateWorkspace.model_validate(payload)
     except ValidationError as exc:
         raise HTTPException(422, _("Invalid workspace creation request")) from exc
     raw = await _core(
@@ -275,11 +275,11 @@ async def create_workspace(
 async def update_workspace(
     ctx: object, payload: dict[str, Any], _progress: object
 ) -> dict[str, Any]:
-    from plugins.business.workspace.backend.workspace_directory_export import _UpdateRequest
+    from plugins.business.workspace.command_models import UpdateWorkspace
 
     tenant, project = _scope(ctx)
     try:
-        data = _UpdateRequest.model_validate(payload)
+        data = UpdateWorkspace.model_validate(payload)
     except ValidationError as exc:
         raise HTTPException(422, _("Invalid workspace settings request")) from exc
     changes = data.model_dump(
@@ -374,7 +374,7 @@ def _surface_headers(headers: dict[str, str]) -> dict[str, str]:
 
 
 async def _surface_call(ctx: object, args: object, change: object) -> dict[str, Any]:
-    from plugins.business.workspace.backend.blackboard_surface import _ROOT, _SCOPED, _WRITES
+    from plugins.business.workspace.command_models import _ROOT, _SCOPED, _WRITES
 
     permitted = _WRITES[change.method] if change else _SCOPED | _ROOT
     if args.resource not in permitted:
@@ -435,18 +435,15 @@ async def _surface_call(ctx: object, args: object, change: object) -> dict[str, 
 async def _download(ctx: object, workspace: str, file_id: str, progress: object) -> dict[str, Any]:
     if progress is None:
         raise HTTPException(422, _("File download requires a stream"))
-    frames: list[dict[str, Any]] = []
 
-    async def collect(frame: dict[str, Any]) -> None:
-        frames.append({"content": frame["raw"]})
+    async def publish_chunk(frame: dict[str, Any]) -> None:
+        await progress({"content": frame["raw"]})
 
     result = await current().data(
         "workspace.file.chunks",
         {"workspace": workspace, "file_id": file_id},
-        collect,
+        publish_chunk,
     )
-    for frame in frames:
-        await progress(frame)
     return {"size": result["size"], "mime": result["mime"]}
 
 
@@ -467,10 +464,15 @@ async def read_surface(ctx: object, payload: dict[str, Any], progress: object) -
     return await _surface_call(ctx, query, None)
 
 
+class SurfaceChange(SurfaceQuery):
+    method: Literal["POST", "PATCH", "DELETE"]
+    fields: dict[str, Any] | None = None
+    request_id: str = Field(min_length=36, max_length=36)
+    revision: int = Field(ge=0)
+
+
 async def change_surface(ctx: object, payload: dict[str, Any], progress: object) -> dict[str, Any]:
     del progress
-    from plugins.business.workspace.backend.blackboard_surface import SurfaceChange
-
     change = SurfaceChange.model_validate(payload)
     if change.method == "POST" and change.resource.startswith("file-transfer/") and not change.ids:
         return await current().data(
@@ -492,7 +494,7 @@ async def _projection(
     await read_workspace(ctx, {"workspace_id": workspace}, None)
     tenant, project = _scope(ctx)
     if resource == "published-genes":
-        from plugins.business.workspace.backend.board_projections import CatalogSearch
+        from plugins.business.workspace.command_models import CatalogSearch
 
         params = {
             **CatalogSearch.model_validate(query).model_dump(),
@@ -501,7 +503,7 @@ async def _projection(
         }
         path = "/api/v1/genes/"
     else:
-        from plugins.business.workspace.backend.board_projections import RosterPage
+        from plugins.business.workspace.command_models import RosterPage
 
         params = {
             **RosterPage.model_validate(query).model_dump(),

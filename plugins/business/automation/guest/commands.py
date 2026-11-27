@@ -38,7 +38,7 @@ async def read_verdicts(ctx: object, payload: dict[str, Any], _progress: object)
 
 
 async def schedules(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.automation.backend.schedule_operations import PageQuery
+    from plugins.business.automation.schedule_models import PageQuery
 
     PageQuery.model_validate(payload)
     if not ctx.scope.project_id:
@@ -48,7 +48,7 @@ async def schedules(ctx: object, payload: dict[str, Any], _progress: object) -> 
 
 
 async def save_schedule(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.automation.backend.schedule_operations import ScheduleEdit
+    from plugins.business.automation.schedule_models import ScheduleEdit
 
     ScheduleEdit.model_validate(payload)
     document = await current().data("automation.schedules.save", payload)
@@ -57,7 +57,7 @@ async def save_schedule(ctx: object, payload: dict[str, Any], _progress: object)
 
 async def run_schedule(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.schedule_operations import RunRevision
+    from plugins.business.automation.schedule_models import RunRevision
 
     RunRevision.model_validate(payload)
     raw = await current().data("automation.schedules.run", payload)
@@ -69,7 +69,7 @@ async def delete_schedule(
     ctx: object, payload: dict[str, Any], _progress: object
 ) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.schedule_operations import Revision
+    from plugins.business.automation.schedule_models import Revision
 
     edit = Revision.model_validate(payload)
     await current().data("automation.schedules.delete", payload)
@@ -92,7 +92,7 @@ def _without_secrets(document: dict[str, Any]) -> dict[str, Any]:
 
 async def list_patterns(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.pattern_operations import ListPatterns
+    from plugins.business.automation.pattern_models import ListPatterns
 
     ListPatterns.model_validate(payload)
     raw = await current().data("automation.patterns.list", payload)
@@ -101,7 +101,7 @@ async def list_patterns(ctx: object, payload: dict[str, Any], _progress: object)
 
 async def delete_pattern(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.pattern_operations import DeletePattern
+    from plugins.business.automation.pattern_models import DeletePattern
 
     query = DeletePattern.model_validate(payload)
     raw = await current().data("automation.patterns.delete", {"pattern_id": query.pattern_id})
@@ -132,42 +132,42 @@ async def _tenant(name: str, payload: dict[str, Any], model: object) -> dict[str
 
 async def read_events(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Events
+    from plugins.business.automation.tenant_models import _Events
 
     return await _tenant("automation.events.read", payload, _Events)
 
 
 async def event_types(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Input
+    from plugins.business.automation.tenant_models import _Input
 
     return await _tenant("automation.events.types", payload, _Input)
 
 
 async def list_hooks(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Input
+    from plugins.business.automation.tenant_models import _Input
 
     return await _tenant("automation.webhooks.read", payload, _Input)
 
 
 async def create_hook(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Create
+    from plugins.business.automation.tenant_models import _Create
 
     return await _tenant("automation.webhooks.create", payload, _Create)
 
 
 async def update_hook(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Update
+    from plugins.business.automation.tenant_models import _Update
 
     return await _tenant("automation.webhooks.update", payload, _Update)
 
 
 async def delete_hook(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.automation.backend.tenant_automation_operations import _Key
+    from plugins.business.automation.tenant_models import _Key
 
     return await _tenant("automation.webhooks.delete", payload, _Key)
 

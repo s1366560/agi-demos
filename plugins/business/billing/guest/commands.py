@@ -9,7 +9,7 @@ from plugins.business.guest_runtime.binding import current
 
 async def read_account(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.billing.backend.account_operations import _AccountView
+    from plugins.business.billing.command_models import _AccountView
 
     view = _AccountView.model_validate(payload)
     parts = await current().data("billing.account.parts", {"full_history": view.full_history})
@@ -20,7 +20,7 @@ async def read_account(ctx: object, payload: dict[str, Any], _progress: object) 
 
 async def change_plan(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.billing.backend.account_operations import _Plan
+    from plugins.business.billing.command_models import _Plan
 
     plan = _Plan.model_validate(payload)
     changed = await current().data("billing.plan.apply", plan.model_dump())

@@ -1,10 +1,15 @@
 """Tenant-admin mutations used by the original cluster management form."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from plugins.business.environments.command_models import (
+    ClusterCreateCommand as _Create,
+    ClusterEditCommand as _Edit,
+    ClusterUpdateCommand as _Update,
+)
 from src.application.schemas.cluster_schemas import ClusterCreate, ClusterUpdate
 from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
     cluster_application_authority_dependency_v2,
@@ -15,35 +20,6 @@ from src.infrastructure.adapters.primary.web.routers.agent.access import require
 if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
-
-
-class _Input(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class _Key(_Input):
-    id: str = Field(min_length=1, max_length=128)
-
-
-class _Settings(_Input):
-    name: str = Field(min_length=1, max_length=255)
-    compute_provider: str | None = Field(None, max_length=50)
-    proxy_endpoint: str | None = Field(None, max_length=2048)
-    provider_config: dict[str, Any] | None = None
-
-
-class _Create(_Input):
-    action: Literal["create"]
-    data: _Settings
-
-
-class _Edit(_Key):
-    action: Literal["edit"]
-
-
-class _Update(_Key):
-    action: Literal["update"]
-    data: _Settings
 
 
 async def raw_write_cluster(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:

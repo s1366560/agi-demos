@@ -312,6 +312,45 @@ async def test_guest_forwards_capability_progress_to_the_caller() -> None:
     assert events == [{"content": "YQ=="}]
 
 
+def test_guest_validation_does_not_open_the_relational_store() -> None:
+    import subprocess
+    import sys
+
+    script = """
+import asyncio
+import sys
+from types import SimpleNamespace
+
+from plugins.business.automation.guest.commands import schedules
+from plugins.business.billing.guest.commands import read_account
+from plugins.business.environments.guest.commands import write_cluster
+from plugins.business.workspace.guest.commands import create_workspace, read_workspace
+
+ctx = SimpleNamespace(
+    scope=SimpleNamespace(tenant_id="t", project_id="p"),
+    user=SimpleNamespace(id="u"),
+)
+
+async def main() -> None:
+    for call in (
+        schedules(ctx, {}, None),
+        read_workspace(ctx, {"workspace_id": "w"}, None),
+        create_workspace(ctx, {}, None),
+        read_account(ctx, {}, None),
+        write_cluster(ctx, {"action": "edit"}, None),
+    ):
+        try:
+            await call
+        except Exception:
+            pass
+
+asyncio.run(main())
+assert "src.infrastructure.adapters.secondary.persistence.database" not in sys.modules
+"""
+    completed = subprocess.run([sys.executable, "-c", script], check=False, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+
+
 class _Audit:
     executor = ""
 

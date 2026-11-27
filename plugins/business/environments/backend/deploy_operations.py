@@ -1,10 +1,9 @@
 """Run deployment reads and transitions in the tenant selected by the signed page."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from plugins.business.environments.command_models import DeployChange as Change, DeployRead as Read
 from src.application.schemas.deploy_schemas import DeployCreate, DeployResponse
 from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
     deploy_application_authority_dependency_v2,
@@ -21,24 +20,6 @@ if TYPE_CHECKING:
     from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
         InstanceDeployApplicationAuthorityV2,
     )
-
-type Identifier = Annotated[str, Field(min_length=1, max_length=128)]
-
-
-class Read(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    view: Literal["list", "detail", "latest"]
-    id: Identifier
-    page: int = Field(1, ge=1)
-    page_size: int = Field(20, ge=1, le=100)
-
-
-class Change(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["create", "success", "failed", "cancel"]
-    id: Identifier
-    message: str = Field("", max_length=2000)
-
 
 @asynccontextmanager
 async def _authority(

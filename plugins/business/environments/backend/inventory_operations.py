@@ -1,10 +1,9 @@
 """Tenant-scoped runtime inventory for the signed Environments pages."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from plugins.business.environments.command_models import InventoryQuery
 from src.application.schemas.cluster_schemas import ClusterResponse
 from src.application.schemas.instance_schemas import InstanceResponse
 from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
@@ -20,15 +19,6 @@ from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBu
 if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
-
-
-class InventoryQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    kind: Literal["instances", "clusters"]
-    id: Annotated[str, Field(min_length=1, max_length=128)] | None = None
-    health: bool = False
-    page_size: int = Field(20, ge=1, le=100)
-    page: int = Field(1, ge=1, le=1000000)
 
 
 def project_inventory_row(row: InstanceResponse | ClusterResponse, tenant: str) -> dict[str, Any]:

@@ -211,7 +211,11 @@ async def write_cluster(ctx: object, payload: dict[str, Any], _progress: object)
 
     from pydantic import Field, TypeAdapter
 
-    from plugins.business.environments.backend.cluster_operations import _Create, _Edit, _Update
+    from plugins.business.environments.command_models import (
+        ClusterCreateCommand as _Create,
+        ClusterEditCommand as _Edit,
+        ClusterUpdateCommand as _Update,
+    )
 
     TypeAdapter(
         Annotated[_Create | _Edit | _Update, Field(discriminator="action")]
@@ -221,7 +225,7 @@ async def write_cluster(ctx: object, payload: dict[str, Any], _progress: object)
 
 
 async def delete_cluster(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.environments.backend.cluster_operations import _Key
+    from plugins.business.environments.command_models import _Key
 
     key = _Key.model_validate(payload)
     await current().data("environments.clusters.delete", {"id": key.id})
@@ -254,7 +258,7 @@ async def project_desktop(
 
 
 async def list_pools(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.environments.backend.cluster_runner_operations import _Cluster
+    from plugins.business.environments.command_models import _Cluster
 
     _Cluster.model_validate(payload)
     raw = await current().data("environments.runners.list", payload)
@@ -263,7 +267,7 @@ async def list_pools(ctx: object, payload: dict[str, Any], _progress: object) ->
 
 async def create_pool(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.cluster_runner_operations import _CreatePool
+    from plugins.business.environments.command_models import _CreatePool
 
     _CreatePool.model_validate(payload)
     raw = await current().data("environments.runners.create", payload)
@@ -272,7 +276,7 @@ async def create_pool(ctx: object, payload: dict[str, Any], _progress: object) -
 
 async def issue_token(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.cluster_runner_operations import _IssueToken
+    from plugins.business.environments.command_models import _IssueToken
 
     _IssueToken.model_validate(payload)
     raw = await current().data("environments.runners.token", payload)
@@ -290,7 +294,7 @@ def _deploy_row(record: dict[str, Any]) -> dict[str, Any]:
 
 async def read_deploys(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.deploy_operations import Read
+    from plugins.business.environments.command_models import DeployRead as Read
 
     Read.model_validate(payload)
     raw = await current().data("environments.deploys.read", payload)
@@ -303,7 +307,7 @@ async def read_deploys(ctx: object, payload: dict[str, Any], _progress: object) 
 
 async def change_deploy(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.deploy_operations import Change
+    from plugins.business.environments.command_models import DeployChange as Change
 
     Change.model_validate(payload)
     raw = await current().data("environments.deploys.write", payload)
@@ -312,7 +316,7 @@ async def change_deploy(ctx: object, payload: dict[str, Any], _progress: object)
 
 async def read_templates(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.instance_template_operations import TemplateRead
+    from plugins.business.environments.command_models import TemplateRead
 
     TemplateRead.model_validate(payload)
     return await current().data("environments.templates.read", payload)
@@ -322,7 +326,7 @@ async def change_template(
     ctx: object, payload: dict[str, Any], _progress: object
 ) -> dict[str, Any]:
     del ctx
-    from plugins.business.environments.backend.instance_template_operations import TemplateChange
+    from plugins.business.environments.command_models import TemplateChange
 
     TemplateChange.model_validate(payload)
     raw = await current().data("environments.templates.write", payload)
@@ -334,7 +338,7 @@ async def change_template(
 async def create_instance(
     ctx: object, payload: dict[str, Any], _progress: object
 ) -> dict[str, Any]:
-    from plugins.business.environments.backend.instance_template_operations import InstanceCreate
+    from src.application.schemas.instance_schemas import InstanceCreate
 
     await current().data("environments.instances.access", {})
     data = InstanceCreate.model_validate(payload)
@@ -371,7 +375,7 @@ def _inventory_item(row: dict[str, Any], tenant: str, kind: str) -> dict[str, An
 
 
 async def inventory(ctx: object, payload: dict[str, Any], _progress: object) -> dict[str, Any]:
-    from plugins.business.environments.backend.inventory_operations import InventoryQuery
+    from plugins.business.environments.command_models import InventoryQuery
 
     query = InventoryQuery.model_validate(payload)
     if query.health and (not query.id or query.kind != "clusters"):

@@ -82,6 +82,25 @@ def subprocess_env() -> dict[str, str]:
     }
 
 
+async def _pump_stdout(
+    process: asyncio.subprocess.Process,
+    messages: asyncio.Queue[dict[str, Any] | None],
+    on_progress: Progress | None,
+) -> None:
+    assert process.stdout is not None
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            await messages.put(None)
+            return
+        message = json.loads(line)
+        if message.get("type") == "progress":
+            if on_progress is not None:
+                await on_progress(message.get("data") or {})
+            continue
+        await messages.put(message)
+
+
 async def _read_guest(
     process: asyncio.subprocess.Process,
     bridge: HostBridge,
@@ -89,16 +108,7 @@ async def _read_guest(
 ) -> dict[str, Any] | None:
     messages: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
-    async def pump_stdout() -> None:
-        assert process.stdout is not None
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                await messages.put(None)
-                return
-            await messages.put(json.loads(line))
-
-    pumping = asyncio.create_task(pump_stdout())
+    pumping = asyncio.create_task(_pump_stdout(process, messages, on_progress))
     result: dict[str, Any] | None = None
     try:
         while True:
@@ -106,9 +116,7 @@ async def _read_guest(
             if message is None:
                 break
             kind = message.get("type")
-            if kind == "progress" and on_progress is not None:
-                await on_progress(message["data"])
-            elif kind == "call":
+            if kind == "call":
                 await _reply(process, bridge, message)
             elif kind == "result":
                 result = message

@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from plugins.business.workspace.command_models import _ROOT, _SCOPED, _WRITES
 from src.infrastructure.i18n import gettext as _
 
 from .collaboration import Identifier
@@ -15,101 +16,6 @@ from .workspace_directory_export import _body, _request_core, read_workspace_ope
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
-
-# Item positions are identifiers. The scoped or workspace-root prefix comes from authenticated scope.
-_SCOPED = frozenset(
-    {
-        "",
-        "members",
-        "agents",
-        "objectives",
-        "genes",
-        "messages",
-        "collaboration/authority",
-        "blackboard/posts",
-        "blackboard/posts/:id/replies",
-        "blackboard/execution-diagnostics",
-        "blackboard/files",
-    }
-)
-_ROOT = frozenset(
-    {
-        "tasks",
-        "plan",
-        "topology/nodes",
-        "topology/edges",
-        "autonomy/attentions",
-        "tasks/:id/experience",
-        "tasks/:id/execution-session",
-    }
-)
-_WRITES = {
-    "POST": frozenset(
-        {
-            "blackboard/posts",
-            "blackboard/posts/:id/replies",
-            "blackboard/posts/:id/pin",
-            "blackboard/posts/:id/unpin",
-            "objectives",
-            "objectives/:id/project-to-task",
-            "genes",
-            "tasks",
-            "topology/nodes",
-            "topology/edges",
-            "messages",
-            "collaboration/mutations",
-            "members",
-            "agents",
-            "autonomy/tick",
-            "tasks/:id/recovery-actions",
-            "tasks/:id/assign-agent",
-            "tasks/:id/unassign-agent",
-            "plan/outbox/:id/retry",
-            "plan/recover-stale-attempts",
-            "plan/nodes/:id/request-replan",
-            "plan/nodes/:id/reopen",
-            "plan/nodes/:id/accept-review",
-            "plan/iteration/pause",
-            "plan/iteration/resume",
-            "plan/iteration/trigger-next",
-            "plan/delivery/run-pipeline",
-            "plan/delivery/regenerate-contract",
-            "blackboard/files/mkdir",
-            "blackboard/files/:id/copy",
-        }
-    ),
-    "PATCH": frozenset(
-        {
-            "",
-            "members/:id",
-            "agents/:id",
-            "blackboard/files/:id",
-            "blackboard/posts/:id",
-            "blackboard/posts/:id/replies/:id",
-            "objectives/:id",
-            "genes/:id",
-            "tasks/:id",
-            "topology/nodes/:id",
-            "topology/edges/:id",
-        }
-    ),
-    "DELETE": frozenset(
-        {
-            "",
-            "members/:id",
-            "agents/:id",
-            "blackboard/files/:id",
-            "blackboard/posts/:id",
-            "blackboard/posts/:id/replies/:id",
-            "objectives/:id",
-            "genes/:id",
-            "tasks/:id",
-            "topology/nodes/:id",
-            "topology/edges/:id",
-        }
-    ),
-}
-
 
 class SurfaceQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
