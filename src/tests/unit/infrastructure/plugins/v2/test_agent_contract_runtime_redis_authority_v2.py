@@ -9,7 +9,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.infrastructure.agent.workspace.contract_agent_runtime as contract_agent_runtime
-import src.infrastructure.plugins.v2.artifact_content_gc_runtime as persistence_runtime
 from src.infrastructure.agent.workspace.contract_agent_runtime import (
     workspace_contract_agent_turn_authority_v2,
     workspace_contract_operation_id_v2,
@@ -137,7 +136,11 @@ async def test_contract_agent_turn_holds_exact_generation_and_operation_services
         return runtime
 
     db = AsyncSession()
-    monkeypatch.setattr(persistence_runtime, "async_session_factory", lambda: _SessionContext(db))
+    # The runtime reads the process factory where it applies its definition.
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        lambda: _SessionContext(db),
+    )
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
             workspace_core_runtime_factory=workspace_runtime_factory,
