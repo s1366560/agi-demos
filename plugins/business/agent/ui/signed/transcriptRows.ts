@@ -16,12 +16,19 @@ export type { Thought } from "./useChat";
 
 export type TranscriptRow =
   | { kind: "message"; id: string; message: Message }
-  | { kind: "thought"; id: string; content: string; timestamp?: number }
+  | {
+      kind: "thought";
+      id: string;
+      content: string;
+      timestamp: number | undefined;
+    }
   | { kind: "steps"; id: string; steps: TimelineStep[] }
   /** A human-in-the-loop card or an error notice, drawn from its event. */
   | { kind: "event"; id: string; event: InteractionEvent }
   /** A memory step of a turn: what was recalled or captured at that point. */
-  | { kind: "memory"; id: string; event: InteractionEvent };
+  | { kind: "memory"; id: string; event: InteractionEvent }
+  /** A file the agent produced, as the card of the original transcript shows it. */
+  | { kind: "artifact"; id: string; event: InteractionEvent };
 
 /** Event time and counter locate a row inside the conversation timeline. */
 type Position = [time: number, counter: number];
@@ -44,6 +51,7 @@ const DRAWN = new Set([
   "clarification_answered",
   "decision_answered",
   "env_var_provided",
+  "artifact_created",
   ...MEMORY,
 ]);
 
@@ -58,10 +66,12 @@ function answered(event: TimelineEvent): boolean {
   );
 }
 
-function position(row: {
-  eventTimeUs?: number;
-  eventCounter?: number;
-}): Position | null {
+type PositionFields = {
+  eventTimeUs?: number | undefined;
+  eventCounter?: number | undefined;
+};
+
+function position(row: PositionFields): Position | null {
   return typeof row.eventTimeUs === "number"
     ? [row.eventTimeUs, row.eventCounter ?? 0]
     : null;
@@ -69,6 +79,20 @@ function position(row: {
 
 function compare(a: Position, b: Position): number {
   return a[0] - b[0] || a[1] - b[1];
+}
+
+/** The row a timeline event draws, when it draws one. */
+function drawnRow(event: InteractionEvent): TranscriptRow | undefined {
+  if (!DRAWN.has(event.type)) return undefined;
+  return {
+    kind: MEMORY.has(event.type)
+      ? "memory"
+      : event.type === "artifact_created"
+        ? "artifact"
+        : "event",
+    id: event.id,
+    event,
+  };
 }
 
 /**
@@ -81,7 +105,7 @@ function load(
   events: readonly InteractionEvent[],
 ) {
   const placed = new Map<string, Position>();
-  const timeline: TimelineEvent[] = [];
+  const timeline: { at: Position; event: TimelineEvent }[] = [];
   const rows = new Map<string, TranscriptRow>();
   const place = (
     id: string,
@@ -91,7 +115,7 @@ function load(
   ) => {
     if (!at || placed.has(id)) return false;
     placed.set(id, at);
-    timeline.push(event);
+    timeline.push({ at, event });
     if (row) rows.set(id, row);
     return true;
   };
@@ -138,20 +162,23 @@ function load(
   const stepAt = new Map<string, Position>();
   for (const event of events) {
     const at = position(event);
-    const drawn: TranscriptRow | undefined = !DRAWN.has(event.type)
-      ? undefined
-      : {
-          kind: MEMORY.has(event.type) ? "memory" : "event",
-          id: event.id,
-          event,
-        };
-    if (!place(event.id, at, event as unknown as TimelineEvent, drawn))
+    if (
+      !at ||
+      !place(event.id, at, event as unknown as TimelineEvent, drawnRow(event))
+    )
       continue;
-    if (event.type === "act") stepAt.set(event.execution_id ?? event.id, at!);
+    if (event.type === "act") stepAt.set(event.execution_id ?? event.id, at);
   }
-  timeline.sort((a, b) => compare(placed.get(a.id)!, placed.get(b.id)!));
+  timeline.sort((a, b) => compare(a.at, b.at));
 
-  return { placed, timeline, rows, streaming, live, stepAt };
+  return {
+    placed,
+    timeline: timeline.map((entry) => entry.event),
+    rows,
+    streaming,
+    live,
+    stepAt,
+  };
 }
 
 /** The rows of the timeline, counted the way the original transcript counts them. */
@@ -199,10 +226,10 @@ export function transcriptRows(
     if (item.kind === "timeline") {
       const first = item.steps[0];
       const at = first && stepAt.get(first.id);
-      if (at)
+      if (first && at)
         grouped.push({
           kind: "steps",
-          id: `steps:${first!.id}`,
+          id: `steps:${first.id}`,
           steps: item.steps,
           at,
         });
@@ -237,7 +264,8 @@ export function transcriptRows(
       ? streaming.at(-1)
       : undefined;
   const settled = answer ? streaming.slice(0, -1) : streaming;
-  const sending = settled[0]?.role === "user_message" ? settled[0] : undefined;
+  const first = settled.at(0);
+  const sending = first?.role === "user_message" ? first : undefined;
   const rest = [
     ...settled.slice(1).map(messageRow),
     ...(answer ? [messageRow(answer)] : []),
@@ -250,7 +278,7 @@ export function transcriptRows(
     rows: readonly Positioned<TranscriptRow>[],
     floor: Position | undefined,
   ): TranscriptRow[] => {
-    const pending = arrived.map((thought) => {
+    const queue = arrived.map((thought) => {
       const anchor = latestPosition([
         { eventTimeUs: thought.after?.[0], eventCounter: thought.after?.[1] },
         { eventTimeUs: floor?.[0], eventCounter: floor?.[1] },
@@ -261,28 +289,25 @@ export function transcriptRows(
       };
     });
     const out: TranscriptRow[] = [];
-    let next = 0;
     const read = (limit: Position | null) => {
-      while (next < pending.length) {
-        const entry = pending[next];
+      while (queue.length) {
+        const entry = queue[0];
+        if (!entry) break;
         // Reasoning with nothing read before it comes first.
         if (entry.key && limit && compare(entry.key, limit) >= 0) break;
         out.push(thoughtRow(entry.thought));
-        next++;
+        queue.shift();
       }
     };
     for (const row of rows) {
       read(row.at);
-      out.push(rowsOf([row])[0]);
+      const { at: _at, ...rest } = row;
+      out.push(rest);
     }
     read(null);
     return out;
   };
-  const lastLoaded = messages
-    .map(position)
-    .filter(Boolean)
-    .sort(compare)
-    .at(-1);
+  const lastLoaded = latestPosition(messages);
   // The first turn of a conversation has no history to anchor the message being
   // sent: it comes first, and what happened in its turn follows it.
   if (!lastLoaded && sending && grouped.length && streaming.length <= 2)
@@ -315,9 +340,13 @@ export function transcriptRows(
 
 /** The last position among events, to place what arrives after them. */
 export function latestPosition(
-  events: readonly { eventTimeUs?: number; eventCounter?: number }[],
+  events: readonly PositionFields[],
 ): Position | undefined {
-  const last = events.map(position).filter(Boolean).sort(compare).at(-1);
+  let last: Position | undefined;
+  for (const row of events) {
+    const at = position(row);
+    if (at && (!last || compare(at, last) > 0)) last = at;
+  }
   return last;
 }
 

@@ -2,6 +2,7 @@
 (() => {
   const channel = new MessageChannel();
   const calls = new Map();
+  const contexts = new Set();
   let ready = false;
   const queued = [];
   function send(message) {
@@ -34,6 +35,22 @@
   }
   addEventListener("error", pageError);
   addEventListener("unhandledrejection", pageError);
+  // This document has no tab of its own: a link of the page to the web is opened by the workbench.
+  addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!link || link.target !== "_blank") return;
+    let address;
+    try {
+      address = new URL(link.href);
+    } catch {
+      return;
+    }
+    if (address.protocol !== "https:" && address.protocol !== "http:") return;
+    event.preventDefault();
+    request("openUrl", { url: address.href }).catch(() => {});
+  });
   addEventListener(
     "load",
     () => {
@@ -87,6 +104,17 @@
       }
       return;
     }
+    if (data?.type === "context") {
+      // A listener that fails is reported as any other error of the page, once this message is done.
+      try {
+        for (const listener of contexts) listener(data.value);
+      } catch (error) {
+        setTimeout(() => {
+          throw error;
+        });
+      }
+      return;
+    }
     const call = calls.get(data?.id);
     if (!call) return;
     if (data.type === "event") {
@@ -99,6 +127,46 @@
     else call.reject(new Error(data.error || "page_request_failed"));
   };
   const resources = JSON.parse(document.getElementById("memstack-resources")?.textContent || "{}");
+  // A page keeps small state in the storage of the workbench, as its own localStorage.
+  // The document carries what was stored when the page loaded, so reading answers at
+  // once; each change is passed on. The bounds are those of the bridge of the workbench.
+  const PAGE_STORAGE_KEY = /^[^\u0000-\u001f\u007f]{1,256}$/;
+  const PAGE_STORAGE_TOTAL = 4194304;
+  const stored = new Map(
+    Object.entries(JSON.parse(document.getElementById("memstack-storage")?.textContent || "{}") || {})
+  );
+  function area(values, kept) {
+    return {
+      get length() {
+        return values.size;
+      },
+      key: (index) => [...values.keys()][index] ?? null,
+      getItem: (key) => (values.has(String(key)) ? values.get(String(key)) : null),
+      setItem(key, value) {
+        const name = String(key), text = String(value);
+        const others = [...values].reduce((sum, [other, held]) => sum + (other === name ? 0 : held.length), 0);
+        if (others + text.length > PAGE_STORAGE_TOTAL)
+          throw new DOMException("The page has no room for more.", "QuotaExceededError");
+        values.set(name, text);
+        // A name the workbench does not keep lasts as long as this document.
+        if (kept && PAGE_STORAGE_KEY.test(name)) send({ type: "storage.set", key: name, value: text });
+      },
+      removeItem(key) {
+        const name = String(key);
+        if (!values.delete(name)) return;
+        if (kept) send({ type: "storage.remove", key: name });
+      },
+      clear() {
+        if (!values.size) return;
+        values.clear();
+        if (kept) send({ type: "storage.clear" });
+      },
+    };
+  }
+  // This document is of an origin the browser does not know, so its storage is this one.
+  const persist = area(stored, true);
+  for (const [name, object] of [["localStorage", persist], ["sessionStorage", area(new Map(), false)]])
+    Object.defineProperty(window, name, { configurable: true, enumerable: true, get: () => object });
   const scope = () => request("scope");
   Object.defineProperty(window, "memstack", {
     value: Object.freeze({
@@ -141,7 +209,17 @@
         return resources[path];
       },
       openPage: (pluginId, pageId, destination) => request("openPage", { pluginId, pageId, destination }),
-      navigate: (path, options) => request("navigate", { path, replace: options?.replace === true }),
+      openUrl: (url) => request("openUrl", { url }),
+      navigate: (path, options) =>
+        request("navigate", {
+          path,
+          replace: options?.replace === true,
+          keepMounted: options?.keepMounted === true,
+        }),
+      onContextChange(listener) {
+        contexts.add(listener);
+        return () => contexts.delete(listener);
+      },
       invoke: (name, payload, options = {}) =>
         request(
           "invoke",
@@ -153,6 +231,9 @@
           options,
         ),
       exportCsv: (name, payload, options = {}) => request("exportCsv", { name, payload }, options),
+      saveFile: (name, content, mimeType, options = {}) =>
+        request("saveFile", { name, content, mimeType }, options),
+      printPdf: (name, html, options = {}) => request("printPdf", { name, html }, options),
       device: (name, payload = {}, options = {}) =>
         request("device", { name, payload }, options),
     }),

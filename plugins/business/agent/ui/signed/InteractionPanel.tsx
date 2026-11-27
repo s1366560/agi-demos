@@ -3,6 +3,8 @@ import { ClarificationForm } from "../desktop/chat/ClarificationForm";
 import type { PendingRequest } from "./useInteractions";
 import { useTranslation } from "react-i18next";
 import { InlineHITLCard } from "../web/hitl/InlineHITLCard";
+import { toEnvVarData } from "../web/transcript/messageBubble/inlineEvents";
+import type { TimelineEvent } from "../../../../../web/src/types/agent";
 import { A2UISurfaceRenderer } from "../web/canvas/A2UISurfaceRenderer";
 import { ToolResultDisplay } from "../web/chat/ToolResultDisplay";
 import {
@@ -15,6 +17,8 @@ import {
   type InteractionEvent,
   type Interactions,
 } from "./useInteractions";
+
+const refuse = () => Promise.reject(new Error("unsupported_request"));
 
 function ToolMarkdown({ content }: { content: string }) {
   return <Answer text={content} />;
@@ -202,7 +206,7 @@ export function InteractionPanel({
         );
       })}
       {section !== "canvas" && requests
-        .filter((r) => r.request_type !== "a2ui_action")
+        .filter((r) => r.request_type !== "a2ui_action" && r.request_type !== "env_var")
         .map((r) => {
           const type = r.request_type;
           if (type === "a2ui_action") return null;
@@ -251,12 +255,35 @@ export function InteractionPanel({
                   scope: "once",
                 })
               }
-              respondToEnvVar={() =>
-                Promise.reject(new Error("unsupported_request"))
-              }
+              respondToEnvVar={() => Promise.reject(new Error("unsupported_request"))}
             />
           );
         })}
+      {/* What an environment-variable request asks for is on its timeline event. */}
+      {section !== "canvas" &&
+        events
+          .filter((event) => event.type === "env_var_requested" && event.answered !== true)
+          .flatMap((event) => {
+            const request = requests.find((r) => r.id === event.requestId);
+            const data = request && toEnvVarData(event as unknown as TimelineEvent);
+            return data && request ? [{ request, data }] : [];
+          })
+          .map(({ request, data }) => (
+            <InlineHITLCard
+              key={request.id}
+              hitlType="env_var"
+              requestId={request.id}
+              envVarData={data}
+              createdAt={request.created_at}
+              {...(request.expires_at ? { expiresAt: request.expires_at } : {})}
+              respondToEnvVar={async (_id, values) => {
+                await respond(request, { values });
+              }}
+              respondToClarification={refuse}
+              respondToDecision={refuse}
+              respondToPermission={refuse}
+            />
+          ))}
     </>
   );
 }

@@ -39,6 +39,9 @@ body,
 @source '../web/transcript/timeline-items/shared.tsx';
 @source '../web/transcript/messageBubble/inlineEvents.tsx';
 @source '../web/transcript/messageBubble/ExecutionSummaryPanel.tsx';
+/* A folded turn and the pinned messages above the transcript. */
+@source '../web/transcript/message/TurnPlaceholderRow.tsx';
+@source '../web/transcript/message/PinnedMessages.tsx';
 @source '../../../../../web/src/components/agent/results/MultiSourceResultsCard.tsx';
 @source '../../../../../web/src/components/agent/chat/AgentSection.tsx';
 @source './WebChatTranscript.tsx';
@@ -55,6 +58,9 @@ body,
 @source '../../../../../web/src/components/agent/context/ContextStatusIndicator.tsx';
 
 @source '../../../../../web/src/components/agent/chat/MessageActionBar.tsx';
+/* The dialog that keeps an answer as a prompt template. */
+@source '../../../../../web/src/components/agent/chat/SaveTemplateModal.tsx';
+@source '../../../../../web/src/components/common/AppModal.tsx';
 /* The workbench SDK supplies an unlayered heading reset for generic pages.
    Let this page's original Tailwind heading utilities determine size and leading. */
 html :where(h1, h2, h3, h4, h5, h6) {

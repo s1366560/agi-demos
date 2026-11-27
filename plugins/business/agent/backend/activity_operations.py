@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import Field
 from sqlalchemy import select
 
-from src.application.schemas.activity_read_state import UpdateActivityReadStateRequest
+from src.application.schemas.activity_read_state import ActivityReadEntry
 from src.infrastructure.adapters.secondary.persistence.models import AgentRunAuthorityModel
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
@@ -19,8 +19,16 @@ class ActivityView(_Input):
     view: Literal["items", "receipts"]
 
 
-class ReceiptUpdate(UpdateActivityReadStateRequest):
+class ReceiptUpdate(_Input):
+    """A receipt of the page, which always names the revision it has read.
+
+    The canonical request lets the revision be absent; the fields are declared here
+    rather than narrowed on that request, which a type checker reads as a field that
+    lost its default.
+    """
+
     expected_authority_revision: int = Field(ge=0)
+    entries: list[ActivityReadEntry] = Field(max_length=500)
 
 
 class RunDetail(_Input):

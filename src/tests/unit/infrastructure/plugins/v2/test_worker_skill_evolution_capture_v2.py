@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.plugins.skill_evolution.models import SkillEvolutionSession
-from src.infrastructure.plugins.v2 import artifact_content_gc_runtime
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
@@ -32,7 +31,10 @@ async def test_admitted_worker_capture_is_durable_but_cannot_start_scheduler(
     test_engine, monkeypatch, scoped
 ):
     sessions = async_sessionmaker(test_engine, expire_on_commit=False)
-    monkeypatch.setattr(artifact_content_gc_runtime, "async_session_factory", sessions)
+    # The runtime reads the process factory where it applies its definition.
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory", sessions
+    )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     publication = await host.bootstrap(
         profile_path=ROOT / "config/plugin-profiles/memstack-default.v2.yaml",

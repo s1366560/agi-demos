@@ -1,5 +1,6 @@
 """Conversation-bound capabilities used by the original chat workbench."""
 
+import base64
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
@@ -15,8 +16,11 @@ from .chat_operations import (
     Identifier,
     Turn,
     _canonical,
+    _canonical_http,
+    _Input,
     _own_conversation,
     _turn,
+    canonical_bytes,
 )
 
 if TYPE_CHECKING:
@@ -25,7 +29,7 @@ if TYPE_CHECKING:
 
 class Answer(ConversationInput):
     request_id: Identifier
-    hitl_type: Literal["clarification", "decision", "permission", "a2ui_action"]
+    hitl_type: Literal["clarification", "decision", "permission", "a2ui_action", "env_var"]
     expected_revision: int = Field(ge=1)
     idempotency_key: Identifier
     response_data: dict[str, Any]
@@ -56,7 +60,9 @@ async def respond(
 
 
 class TimelineReview(History):
-    view: Literal["workbench", "attachments"] = "workbench"
+    view: Literal["workbench", "attachments", "artifact"] = "workbench"
+    # The file of the `artifact` view, as the timeline names it.
+    artifact_id: Identifier | None = None
 
 
 # A step is placed among the messages of its turn, so every row keeps its position.
@@ -133,6 +139,42 @@ CARD_KEYS = {
     "env_var_provided": ("requestId", "toolName", "variableNames"),
 }
 ERROR_KEYS = ("message", "code")
+# What the card of a file the agent produced reads. Its address is signed by the
+# storage and runs out; the card asks the `artifact` view for a new one.
+ARTIFACT_KEYS = (
+    "artifactId",
+    "filename",
+    "mimeType",
+    "category",
+    "sizeBytes",
+    "url",
+    "previewUrl",
+    "sourceTool",
+    "error",
+)
+# A picture is shown inside the page, which reaches no storage of its own. Larger
+# files are opened by their address.
+PREVIEW_IMAGE_BYTES = 1_048_576
+# A document comes as the text it holds, to be read and edited on the canvas.
+PREVIEW_TEXT_BYTES = 524_288
+# Types that hold something other than text a page can show as it is.
+BINARY_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/zip",
+        "application/x-tar",
+        "application/gzip",
+        "application/x-gzip",
+        "application/octet-stream",
+        "application/wasm",
+        "application/x-7z-compressed",
+        "application/vnd.rar",
+        "application/sqlite3",
+    }
+)
+# What the canvas reads from the metadata of a block: the language of a file, and
+# the surface and the request of an A2UI block.
+BLOCK_METADATA_KEYS = ("language", "mime_type", "surface_id", "hitl_request_id")
 # What the memory steps of a transcript read. A recalled memory is shown with its
 # text, score, source and category; the rest of the retrieval record stays.
 RECALLED_KEYS = ("content", "score", "source", "category")
@@ -164,14 +206,24 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     """What a transcript reads from a timeline row, placed where it happened."""
     kind = row.get("type")
     if kind == "canvas_updated":
-        block = row.get("block") or {}
+        block: dict[str, Any] = row.get("block") or {}
+        metadata = block.get("metadata")
         return {
             **{key: row[key] for key in ROW_KEYS if key in row},
             "action": row["action"],
             "block_id": row["block_id"],
             "block": {
                 key: block[key] for key in ("id", "title", "block_type", "content") if key in block
-            },
+            }
+            | (
+                {}
+                if not isinstance(metadata, dict)
+                else {
+                    "metadata": {
+                        key: metadata[key] for key in BLOCK_METADATA_KEYS if key in metadata
+                    }
+                }
+            ),
         }
     keys: tuple[str, ...]
     if kind in {"act", "observe"}:
@@ -180,6 +232,8 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
         keys = CARD_KEYS[kind]
     elif kind == "error":
         keys = ERROR_KEYS
+    elif kind == "artifact_created":
+        keys = ARTIFACT_KEYS
     elif kind in MEMORY_KEYS:
         keys = MEMORY_KEYS[kind]
     else:
@@ -190,7 +244,7 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     if kind == "act":
         # The transcript tells an argument draft of a call from its execution by
         # this one field; the rest of the metadata stays on the server.
-        source = (row.get("metadata") or {}).get("sourceEventType")
+        source: object = (row.get("metadata") or {}).get("sourceEventType")
         if isinstance(source, str):
             projected["metadata"] = {"sourceEventType": source}
     if isinstance(projected.get("memories"), list):
@@ -202,11 +256,58 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+async def artifact(
+    ctx: "PackageOperationContext", conversation_id: str, artifact_id: str
+) -> dict[str, Any]:
+    """A file the agent produced in a conversation, as the page can show it.
+
+    The application is asked in the caller's own name, and names the conversation
+    the file belongs to. The address of the file is signed anew; a small picture
+    and the text of a document come as the page can show them.
+    """
+    base = f"/api/v1/artifacts/{artifact_id}"
+    row = await _canonical_http(ctx, "GET", base)
+    if (
+        row.get("conversation_id") != conversation_id
+        or row.get("project_id") != ctx.scope.project_id
+    ):
+        raise OptionalBusinessError("forbidden", "Artifact unavailable for this conversation")
+    result: dict[str, Any] = {"id": artifact_id, "status": row.get("status")}
+    if row.get("status") != "ready":
+        return result
+    result["url"] = (await _canonical_http(ctx, "POST", base + "/refresh-url"))["url"]
+    mime = str(row.get("mime_type") or "")
+    size = row.get("size_bytes") or 0
+    if mime.startswith("image/"):
+        if size <= PREVIEW_IMAGE_BYTES:
+            content_type, content = await canonical_bytes(ctx, base + "/content/bytes")
+            if content and content_type.startswith("image/"):
+                result["preview"] = (
+                    f"data:{content_type};base64,{base64.b64encode(content).decode('ascii')}"
+                )
+        return result
+    if (
+        size <= PREVIEW_TEXT_BYTES
+        and not mime.startswith(("video/", "audio/", "font/"))
+        and mime not in BINARY_TYPES
+        and not mime.startswith("application/vnd.openxmlformats")
+    ):
+        content_type, content = await canonical_bytes(ctx, base + "/content/bytes")
+        # The page decides what to make of the type and the bytes; text is read as text.
+        result["mime_type"] = content_type or mime
+        result["content"] = content.decode("utf-8", errors="replace")
+    return result
+
+
 async def interactions(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
     data = TimelineReview.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
+    if data.view == "artifact":
+        if data.artifact_id is None:
+            raise OptionalBusinessError("page_request_invalid", "No file was named")
+        return {"artifact": await artifact(ctx, data.conversation_id, data.artifact_id)}
     base = f"conversations/{data.conversation_id}"
     query = data.model_dump(exclude={"conversation_id", "view"}, exclude_none=True)
     timeline = await _canonical(ctx, "GET", base + "/messages", query=query)
@@ -221,6 +322,7 @@ async def interactions(
             "decision",
             "clarification",
             "a2ui_action",
+            "env_var",
         }:
             continue
         meta = item.get("metadata") or {}
@@ -258,6 +360,83 @@ async def interactions(
             }
         )
     return {"events": rows, "requests": requests}
+
+
+class CanvasFiles(_Input):
+    view: Literal["sandbox", "read", "artifacts"]
+    # The file of the `read` view, inside the workspace of the project sandbox.
+    path: str | None = Field(default=None, min_length=1, max_length=1024)
+
+
+# What the file browser of the canvas asks the project sandbox: to name the files of
+# its workspace, and to read one of them. The tools are fixed here; the page names none.
+SANDBOX_LISTING: dict[str, Any] = {
+    "tool_name": "glob",
+    "arguments": {"pattern": "**/*", "path": "/workspace", "max_results": 500},
+    "timeout": 30,
+}
+SANDBOX_READ_LINES = 50000
+
+
+def inside_workspace(path: str) -> bool:
+    """Whether a path names a file below the workspace, without leaving it."""
+    return (
+        path.startswith("/workspace/")
+        and all(part not in ("", ".", "..") for part in path.split("/")[1:])
+        and "\\" not in path
+        and not any(ord(char) < 32 or ord(char) == 127 for char in path)
+    )
+
+
+async def canvas_files(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    """What the file browser of the canvas reads: the files of the project sandbox, one of them, or the files the agent produced."""
+    data = CanvasFiles.model_validate(payload)
+    if data.view == "artifacts":
+        result = await _canonical_http(ctx, "GET", "/api/v1/artifacts", query={"limit": 500})
+        return {
+            "artifacts": [
+                {
+                    key: row[key]
+                    for key in (
+                        "id",
+                        "filename",
+                        "mime_type",
+                        "category",
+                        "size_bytes",
+                        "status",
+                        "source_path",
+                    )
+                    if key in row
+                }
+                for row in result.get("artifacts") or []
+                if isinstance(row, dict)
+            ]
+        }
+    if data.view == "read":
+        if data.path is None or not inside_workspace(data.path):
+            raise OptionalBusinessError("page_request_invalid", "Not a file of the workspace")
+        request: dict[str, Any] = {
+            "tool_name": "read",
+            "arguments": {
+                "file_path": data.path,
+                "offset": 0,
+                "limit": SANDBOX_READ_LINES,
+                "raw": True,
+            },
+            "timeout": 30,
+        }
+    else:
+        request = SANDBOX_LISTING
+    result = await _canonical(ctx, "POST", "sandbox/execute", project_route=True, body=request)
+    text = "\n".join(
+        item["text"]
+        for item in result.get("content") or []
+        if isinstance(item, dict) and isinstance(item.get("text"), str)
+    )
+    # What the sandbox answered is the page's to show, an error included.
+    return {"content": text, "is_error": result.get("is_error") is True}
 
 
 class AttachmentUpload(FileInput):
@@ -324,6 +503,7 @@ async def attached_turn(
 
 
 WORKBENCH_OPERATIONS = {
+    "app.agent.canvas.files": canvas_files,
     "app.agent.interactions": interactions,
     "app.agent.respond": respond,
     "app.agent.attachments": upload,

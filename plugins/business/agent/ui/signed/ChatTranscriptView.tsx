@@ -95,7 +95,7 @@ export function Transcript({
   const cursor = chat.cursor;
   const reading = chat.loading || !settled;
   const busy = chat.busy;
-  const asked = useRef<typeof cursor>();
+  const asked = useRef<typeof cursor>(undefined);
   useEffect(() => {
     const element = viewport.current;
     if (

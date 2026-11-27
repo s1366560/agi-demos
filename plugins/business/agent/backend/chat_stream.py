@@ -13,9 +13,12 @@ if TYPE_CHECKING:
 
     from src.host.operations.application_commands import PackageOperationContext, Progress
 
+    from .chat_operations import Follow
 
-def _project_message(event: dict[str, Any], run_id: str) -> dict[str, Any] | None:
-    if event.get("run_id") != run_id:
+
+def _project_message(event: dict[str, Any], run_id: str | None) -> dict[str, Any] | None:
+    # A turn this page started is tied to its run; a subscription carries no run id.
+    if run_id is not None and event.get("run_id") != run_id:
         return None
     kind, data = event.get("type"), event.get("data", {})
     if kind == "text_delta" and isinstance(data.get("delta"), str):
@@ -28,6 +31,26 @@ def _project_message(event: dict[str, Any], run_id: str) -> dict[str, Any] | Non
     if kind in {"complete", "cancelled", "agent_stopped"}:
         return {"type": "complete"}
     return None
+
+
+class StreamIdle(OptionalBusinessError):
+    """Nothing came for a while. It does not mean the stream is gone."""
+
+
+async def stream_follow(
+    ctx: "PackageOperationContext",
+    data: "Follow",
+    run: dict[str, Any],
+    progress: "Progress | None",
+) -> dict[str, Any]:
+    """Bridge one signed follow to the agent socket's subscription of the conversation."""
+    async with _actor_socket(ctx) as (socket, incoming, outgoing):
+        return await _read_follow(ctx, data, run, progress, socket, incoming, outgoing)
+
+
+# A turn can wait minutes inside one tool. Past that, whether it still runs is read again.
+FOLLOW_IDLE_SECONDS = 60.0
+FOLLOW_FIRST_IDLE_SECONDS = 5.0
 
 
 @asynccontextmanager
@@ -140,18 +163,18 @@ async def _read_turn(
 
 
 async def _next_event(
-    socket: asyncio.Task[None], outgoing: "asyncio.Queue[Message]"
+    socket: asyncio.Task[None], outgoing: "asyncio.Queue[Message]", idle: float = 300
 ) -> dict[str, Any]:
     while True:
         reading = asyncio.create_task(outgoing.get())
         try:
-            ready, _ = await asyncio.wait(
-                {socket, reading}, timeout=300, return_when=asyncio.FIRST_COMPLETED
+            finished, _waiting = await asyncio.wait(
+                {socket, reading}, timeout=idle, return_when=asyncio.FIRST_COMPLETED
             )
-            if reading not in ready:
-                raise OptionalBusinessError(
-                    "runtime_unavailable", "Agent stream closed or timed out"
-                )
+            if reading not in finished:
+                if socket in finished:
+                    raise OptionalBusinessError("runtime_unavailable", "Agent stream closed")
+                raise StreamIdle("runtime_unavailable", "Agent stream timed out")
             message = reading.result()
         finally:
             reading.cancel()
@@ -170,3 +193,56 @@ async def _next_event(
         if not isinstance(frame, dict):
             raise OptionalBusinessError("runtime_unavailable", "Invalid Agent socket frame")
         return frame
+
+
+async def _read_follow(
+    ctx: "PackageOperationContext",
+    data: "Follow",
+    run: dict[str, Any],
+    progress: "Progress | None",
+    socket: asyncio.Task[None],
+    incoming: "asyncio.Queue[Message]",
+    outgoing: "asyncio.Queue[Message]",
+) -> dict[str, Any]:
+    # A turn that just ended is still marked running for a moment, and subscribing
+    # to it brings nothing: the first wait after subscribing is short. A running
+    # turn can then be quiet for as long as one tool takes.
+    idle = FOLLOW_IDLE_SECONDS
+    while True:
+        event = await _next_event(socket, outgoing, idle)
+        kind = event.get("type")
+        if kind == "connected":
+            if event.get("data", {}).get("user_id") != ctx.user.id:
+                raise OptionalBusinessError("forbidden", "Agent socket identity mismatch")
+            # Events at or before the position were read by the page already.
+            incoming.put_nowait(
+                {
+                    "type": "websocket.receive",
+                    "text": json.dumps(
+                        {
+                            "type": "subscribe",
+                            "conversation_id": data.conversation_id,
+                            "from_time_us": data.from_time_us,
+                            "from_counter": data.from_counter,
+                        }
+                    ),
+                }
+            )
+            if progress:
+                await progress(
+                    {"type": "accepted", "run_id": run["id"], "revision": run["revision"]}
+                )
+            idle = FOLLOW_FIRST_IDLE_SECONDS
+            continue
+        idle = FOLLOW_IDLE_SECONDS
+        if event.get("conversation_id") != data.conversation_id:
+            continue
+        if kind == "error":
+            raise OptionalBusinessError("apply_failed", "Cloud Agent failed this turn")
+        projected = _project_message(event, None)
+        if projected is None:
+            continue
+        if projected["type"] == "complete":
+            return {"status": "complete", "run_id": run["id"]}
+        if progress:
+            await progress(projected)

@@ -13,7 +13,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.infrastructure.plugins.v2.agent_event_query_services as event_query_services
-import src.infrastructure.plugins.v2.artifact_content_gc_runtime as persistence_runtime
 from src.infrastructure.agent.workspace.contract_agent_runtime import (
     recover_workspace_contract_payload,
 )
@@ -82,7 +81,11 @@ async def test_contract_recovery_resolves_session_and_event_query_from_one_gener
         session_calls += 1
         return _SessionContext(db)
 
-    monkeypatch.setattr(persistence_runtime, "async_session_factory", session_factory)
+    # The runtime reads the process factory where it applies its definition.
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
     service = _EventQueryService(
         [
             SimpleNamespace(event_type="observe", event_data={"payload": {"value": "old"}}),

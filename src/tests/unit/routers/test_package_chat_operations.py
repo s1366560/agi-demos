@@ -1,6 +1,9 @@
 """The package sees only text and receipts from its authenticated project and turn."""
 
+import base64
+import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import FastAPI, Request, WebSocket
@@ -82,6 +85,7 @@ async def test_chat_operations_reject_cross_project_before_calling_handler(db_se
         (ops.history, {"conversation_id": "other"}),
         (ops.cancel, {"conversation_id": "other", "run_id": "run", "expected_revision": 1}),
         (ops.turn, {"conversation_id": "other", "message": "hi", "message_id": "m"}),
+        (ops.follow, {"conversation_id": "other", "from_time_us": 0}),
     ]:
         with pytest.raises(OptionalBusinessError, match="conversation unavailable"):
             await op(ctx, payload, None)
@@ -181,6 +185,149 @@ async def test_cloud_workspace_chat_uses_canonical_link_and_handles_deep_bookmar
         await ops.list_conversations(
             ctx, {"workspace_id": "other", "conversation_id": pinned}, None
         )
+
+
+def _conversation_row(identifier: str) -> dict[str, str]:
+    return {"id": identifier, "title": identifier.upper(), "execution_target": "cloud"}
+
+
+async def test_conversation_list_pages_through_both_lists_of_the_workbench(db_session, monkeypatch):
+    """The workbench lists unbound conversations first and grouped ones after, a page at a time."""
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    requests: list[dict[str, str | int] | None] = []
+    unbound: dict[str, Any] = {
+        "items": [_conversation_row(f"u{i}") for i in range(10)],
+        "has_more": True,
+    }
+    grouped: dict[str, Any] = {
+        "items": [_conversation_row("g1"), _conversation_row("u3")],
+        "has_more": False,
+    }
+
+    async def canonical(_ctx, method, path, **kwargs):
+        assert (method, path) == ("GET", "conversations")
+        requests.append(kwargs.get("query"))
+        return grouped if kwargs["query"].get("group_by_workspace") else unbound
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    first = await operations.list_conversations(ctx, {"workbench": True, "limit": 10}, None)
+
+    # A grouped row that was already listed is not repeated.
+    assert [row["id"] for row in first["items"]] == [f"u{i}" for i in range(10)] + ["g1"]
+    assert first["has_more"] is True
+    assert isinstance(first["cursor"], str)
+    assert requests == [
+        {"limit": 10, "offset": 0, "unbound_only": "true"},
+        {"limit": 10, "offset": 0, "group_by_workspace": "true"},
+    ]
+
+    requests.clear()
+    unbound.clear()
+    unbound.update({"items": [_conversation_row("u10")], "has_more": False})
+    second = await operations.list_conversations(
+        ctx, {"workbench": True, "limit": 10, "cursor": first["cursor"]}, None
+    )
+
+    # Only the list that still had rows is asked again.
+    assert requests == [{"limit": 10, "offset": 10, "unbound_only": "true"}]
+    assert [row["id"] for row in second["items"]] == ["u10"]
+    assert second["has_more"] is False
+    assert second["cursor"] is None
+
+
+async def test_conversation_list_starts_over_from_a_cursor_that_cannot_be_read(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    requests: list[dict[str, str | int] | None] = []
+
+    async def canonical(_ctx, method, path, **kwargs):
+        requests.append(kwargs.get("query"))
+        return {"items": [], "has_more": False}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.list_conversations(
+        ctx, {"workbench": True, "limit": 10, "cursor": "not-a-cursor"}, None
+    )
+
+    assert result == {"items": [], "has_more": False, "cursor": None}
+    assert [request["offset"] for request in requests] == [0, 0]
+
+
+async def test_conversation_list_of_a_workspace_reports_whether_more_follow(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(_ctx, method, path, **kwargs):
+        assert kwargs["query"] == {"workspace_id": "mine", "offset": 20}
+        return {"items": [_conversation_row("w1")], "has_more": True}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.list_conversations(
+        ctx,
+        {
+            "workspace_id": "mine",
+            "cursor": base64.urlsafe_b64encode(
+                json.dumps({"o": [20, 20], "m": [True, True]}).encode()
+            ).decode("ascii"),
+        },
+        None,
+    )
+
+    assert result["items"][0]["id"] == "w1"
+    assert result["has_more"] is True
+    assert isinstance(result["cursor"], str)
+
+
+async def test_conversation_list_names_how_much_a_conversation_holds(db_session, monkeypatch):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(_ctx, method, path, **_kwargs):
+        return {
+            "items": [
+                {**_conversation_row("c1"), "message_count": 12},
+                {**_conversation_row("c2"), "message_count": "many"},
+                _conversation_row("c3"),
+            ],
+            "has_more": False,
+        }
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    items = (await operations.list_conversations(ctx, {"workbench": True}, None))["items"]
+
+    # A count the workbench can show is passed on; anything else is left out.
+    assert [item.get("message_count") for item in items] == [12, None, None]
 
 
 async def test_history_keeps_turn_order_and_reasoning_without_tool_arguments(
@@ -294,17 +441,42 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
     async def canonical(_ctx, method, path, **_kwargs):
         assert method == "GET"
         if path.endswith("/pending"):
-            return {"requests": []}
+            return {
+                "requests": [
+                    {
+                        "id": "env-pending",
+                        "request_type": "env_var",
+                        "question": "",
+                        "options": [],
+                        "created_at": "2026-11-26T00:00:00",
+                        "expires_at": "2026-11-26T00:05:00",
+                        "authority_revision": 3,
+                        "context": {"requested_variables": ["TOKEN"]},
+                        "metadata": {"internal": "kept on the server"},
+                    },
+                    {
+                        "id": "native",
+                        "request_type": "permission",
+                        "native_binding": {"device_id": "private"},
+                    },
+                    {"id": "other", "request_type": "plan_approval"},
+                ]
+            }
         return {
             "timeline": [
                 {
                     "id": "u1",
                     "type": "user_message",
-                    "content": "question",
+                    "content": "private question",
                     "metadata": {"fileMetadata": [{"filename": "a.txt"}]},
                     "eventTimeUs": 1,
                 },
-                {"id": "t1", "type": "thought", "content": "reason", "eventTimeUs": 2},
+                {
+                    "id": "t1",
+                    "type": "thought",
+                    "content": "private reasoning",
+                    "eventTimeUs": 2,
+                },
                 {
                     # An argument draft of the call below. The transcript drops it
                     # once the execution is read, by the one field that marks it.
@@ -449,7 +621,19 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
 
     execution = {"startTime": 1.0, "endTime": 2.0, "duration": 1000, "status": "success"}
     assert result == {
-        "requests": [],
+        # An environment-variable request waits here to be answered; a request bound
+        # to a device and one of another kind are not this page's to answer.
+        "requests": [
+            {
+                "id": "env-pending",
+                "request_type": "env_var",
+                "question": "",
+                "options": [],
+                "created_at": "2026-11-26T00:00:00",
+                "expires_at": "2026-11-26T00:05:00",
+                "authority_revision": 3,
+            }
+        ],
         "events": [
             {"id": "u1", "type": "user_message", "eventTimeUs": 1},
             {"id": "t1", "type": "thought", "eventTimeUs": 2},
@@ -565,8 +749,8 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
     # Message text, event payloads and the values of an environment-variable answer
     # stay on the server.
     for kept in (
-        "question",
-        "reason",
+        "private question",
+        "private reasoning",
         "fileMetadata",
         "executionSummary",
         "payload",
@@ -584,3 +768,541 @@ async def test_interactions_keep_every_event_in_order_and_show_only_what_a_trans
         "internal",
     ):
         assert kept not in str(result)
+
+
+def test_transcript_event_carries_what_the_canvas_opens_as_a_tab():
+    from plugins.business.agent.backend import workbench
+
+    row = {
+        "id": "canvas-1",
+        "type": "canvas_updated",
+        "eventTimeUs": 4,
+        "action": "created",
+        "block_id": "b1",
+        "block": {
+            "id": "b1",
+            "title": "Report",
+            "block_type": "code",
+            "content": "print(1)",
+            "metadata": {
+                "language": "python",
+                "surface_id": "s",
+                "internal": "kept on the server",
+            },
+            "position": 3,
+        },
+        "version": 1,
+    }
+    assert workbench.transcript_event(row) == {
+        "id": "canvas-1",
+        "type": "canvas_updated",
+        "eventTimeUs": 4,
+        "action": "created",
+        "block_id": "b1",
+        "block": {
+            "id": "b1",
+            "title": "Report",
+            "block_type": "code",
+            "content": "print(1)",
+            "metadata": {"language": "python", "surface_id": "s"},
+        },
+    }
+    # A block without metadata the canvas reads has no metadata at all.
+    bare = workbench.transcript_event({**row, "block": {"id": "b2", "block_type": "markdown"}})
+    assert bare["block"] == {"id": "b2", "block_type": "markdown"}
+
+
+def test_transcript_event_carries_what_the_card_of_a_file_reads():
+    from plugins.business.agent.backend import workbench
+
+    row = {
+        "id": "art-1",
+        "type": "artifact_created",
+        "eventTimeUs": 5,
+        "artifactId": "a1",
+        "filename": "report.pdf",
+        "mimeType": "application/pdf",
+        "category": "document",
+        "sizeBytes": 10,
+        "url": "",
+        "previewUrl": "",
+        "sourceTool": "export_artifact",
+        "sourcePath": "/tmp/report.pdf",
+        "metadata": {"internal": "kept on the server"},
+    }
+    # The address is left to the artifact view, which signs it anew.
+    assert workbench.transcript_event(row) == {
+        "id": "art-1",
+        "type": "artifact_created",
+        "eventTimeUs": 5,
+        "artifactId": "a1",
+        "filename": "report.pdf",
+        "mimeType": "application/pdf",
+        "category": "document",
+        "sizeBytes": 10,
+        "url": "",
+        "previewUrl": "",
+        "sourceTool": "export_artifact",
+    }
+
+
+async def test_artifact_of_a_conversation_is_signed_again_and_comes_as_a_picture(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        if path == "/api/v1/artifacts/a1":
+            return {
+                "conversation_id": "c",
+                "project_id": "p",
+                "status": "ready",
+                "mime_type": "image/png",
+                "size_bytes": 12,
+            }
+        assert (method, path) == ("POST", "/api/v1/artifacts/a1/refresh-url")
+        return {"artifact_id": "a1", "url": "http://files/a1.png?X-Amz-Signature=new"}
+
+    async def pieces(_ctx, path):
+        assert path == "/api/v1/artifacts/a1/content/bytes"
+        return "image/png", b"\x89PNG"
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+
+    result = await workbench.interactions(
+        ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+    )
+
+    assert result == {
+        "artifact": {
+            "id": "a1",
+            "status": "ready",
+            "url": "http://files/a1.png?X-Amz-Signature=new",
+            "preview": "data:image/png;base64," + base64.b64encode(b"\x89PNG").decode("ascii"),
+        }
+    }
+    assert calls == [
+        ("GET", "/api/v1/artifacts/a1"),
+        ("POST", "/api/v1/artifacts/a1/refresh-url"),
+    ]
+
+
+async def test_artifact_of_another_conversation_is_not_read(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        return {"conversation_id": "another", "project_id": "p", "status": "ready"}
+
+    async def pieces(*_args):
+        raise AssertionError("the bytes of another conversation are not read")
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.interactions(
+            ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+        )
+
+    assert refused.value.code == "forbidden"
+    assert calls == [("GET", "/api/v1/artifacts/a1")]
+
+
+@pytest.mark.parametrize(
+    ("row", "expected", "carried"),
+    [
+        (
+            {"status": "pending", "mime_type": "image/png", "size_bytes": 10},
+            {"status": "pending"},
+            False,
+        ),
+        (
+            {"status": "error", "mime_type": "text/plain", "size_bytes": 10},
+            {"status": "error"},
+            False,
+        ),
+        # A picture too large to carry is opened by its address instead.
+        (
+            {"status": "ready", "mime_type": "image/png", "size_bytes": 3_000_000},
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
+        ),
+        # A document the page cannot show as it is is opened by its address.
+        (
+            {"status": "ready", "mime_type": "application/pdf", "size_bytes": 10},
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
+        ),
+        (
+            {
+                "status": "ready",
+                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "size_bytes": 10,
+            },
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
+        ),
+        (
+            {"status": "ready", "mime_type": "text/plain", "size_bytes": 10},
+            {
+                "status": "ready",
+                "url": "http://files/a1.png?X-Amz-Signature=new",
+                "mime_type": "text/plain",
+                "content": "hello",
+            },
+            True,
+        ),
+    ],
+)
+async def test_artifact_is_carried_only_as_what_the_page_can_show(
+    db_session, monkeypatch, row, expected, carried
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+    pieces = []
+
+    async def owned(*_args):
+        return None
+
+    async def http(_ctx, method, path, **_kwargs):
+        calls.append((method, path))
+        if path == "/api/v1/artifacts/a1":
+            return {"conversation_id": "c", "project_id": "p", **row}
+        return {"artifact_id": "a1", "url": "http://files/a1.png?X-Amz-Signature=new"}
+
+    async def read_pieces(_ctx, path):
+        pieces.append(path)
+        return "text/plain", b"hello"
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+    monkeypatch.setattr(workbench, "canonical_bytes", read_pieces)
+
+    result = await workbench.interactions(
+        ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
+    )
+
+    assert result == {"artifact": {"id": "a1", **expected}}
+    assert calls[0] == ("GET", "/api/v1/artifacts/a1")
+    assert len(calls) == (2 if row["status"] == "ready" else 1)
+    # Only what the page can show is read from the storage.
+    assert pieces == (["/api/v1/artifacts/a1/content/bytes"] if carried else [])
+
+
+async def test_artifact_view_names_a_file(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    async def owned(*_args):
+        return None
+
+    async def http(*_args, **_kwargs):
+        raise AssertionError("no file was named, so nothing is read")
+
+    monkeypatch.setattr(workbench, "_own_conversation", owned)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.interactions(
+            context(FastAPI(), db_session),
+            {"conversation_id": "c", "view": "artifact"},
+            None,
+        )
+
+    assert refused.value.code == "page_request_invalid"
+
+
+async def test_canvas_files_list_and_read_the_project_sandbox_with_fixed_tools(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def canonical(_ctx, method, path, **options):
+        calls.append((method, path, options))
+        return {
+            "success": True,
+            "is_error": False,
+            "content": [
+                {"type": "text", "text": "Found 2 files\n/workspace/a.py\n/workspace/out/b.txt"}
+            ],
+        }
+
+    async def http(_ctx, method, path, **options):
+        calls.append((method, path, options))
+        return {
+            "artifacts": [
+                {
+                    "id": "x",
+                    "filename": "a.txt",
+                    "mime_type": "text/plain",
+                    "category": "text",
+                    "size_bytes": 3,
+                    "status": "ready",
+                    "url": "http://files/signed",
+                    "project_id": "p",
+                }
+            ],
+            "total": 1,
+        }
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+
+    listed = await workbench.canvas_files(ctx, {"view": "sandbox"}, None)
+
+    assert listed == {
+        "content": "Found 2 files\n/workspace/a.py\n/workspace/out/b.txt",
+        "is_error": False,
+    }
+    assert calls == [
+        (
+            "POST",
+            "sandbox/execute",
+            {
+                "project_route": True,
+                "body": {
+                    "tool_name": "glob",
+                    "arguments": {
+                        "pattern": "**/*",
+                        "path": "/workspace",
+                        "max_results": 500,
+                    },
+                    "timeout": 30,
+                },
+            },
+        )
+    ]
+
+    calls.clear()
+    read = await workbench.canvas_files(ctx, {"view": "read", "path": "/workspace/out/b.txt"}, None)
+
+    assert read == listed
+    method, path, options = calls[0]
+    assert (method, path) == ("POST", "sandbox/execute")
+    assert options["body"]["tool_name"] == "read"
+    assert options["body"]["arguments"] == {
+        "file_path": "/workspace/out/b.txt",
+        "offset": 0,
+        "limit": 50000,
+        "raw": True,
+    }
+
+    calls.clear()
+    produced = await workbench.canvas_files(ctx, {"view": "artifacts"}, None)
+
+    # What the page lists is the file and its kind; where it is stored stays on the server.
+    assert produced == {
+        "artifacts": [
+            {
+                "id": "x",
+                "filename": "a.txt",
+                "mime_type": "text/plain",
+                "category": "text",
+                "size_bytes": 3,
+                "status": "ready",
+            }
+        ]
+    }
+    assert calls[0][:2] == ("GET", "/api/v1/artifacts")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/etc/passwd",
+        "/workspace",
+        "/workspace/",
+        "/workspace/../etc/passwd",
+        "/workspace//a.txt",
+        "workspace/a.txt",
+        "/workspace/a\\b.txt",
+        "/workspace/a\u0000b.txt",
+        "/workspace/./a.txt",
+        "/other/workspace/a.txt",
+    ],
+)
+async def test_canvas_files_do_not_read_outside_the_workspace(db_session, monkeypatch, path):
+    from plugins.business.agent.backend import workbench
+
+    async def canonical(*_args, **_options):
+        raise AssertionError("a path outside the workspace is not sent to the sandbox")
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.canvas_files(
+            context(FastAPI(), db_session), {"view": "read", "path": path}, None
+        )
+
+    assert refused.value.code == "page_request_invalid"
+
+
+async def test_canvas_files_show_what_the_sandbox_answered(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    async def canonical(*_args, **_options):
+        return {"is_error": True, "content": [{"type": "text", "text": "File not found"}]}
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+
+    # An error of the sandbox is the page's to show; it is not a failure of the command.
+    assert await workbench.canvas_files(
+        context(FastAPI(), db_session), {"view": "read", "path": "/workspace/gone.txt"}, None
+    ) == {"content": "File not found", "is_error": True}
+
+
+async def test_canvas_files_do_not_take_a_tool_from_the_page(db_session):
+    from plugins.business.agent.backend import workbench
+
+    with pytest.raises(ValidationError):
+        await workbench.canvas_files(
+            context(FastAPI(), db_session),
+            {"view": "read", "path": "/workspace/a.txt", "tool_name": "bash"},
+            None,
+        )
+
+
+async def test_follow_streams_the_running_turn_and_ends_when_it_ends(monkeypatch):
+    """Opening a conversation while its turn runs follows it, as the original workbench does."""
+    from plugins.business.agent.backend import chat_operations as operations
+
+    app = FastAPI()
+    inbound = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        await ws.accept()
+        await ws.send_json({"type": "connected", "data": {"user_id": "u"}})
+        inbound.append(await ws.receive_json())
+
+        async def send(kind, **fields):
+            await ws.send_json({"type": kind, "conversation_id": "c", **fields})
+
+        await send("ack", action="subscribe")
+        # Another conversation's events do not reach the page.
+        await ws.send_json(
+            {"type": "text_delta", "conversation_id": "other", "data": {"delta": "x"}}
+        )
+        await send("thought", data={"thought": "reason"})
+        await send("text_delta", data={"delta": "text"})
+        await send("complete")
+        await ws.receive()
+
+    frames = []
+
+    async def progress(frame):
+        frames.append(frame)
+
+    async def owned(*_args):
+        return None
+
+    requests = []
+
+    async def canonical(_ctx, method, path, **_kwargs):
+        requests.append((method, path))
+        return {"active_run": {"id": "r", "revision": 3, "status": "running"}}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 5, "from_counter": 1}, progress
+    )
+
+    assert requests == [("GET", "conversations/c/active-run")]
+    assert inbound == [
+        {"type": "subscribe", "conversation_id": "c", "from_time_us": 5, "from_counter": 1}
+    ]
+    assert frames == [
+        {"type": "accepted", "run_id": "r", "revision": 3},
+        {"type": "thought", "text": "reason"},
+        {"type": "text_delta", "text": "text"},
+    ]
+    assert result == {"status": "complete", "run_id": "r"}
+
+
+async def test_follow_without_a_running_turn_returns_at_once(monkeypatch):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    app = FastAPI()
+    opened = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        opened.append(1)
+        await ws.accept()
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(*_args, **_kwargs):
+        return {"active_run": None, "reason_code": "no_active_run"}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 0}, None
+    )
+
+    assert result == {"status": "idle"}
+    assert opened == []
+
+
+async def test_follow_that_hears_nothing_checks_whether_the_turn_still_runs(monkeypatch):
+    """A turn can end between the status read and the subscription."""
+    from plugins.business.agent.backend import chat_operations as operations, chat_stream
+
+    app = FastAPI()
+    inbound = []
+
+    @app.websocket("/api/v1/agent/ws")
+    async def socket(ws: WebSocket):
+        await ws.accept()
+        await ws.send_json({"type": "connected", "data": {"user_id": "u"}})
+        inbound.append(await ws.receive_json())
+        # Nothing follows: the turn already ended.
+        await ws.receive()
+
+    async def owned(*_args):
+        return None
+
+    reads = []
+
+    async def canonical(*_args, **_kwargs):
+        reads.append(1)
+        running = len(reads) == 1
+        return {"active_run": {"id": "r", "revision": 1} if running else None}
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+    monkeypatch.setattr(chat_stream, "FOLLOW_FIRST_IDLE_SECONDS", 0.05)
+
+    result = await operations.follow(
+        context(app), {"conversation_id": "c", "from_time_us": 0}, None
+    )
+
+    assert result == {"status": "complete", "run_id": "r"}
+    assert len(inbound) == 1
+    assert len(reads) == 2

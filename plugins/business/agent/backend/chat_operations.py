@@ -1,7 +1,10 @@
 """Scoped application capabilities backed by the canonical Agent HTTP and WS authorities."""
 
+import base64
+import binascii
+import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,7 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
 )
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
-from .chat_stream import stream_turn
+from .chat_stream import StreamIdle, stream_follow, stream_turn
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -52,6 +55,12 @@ class Turn(ConversationInput):
     message_id: Identifier
     forced_skill_name: str | None = Field(default=None, min_length=1, max_length=255)
     message: str = Field(min_length=1, max_length=32000)
+
+
+class Follow(ConversationInput):
+    # Events at or before this position were read by the page already.
+    from_time_us: int = Field(ge=0)
+    from_counter: int = Field(default=0, ge=0)
 
 
 class Cancel(ConversationInput):
@@ -85,14 +94,15 @@ async def _canonical(
     return await _canonical_http(ctx, method, base + path, body=body, query=query)
 
 
-async def _canonical_http(
+async def _canonical_reply(
     ctx: "PackageOperationContext",
     method: str,
     path: str,
     *,
     body: dict[str, Any] | None = None,
     query: Mapping[str, int | str] | None = None,
-) -> dict[str, Any]:
+) -> httpx.Response:
+    """What the application answered in the caller's own name, when it answered."""
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=ctx.request.app),
         base_url="http://localhost",
@@ -109,10 +119,28 @@ async def _canonical_http(
             reply.status_code, "runtime_unavailable"
         )
         raise OptionalBusinessError(code, f"Agent authority returned HTTP {reply.status_code}")
-    result = reply.json()
+    return reply
+
+
+async def _canonical_http(
+    ctx: "PackageOperationContext",
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    query: Mapping[str, int | str] | None = None,
+) -> dict[str, Any]:
+    result = (await _canonical_reply(ctx, method, path, body=body, query=query)).json()
     if not isinstance(result, dict):
         raise OptionalBusinessError("runtime_unavailable", "Invalid Agent authority response")
     return result
+
+
+async def canonical_bytes(ctx: "PackageOperationContext", path: str) -> tuple[str, bytes]:
+    """The bytes the application serves at a path, with their type."""
+    reply = await _canonical_reply(ctx, "GET", path)
+    content_type: str = reply.headers.get("content-type", "")
+    return content_type.split(";")[0], reply.content
 
 
 async def visible_skills(
@@ -145,44 +173,114 @@ def _conversation(row: dict[str, Any]) -> dict[str, Any]:
 class WorkbenchList(ConversationList):
     workbench: bool = False
     limit: int | None = Field(default=None, ge=1, le=100)
+    # Where the previous page ended, as that page returned it.
+    cursor: str | None = Field(default=None, max_length=1024)
+
+
+# Where the two lists of the workbench stand: the offset of each, and whether each
+# still has rows to read.
+type Position = tuple[int, int, bool, bool]
+
+
+START: Position = (0, 0, True, True)
+
+
+def _position(cursor: str | None) -> Position:
+    if not cursor:
+        return START
+    try:
+        data = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
+        offsets, more = data["o"], data["m"]
+        position: Position = (int(offsets[0]), int(offsets[1]), bool(more[0]), bool(more[1]))
+    except (ValueError, KeyError, IndexError, TypeError, UnicodeEncodeError, binascii.Error):
+        return START
+    # A cursor that does not start the lists at their beginning is not read.
+    return position if min(position[:2]) >= 0 else START
+
+
+def _cursor(position: Position) -> str:
+    offsets, more = position[:2], position[2:]
+    return base64.urlsafe_b64encode(json.dumps({"o": offsets, "m": more}).encode()).decode("ascii")
+
+
+def _next_offset(page: dict[str, Any], offset: int) -> int:
+    """Where the next page of a list starts, as the original workbench reads it."""
+    declared = page.get("next_offset")
+    if isinstance(declared, int):
+        return declared
+    start = page.get("offset")
+    return (start if isinstance(start, int) else offset) + len(page["items"])
+
+
+def _rows(items: object) -> list[dict[str, Any]]:
+    if not isinstance(items, list) or any(not isinstance(row, dict) for row in items):
+        raise OptionalBusinessError("runtime_unavailable", "Invalid conversation list")
+    return cast("list[dict[str, Any]]", items)
 
 
 async def _conversation_page(
     ctx: "PackageOperationContext", filters: WorkbenchList
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool, str | None]:
+    """The rows of one page, whether more follow, and where the next page starts."""
     query: dict[str, str | int] = {}
     if filters.limit is not None:
         query["limit"] = filters.limit
     if filters.workspace_id:
         query["workspace_id"] = filters.workspace_id
+    unbound_at, grouped_at, unbound_more, grouped_more = _position(filters.cursor)
     if not filters.workbench or filters.workspace_id:
+        if filters.cursor:
+            query["offset"] = unbound_at
         result = await _canonical(ctx, "GET", "conversations", query=query)
-        items = result["items"]
-        if not isinstance(items, list) or any(not isinstance(row, dict) for row in items):
-            raise OptionalBusinessError("runtime_unavailable", "Invalid conversation list")
-        return items
+        items = _rows(result["items"])
+        more = result.get("has_more") is True
+        return (
+            items,
+            more,
+            _cursor((_next_offset(result, unbound_at), 0, more, False)) if more else None,
+        )
 
-    # The Web workbench initially loads two pages. The unbound list owns its
-    # ordering and duplicates, then grouped rows contribute previously unseen IDs.
-    query["limit"] = filters.limit or 10
-    unbound = await _canonical(ctx, "GET", "conversations", query={**query, "unbound_only": "true"})
-    grouped = await _canonical(
-        ctx, "GET", "conversations", query={**query, "group_by_workspace": "true"}
-    )
-    items = list(unbound["items"])
+    # The Web workbench reads unbound conversations first and grouped ones after.
+    # The unbound list owns its ordering and duplicates; grouped rows contribute
+    # previously unseen IDs. Each list is paged on its own.
+    limit = filters.limit or 10
+    unbound = grouped = None
+    if unbound_more:
+        unbound = await _canonical(
+            ctx,
+            "GET",
+            "conversations",
+            query={**query, "limit": limit, "offset": unbound_at, "unbound_only": "true"},
+        )
+    if grouped_more:
+        grouped = await _canonical(
+            ctx,
+            "GET",
+            "conversations",
+            query={**query, "limit": limit, "offset": grouped_at, "group_by_workspace": "true"},
+        )
+    # A new list: the page is extended with grouped rows.
+    items = [*_rows(unbound["items"])] if unbound else []
     seen = {row["id"] for row in items}
-    for row in grouped["items"]:
+    for row in _rows(grouped["items"]) if grouped else []:
         if row["id"] not in seen:
             seen.add(row["id"])
             items.append(row)
-    return items
+    position: Position = (
+        _next_offset(unbound, unbound_at) if unbound else unbound_at,
+        _next_offset(grouped, grouped_at) if grouped else grouped_at,
+        unbound is not None and unbound.get("has_more") is True,
+        grouped is not None and grouped.get("has_more") is True,
+    )
+    more = position[2] or position[3]
+    return items, more, _cursor(position) if more else None
 
 
 async def list_conversations(
     ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
     filters = WorkbenchList.model_validate(payload)
-    page = await _conversation_page(ctx, filters)
+    page, has_more, cursor = await _conversation_page(ctx, filters)
     if filters.conversation_id and all(row["id"] != filters.conversation_id for row in page):
         await _own_conversation(ctx, filters.conversation_id)
         selected = await _canonical(ctx, "GET", f"conversations/{filters.conversation_id}")
@@ -206,6 +304,12 @@ async def list_conversations(
                     )
                     if row.get(key)
                 },
+                # How much a conversation holds, which the workbench shows when one is picked.
+                **(
+                    {"message_count": row["message_count"]}
+                    if isinstance(row.get("message_count"), int)
+                    else {}
+                ),
                 "sidebar_active": row.get("status") == "active",
                 "sidebar_hidden": bool(
                     row.get("parent_conversation_id")
@@ -233,7 +337,7 @@ async def list_conversations(
     for row in items:
         if row["id"] in local_ids:
             row["execution_target"] = "local"
-    return {"items": items}
+    return {"items": items, "has_more": has_more, "cursor": cursor}
 
 
 async def create(
@@ -452,11 +556,37 @@ async def cancel(
     return {"status": result["status"]}
 
 
+async def follow(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    """Follow the turn running in a conversation, as the original workbench does when opened."""
+    data = Follow.model_validate(payload)
+    await _own_conversation(ctx, data.conversation_id)
+    followed = None
+    while True:
+        active = (await _canonical(ctx, "GET", f"conversations/{data.conversation_id}/active-run"))[
+            "active_run"
+        ]
+        if not isinstance(active, dict) or not active.get("id"):
+            # A turn that was running and then went silent has ended.
+            if followed:
+                return {"status": "complete", "run_id": followed["id"]}
+            return {"status": "idle"}
+        followed = active
+        try:
+            # The run is tied to this page from here on, so it can be stopped from it.
+            return await stream_follow(ctx, data, active, progress)
+        except StreamIdle:
+            # Nothing came for a while: read again whether the turn still runs.
+            continue
+
+
 AGENT_OPERATIONS = {
     "app.agent.list": list_conversations,
     "app.agent.create": create,
     "app.agent.rename": rename,
     "app.agent.history": history,
     "app.agent.turn": turn,
+    "app.agent.follow": follow,
     "app.agent.cancel": cancel,
 }

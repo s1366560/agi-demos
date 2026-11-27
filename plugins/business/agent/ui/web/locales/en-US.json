@@ -1373,6 +1373,16 @@
         "translate": "Translate",
         "summarize": "Summarize"
       },
+      "actionPrompts": {
+        "explain": "Explain the following. Reply with the explanation only:\n\n{{content}}",
+        "optimize": "Optimize the following. Reply with the result only:\n\n{{content}}",
+        "addTests": "Add tests for the following. Reply with the tests only:\n\n{{content}}",
+        "addComments": "Add comments to the following. Reply with the result only:\n\n{{content}}",
+        "improve": "Improve the following. Reply with the result only:\n\n{{content}}",
+        "shorten": "Shorten the following. Reply with the result only:\n\n{{content}}",
+        "translate": "Translate the following into English. Reply with the translation only:\n\n{{content}}",
+        "summarize": "Summarize the following. Reply with the summary only:\n\n{{content}}"
+      },
       "resolvingMedia": "Loading…",
       "image": {
         "zoomIn": "Zoom in",
@@ -4333,7 +4343,18 @@
     }
   },
   "comparison": {
-    "compare": "Compare"
+    "compare": "Compare",
+      "exitCompare": "Exit comparison",
+      "loadFailed": "Failed to load messages",
+      "loading": "Loading…",
+      "messageCount": "{{count}} messages",
+      "messageCount_one": "{{count}} message",
+      "messageCount_other": "{{count}} messages",
+      "noMessages": "No messages",
+      "noResults": "No conversations found",
+      "search": "Search conversations…",
+      "selectConversation": "Select conversation to compare",
+      "title": "Compare Conversations"
   },
   "nav": {
     "agentBindings": "Agent Bindings",

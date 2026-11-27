@@ -115,6 +115,8 @@ export function downloadConversationMarkdown(
   URL.revokeObjectURL(url);
 }
 
+export { timelineToHtml };
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -218,9 +220,10 @@ export async function downloadConversationPdf(
   document.body.appendChild(container);
 
   try {
+    const name = filename || `conversation-${String(Date.now())}.pdf`;
     const pdfOptions: Html2PdfOptions = {
       margin: [10, 10, 10, 10],
-      filename: filename || `conversation-${String(Date.now())}.pdf`,
+      filename: name,
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },

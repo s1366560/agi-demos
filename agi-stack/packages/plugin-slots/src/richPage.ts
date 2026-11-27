@@ -77,6 +77,22 @@ function isStringList(value: unknown): value is string[] {
   );
 }
 
+const STORAGE_TABLE =
+  '<script id="memstack-storage" type="application/json"></script>';
+
+/** Put what the page stored into its document, where the guest reads it as the page loads. */
+export function pageDocumentWithStorage(
+  page: string,
+  values: Readonly<Record<string, string>>,
+) {
+  const at = page.indexOf(STORAGE_TABLE);
+  if (at < 0) return page;
+  const start = at + STORAGE_TABLE.length - "</script>".length;
+  // "<" is escaped, so that nothing a page stored can end the element.
+  const text = JSON.stringify(values).replace(/</g, "\\u003c");
+  return page.slice(0, start) + text + page.slice(start);
+}
+
 export async function verifyPageDocument(
   page: RichPage,
   target: PageTarget,
@@ -162,6 +178,7 @@ export async function verifyPageDocument(
     baseStyle +
     css +
     resourceTable +
+    STORAGE_TABLE +
     '</head><body><main id="root"></main><script src="data:text/javascript;base64,' +
     guest +
     '"></script><script src="data:text/javascript;base64,' +

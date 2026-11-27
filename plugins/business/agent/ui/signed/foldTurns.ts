@@ -14,22 +14,30 @@ export type TranscriptEntry =
   | { kind: "folded"; turnId: string; hiddenCount: number };
 
 // The rows as the items the turn folding of the original transcript works on.
-function grouped(rows: readonly TranscriptRow[]): GroupedItem[] {
-  return rows.map((row, index): GroupedItem => {
-    if (row.kind === "steps")
-      return { kind: "timeline", steps: row.steps, startIndex: index };
-    const type =
-      row.kind === "message"
-        ? row.message.role
-        : row.kind === "thought"
-          ? "thought"
-          : row.event.type;
-    return {
-      kind: "event",
-      event: { id: row.id, type } as TimelineEvent,
-      index,
-    };
+function grouped(rows: readonly TranscriptRow[]) {
+  const items: GroupedItem[] = [];
+  const rowOf = new Map<GroupedItem, TranscriptRow>();
+  rows.forEach((row, index) => {
+    const item: GroupedItem =
+      row.kind === "steps"
+        ? { kind: "timeline", steps: row.steps, startIndex: index }
+        : {
+            kind: "event",
+            event: {
+              id: row.id,
+              type:
+                row.kind === "message"
+                  ? row.message.role
+                  : row.kind === "thought"
+                    ? "thought"
+                    : row.event.type,
+            } as TimelineEvent,
+            index,
+          };
+    items.push(item);
+    rowOf.set(item, row);
   });
+  return { items, rowOf };
 }
 
 /** Hide what answers a user message when its turn is folded, as the original transcript does. */
@@ -37,14 +45,14 @@ export function foldTurns(
   rows: readonly TranscriptRow[],
   collapsed: ReadonlySet<string>,
 ): TranscriptEntry[] {
-  const items = applyTurnCollapse(grouped(rows), collapsed);
-  const at = (item: GroupedItem) =>
-    rows[item.kind === "timeline" ? item.startIndex : item.index];
-  return items.map(
+  const { items, rowOf } = grouped(rows);
+  // Every item comes from a row of this list, so the lookup never misses.
+  const row = (item: GroupedItem) => rowOf.get(item) as TranscriptRow;
+  return applyTurnCollapse(items, collapsed).map(
     (item): TranscriptEntry =>
       isTurnPlaceholder(item)
         ? { kind: "folded", turnId: item.turnId, hiddenCount: item.hiddenCount }
-        : { kind: "row", row: at(item) },
+        : { kind: "row", row: row(item) },
   );
 }
 
@@ -52,7 +60,7 @@ export function foldTurns(
 export function foldableTurns(
   rows: readonly TranscriptRow[],
 ): Map<string, number> {
-  const items = grouped(rows);
+  const { items } = grouped(rows);
   const turns = new Map<string, number>();
   for (const turn of computeTurns(items)) {
     const opener = items[turn.userIndex];
