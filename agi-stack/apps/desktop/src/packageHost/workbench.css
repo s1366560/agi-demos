@@ -3,8 +3,8 @@
   height: 100dvh;
   overflow: auto;
   padding: clamp(1rem, 3vw, 3rem);
-  background: var(--color-background, Canvas);
-  color: var(--color-text, CanvasText);
+  background: var(--desktop-bg, Canvas);
+  color: var(--desktop-text, CanvasText);
 }
 .desktop-package-workbench > button {
   margin-bottom: 1rem;

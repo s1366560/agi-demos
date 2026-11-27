@@ -1,6 +1,11 @@
 import { openVoiceSocket } from './voiceSocket';
 import { installationDestination } from '../../../../packages/plugin-marketplace-ui/src/installationReturn';
-import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import {
+  fullMarketProjectId,
+  loadTenantProjects,
+  type CatalogProject,
+} from '../fullHost/projectCatalog';
 import { createMarketplaceClient } from '../../../../packages/plugin-marketplace-ui/src/client';
 import { marketText } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketText';
 import type { Installation } from '../../../../packages/plugin-marketplace-ui/src/pluginMarketTypes';
@@ -50,9 +55,45 @@ export function PackageManagement({
   const index = hash.indexOf('?');
   const pathname = index < 0 ? hash : hash.slice(0, index);
   const params = new URLSearchParams(index < 0 ? '' : hash.slice(index + 1));
-  const tenantOnly =
-    project === null || (pathname === base && params.get('marketScope') === 'tenant');
-  const scopeProject = tenantOnly ? null : project;
+  const requestedProject = full
+    ? fullMarketProjectId(index < 0 ? '' : hash.slice(index + 1))
+    : null;
+  const tenantOnly = full
+    ? !requestedProject
+    : project === null || (pathname === base && params.get('marketScope') === 'tenant');
+  const scopeProject = full ? requestedProject : tenantOnly ? null : project;
+  const [catalog, setCatalog] = useState<CatalogProject[]>([]);
+  const [catalogError, setCatalogError] = useState('');
+  useEffect(() => {
+    if (!full || !tenant) return;
+    const controller = new AbortController();
+    void loadTenantProjects(transport, tenant, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          setCatalog(items);
+          setCatalogError('');
+        }
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setCatalog([]);
+          setCatalogError(String(cause));
+        }
+      });
+    return () => controller.abort();
+  }, [full, tenant]);
+  function chooseScope(next: string) {
+    const query = pathname === base ? new URLSearchParams(params) : new URLSearchParams();
+    if (next) query.set('projectId', next);
+    else query.delete('projectId');
+    query.delete('marketScope');
+    query.delete('marketPage');
+    query.delete('marketPlugin');
+    query.delete('optionalPlugin');
+    const search = query.toString();
+    onNavigate?.();
+    window.location.hash = base + (search ? '?' + search : '');
+  }
   const marketplace = useMemo(
     () =>
       createMarketplaceClient(
@@ -93,11 +134,11 @@ export function PackageManagement({
   };
   const device = useCallback(
     (pluginId: string, digest: string | null, release?: NpmRelease) =>
-      project && (
+      scopeProject && (
         <DevicePluginSettings
-          key={JSON.stringify([tenant, project, pluginId, digest])}
+          key={JSON.stringify([tenant, scopeProject, pluginId, digest])}
           tenant={tenant}
-          project={project}
+          project={scopeProject}
           pluginId={pluginId}
           digest={digest}
           loadArchive={
@@ -110,7 +151,7 @@ export function PackageManagement({
                     method: 'POST',
                     body: {
                       tenant_id: tenant,
-                      project_id: project,
+                      project_id: scopeProject,
                       package_name: release.packageName,
                       version: release.version,
                     },
@@ -123,7 +164,7 @@ export function PackageManagement({
           }
         />
       ),
-    [tenant, project, canManage],
+    [tenant, scopeProject, canManage],
   );
   if (page)
     return (
@@ -149,18 +190,33 @@ export function PackageManagement({
     <>
       <label className="package-market-scope">
         {t.installationScope}
-        <select
-          value={tenantOnly ? 'tenant' : 'project'}
-          onChange={(event) => {
-            onNavigate?.();
-            window.location.hash =
-              base + (event.target.value === 'tenant' ? '?marketScope=tenant' : '');
-          }}
-        >
-          {project && <option value="project">{t.project}</option>}
-          <option value="tenant">{t.tenant}</option>
-        </select>
+        {full ? (
+          <select value={scopeProject ?? ''} onChange={(event) => chooseScope(event.target.value)}>
+            <option value="">{t.tenantScope}</option>
+            {catalog.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+            {scopeProject && !catalog.some((item) => item.id === scopeProject) ? (
+              <option value={scopeProject}>{scopeProject}</option>
+            ) : null}
+          </select>
+        ) : (
+          <select
+            value={tenantOnly ? 'tenant' : 'project'}
+            onChange={(event) => {
+              onNavigate?.();
+              window.location.hash =
+                base + (event.target.value === 'tenant' ? '?marketScope=tenant' : '');
+            }}
+          >
+            {project && <option value="project">{t.project}</option>}
+            <option value="tenant">{t.tenant}</option>
+          </select>
+        )}
       </label>
+      {catalogError ? <p role="alert">{catalogError}</p> : null}
       <PluginMarket
         key={JSON.stringify([tenant, scopeProject])}
         tenantId={tenant}

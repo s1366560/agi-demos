@@ -8,16 +8,16 @@ import { useI18n } from '../i18n';
 import { transport } from '../packageHost/transport';
 import { messages } from '../packageHost/messages';
 import { DEFAULT_CONFIG } from '../types';
+import {
+  PACKAGE_PROJECT_CATALOG_PATH,
+  readPackageProjectCatalog,
+  type PackageCatalogProject,
+} from './projectCatalog';
 import '../features/settings/SettingsWindow.css';
 import '../features/settings/SettingsForms.css';
 
 export type HostSettingsTab = 'account' | 'workspace' | 'appearance';
-type Project = {
-  project_id: string;
-  tenant_id: string;
-  project_name: string;
-  tenant_name: string;
-};
+type ListedProject = PackageCatalogProject;
 export function HostSettings({
   initial,
   session,
@@ -38,7 +38,7 @@ export function HostSettings({
   const { locale, setLocale, t } = useI18n();
   const { preference, setPreference } = useThemePreference();
   const [tab, setTab] = useState(initial);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ListedProject[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const dialog = useModalDialog({ onClose: close });
@@ -50,16 +50,18 @@ export function HostSettings({
   useEffect(() => {
     if (tab !== 'workspace') return;
     const controller = new AbortController();
-    void transport<Project[]>('/api/v1/project-packages/projects/', {
-      signal: controller.signal,
-    })
-      .then(setProjects)
+    // The per-tenant /projects/ catalog is limited to the saved workspace tenant.
+    // This picker must list every tenant before the user switches.
+    void transport<unknown>(PACKAGE_PROJECT_CATALOG_PATH, { signal: controller.signal })
+      .then((payload) => {
+        if (!controller.signal.aborted) setProjects(readPackageProjectCatalog(payload));
+      })
       .catch((cause) => {
         if (!controller.signal.aborted) setError(String(cause));
       });
     return () => controller.abort();
   }, [tab]);
-  async function switchProject(project: Project) {
+  async function switchProject(project: ListedProject) {
     setBusy(true);
     setError('');
     try {
@@ -67,7 +69,7 @@ export function HostSettings({
         method: 'POST',
         body: {
           tenant_id: project.tenant_id,
-          project_id: project.project_id,
+          project_id: project.id,
           expected_revision: session?.workspaceContext.revision ?? 0,
           idempotency_key: crypto.randomUUID(),
         },
@@ -157,13 +159,13 @@ export function HostSettings({
                 ))}
                 {projects.map((project) => (
                   <button
-                    key={project.project_id}
+                    key={project.tenant_id + '/' + project.id}
                     type="button"
                     className="settings-row"
                     disabled={busy}
                     onClick={() => void switchProject(project)}
                   >
-                    {project.tenant_name} / {project.project_name}
+                    {project.tenant_name} / {project.name}
                   </button>
                 ))}
               </section>

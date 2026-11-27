@@ -59,14 +59,17 @@ export function WorkbenchHeaderFrame({
           style={menuStyle}
         >
           {open.items.map((item) => (
-            <button
+            <a
               key={item.id}
-              type="button"
+              href={'#' + item.path}
               aria-current={item.active ? 'page' : undefined}
-              onClick={() => onSelect(item.path)}
+              onClick={(event) => {
+                event.preventDefault();
+                onSelect(item.path);
+              }}
             >
               {item.label}
-            </button>
+            </a>
           ))}
         </div>
       ) : null}

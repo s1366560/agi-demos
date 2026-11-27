@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CloudSessionProjection } from '../api/cloudSessionProjectionClient';
 import { useI18n } from '../i18n';
 import { transport } from '../packageHost/transport';
-
-type Project = {
-  project_id: string;
-  tenant_id: string;
-  project_name: string;
-  tenant_name: string;
-};
+import { loadTenantProjects, type CatalogProject } from './projectCatalog';
 
 export function ProjectDirectory({
   session,
@@ -20,20 +14,21 @@ export function ProjectDirectory({
   reload(): Promise<void>;
 }) {
   const { t } = useI18n();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<CatalogProject[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if (!tenant) return;
     const controller = new AbortController();
-    void transport<Project[]>('/api/v1/project-packages/projects/', { signal: controller.signal })
-      .then((items) => setProjects(items.filter((item) => item.tenant_id === tenant)))
+    void loadTenantProjects(transport, tenant, controller.signal)
+      .then(setProjects)
       .catch((cause) => {
         if (!controller.signal.aborted) setError(String(cause));
       });
     return () => controller.abort();
   }, [tenant]);
   const current = session?.workspaceContext.projectId ?? null;
-  async function openProject(project: Project) {
+  async function openProject(project: CatalogProject) {
     setBusy(true);
     setError('');
     try {
@@ -41,7 +36,7 @@ export function ProjectDirectory({
         method: 'POST',
         body: {
           tenant_id: project.tenant_id,
-          project_id: project.project_id,
+          project_id: project.id,
           expected_revision: session?.workspaceContext.revision ?? 0,
           idempotency_key: crypto.randomUUID(),
         },
@@ -50,7 +45,7 @@ export function ProjectDirectory({
         '/tenant/' +
         encodeURIComponent(project.tenant_id) +
         '/project/' +
-        encodeURIComponent(project.project_id);
+        encodeURIComponent(project.id);
       await reload();
     } catch (cause) {
       setError(String(cause));
@@ -64,14 +59,14 @@ export function ProjectDirectory({
       {error ? <p role="alert">{error}</p> : null}
       <ul>
         {projects.map((project) => (
-          <li key={project.project_id}>
+          <li key={project.id}>
             <button
               type="button"
-              aria-current={project.project_id === current ? 'true' : undefined}
+              aria-current={project.id === current ? 'true' : undefined}
               disabled={busy}
               onClick={() => void openProject(project)}
             >
-              {project.project_name}
+              {project.name}
             </button>
           </li>
         ))}

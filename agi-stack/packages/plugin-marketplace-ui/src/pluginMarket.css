@@ -523,7 +523,7 @@
   }
 }
 @media (prefers-color-scheme: dark) {
-  .pm-market {
+  :root:not([data-theme='light']) .pm-market {
     --pm-paper: #18231f;
     --pm-panel: #202d27;
     --pm-ink: #e8efeb;
@@ -536,7 +536,9 @@
     --pm-warn-bg: #3b3223;
   }
 }
-:where(.dark, [data-theme='dark'], [data-mode='dark']) .pm-market {
+:root[data-theme='dark'] .pm-market,
+.dark .pm-market,
+[data-theme='dark'] .pm-market {
   --pm-paper: #18231f;
   --pm-panel: #202d27;
   --pm-ink: #e8efeb;
@@ -548,7 +550,9 @@
   --pm-warn: #efd3a1;
   --pm-warn-bg: #3b3223;
 }
-:where(.light, [data-theme='light'], [data-mode='light']) .pm-market {
+:root[data-theme='light'] .pm-market,
+.light .pm-market,
+[data-theme='light'] .pm-market {
   --pm-paper: #fff;
   --pm-panel: #f5f7f6;
   --pm-ink: #182b27;
