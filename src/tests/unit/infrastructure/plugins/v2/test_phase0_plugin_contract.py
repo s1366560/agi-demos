@@ -36,12 +36,22 @@ def test_business_pages_scope_tenant_routes_and_publish_command_schemas():
                 if len(parts) >= 3 and parts[1] == "tenant" and ":projectId" not in parts:
                     assert page.scope == "tenant", route
         for page in parsed.pages:
-            if page.id in {"tenant-chat", "tenant-directory", "tenant-create"}:
+            if page.id in {"tenant-directory", "tenant-create"}:
                 assert page.commands == ()
                 assert page.entry is not None
                 assert page.entry.path == "ui/tenant-scope.js"
                 script = (path.parent / page.entry.path).read_text()
                 assert "invoke" not in script
+                assert "project_required" not in script
+            if page.id == "tenant-chat":
+                assert page.commands == (
+                    "tenant-session-list",
+                    "tenant-session-create",
+                    "tenant-session-open",
+                )
+                assert page.entry is not None
+                script = (path.parent / page.entry.path).read_text()
+                assert "tenant-session-list" in script
                 assert "project_required" not in script
 
 

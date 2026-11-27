@@ -1,35 +1,20 @@
-"""Scoped application capabilities backed by the canonical Agent HTTP and WS authorities."""
+"""Project chat commands. Data access goes through the bound host port."""
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Annotated, Any
+from __future__ import annotations
 
-import httpx
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 
-from src.host.operations.device_conversations import (
-    ConversationId,
-    ConversationList,
-    ConversationRename,
-    DeviceConversationCreate,
-    create_owned,
-    local_history,
+from plugins.business.agent.guest.binding import (
+    CommandContext,
+    CommandError,
+    Progress,
+    bound,
+    current,
 )
-from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentRunAuthorityModel,
-    Conversation,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
-    latest_execution_placements,
-)
-from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
-from .chat_stream import stream_turn
-
-if TYPE_CHECKING:
-    from src.host.operations.application_commands import PackageOperationContext, Progress
-
-type Identifier = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
+type Identifier = str
 
 
 class _Input(BaseModel):
@@ -37,93 +22,82 @@ class _Input(BaseModel):
 
 
 class ConversationInput(_Input):
-    conversation_id: ConversationId
+    conversation_id: str = Field(pattern=r"^[A-Za-z0-9_:-]{1,128}$")
 
 
 class History(ConversationInput):
     before_time_us: int | None = Field(default=None, ge=0)
     before_counter: int = Field(default=0, ge=0)
-    # A transcript page carries the reasoning and tool steps around its messages,
-    # so the workbench reads wider pages than a single-message caller.
     limit: int = Field(default=50, ge=1, le=500)
 
 
 class Turn(ConversationInput):
-    message_id: Identifier
+    message_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
     forced_skill_name: str | None = Field(default=None, min_length=1, max_length=255)
     message: str = Field(min_length=1, max_length=32000)
 
 
 class Cancel(ConversationInput):
-    run_id: Identifier
+    run_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
     expected_revision: int = Field(ge=1)
 
 
-async def _own_conversation(ctx: "PackageOperationContext", conversation_id: str) -> None:
-    match = await ctx.db.scalar(
-        select(Conversation.id).where(
-            Conversation.id == conversation_id,
-            Conversation.tenant_id == ctx.scope.tenant_id,
-            Conversation.project_id == ctx.scope.project_id,
-            Conversation.user_id == ctx.user.id,
-        )
+class WorkbenchList(_Input):
+    workbench: bool = False
+    limit: int | None = Field(default=None, ge=1, le=100)
+    workspace_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_:-]{1,128}$")
+
+
+def _project_of(ctx: CommandContext) -> str:
+    project = getattr(getattr(ctx, "scope", None), "project_id", None) or (
+        current().project_id if bound() else None
     )
-    if match is None:
-        raise OptionalBusinessError("forbidden", "conversation unavailable for this project")
+    if not project:
+        raise CommandError("forbidden", "project scope required")
+    return project
+
+
+async def _canonical_http(
+    ctx: CommandContext,
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    query: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return await current().http(method, path, body=body, query=query, absolute=True)
 
 
 async def _canonical(
-    ctx: "PackageOperationContext",
+    _ctx: CommandContext,
     method: str,
     path: str,
     *,
     project_route: bool = False,
     body: dict[str, Any] | None = None,
-    query: Mapping[str, int | str] | None = None,
+    query: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    base = f"/api/v1/projects/{ctx.scope.project_id}/" if project_route else "/api/v1/agent/"
-    return await _canonical_http(ctx, method, base + path, body=body, query=query)
+    return await current().http(method, path, project_route=project_route, body=body, query=query)
 
 
-async def _canonical_http(
-    ctx: "PackageOperationContext",
-    method: str,
-    path: str,
-    *,
-    body: dict[str, Any] | None = None,
-    query: Mapping[str, int | str] | None = None,
-) -> dict[str, Any]:
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ctx.request.app),
-        base_url="http://localhost",
-        headers={"authorization": ctx.request.headers.get("authorization", "")},
-    ) as client:
-        reply = await client.request(
-            method,
-            path,
-            params={"project_id": ctx.scope.project_id, **(query or {})},
-            json=body,
-        )
-    if reply.status_code >= 400:
-        code = {403: "forbidden", 401: "forbidden", 404: "page_not_found", 409: "conflict"}.get(
-            reply.status_code, "runtime_unavailable"
-        )
-        raise OptionalBusinessError(code, f"Agent authority returned HTTP {reply.status_code}")
-    result = reply.json()
-    if not isinstance(result, dict):
-        raise OptionalBusinessError("runtime_unavailable", "Invalid Agent authority response")
-    return result
+async def _own_conversation(_ctx: CommandContext, conversation_id: str) -> None:
+    await current().own(conversation_id)
 
 
 async def visible_skills(
-    ctx: "PackageOperationContext", *, limit: int, search: str | None = None
+    _ctx: CommandContext, *, limit: int, search: str | None = None
 ) -> list[dict[str, Any]]:
+    project = _project_of(_ctx)
+    tenant_id = getattr(getattr(_ctx, "scope", None), "tenant_id", None)
+    if tenant_id is None and bound():
+        tenant_id = current().tenant_id
     result = await _canonical_http(
-        ctx,
+        _ctx,
         "GET",
         "/api/v1/skills/",
         query={
-            "tenant_id": ctx.scope.tenant_id,
+            "tenant_id": tenant_id,
             "status": "active",
             "limit": limit,
             **({"search": search} if search else {}),
@@ -133,8 +107,8 @@ async def visible_skills(
         {key: item[key] for key in ("id", "name", "description", "scope")}
         for item in result["skills"]
         if item.get("status") == "active"
-        and item.get("project_id") in (None, ctx.scope.project_id)
-        and (item.get("scope") == "system" or item.get("tenant_id") == ctx.scope.tenant_id)
+        and item.get("project_id") in (None, project)
+        and (item.get("scope") == "system" or item.get("tenant_id") == tenant_id)
     ]
 
 
@@ -142,32 +116,24 @@ def _conversation(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row[key] for key in ("id", "title", "execution_target")}
 
 
-class WorkbenchList(ConversationList):
-    workbench: bool = False
-    limit: int | None = Field(default=None, ge=1, le=100)
-
-
-async def _conversation_page(
-    ctx: "PackageOperationContext", filters: WorkbenchList
-) -> list[dict[str, Any]]:
+async def _conversation_page(_ctx: CommandContext, filters: WorkbenchList) -> list[dict[str, Any]]:
     query: dict[str, str | int] = {}
     if filters.limit is not None:
         query["limit"] = filters.limit
     if filters.workspace_id:
         query["workspace_id"] = filters.workspace_id
     if not filters.workbench or filters.workspace_id:
-        result = await _canonical(ctx, "GET", "conversations", query=query)
+        result = await _canonical(_ctx, "GET", "conversations", query=query)
         items = result["items"]
         if not isinstance(items, list) or any(not isinstance(row, dict) for row in items):
-            raise OptionalBusinessError("runtime_unavailable", "Invalid conversation list")
+            raise CommandError("runtime_unavailable", "Invalid conversation list")
         return items
-
-    # The Web workbench initially loads two pages. The unbound list owns its
-    # ordering and duplicates, then grouped rows contribute previously unseen IDs.
     query["limit"] = filters.limit or 10
-    unbound = await _canonical(ctx, "GET", "conversations", query={**query, "unbound_only": "true"})
+    unbound = await _canonical(
+        _ctx, "GET", "conversations", query={**query, "unbound_only": "true"}
+    )
     grouped = await _canonical(
-        ctx, "GET", "conversations", query={**query, "group_by_workspace": "true"}
+        _ctx, "GET", "conversations", query={**query, "group_by_workspace": "true"}
     )
     items = list(unbound["items"])
     seen = {row["id"] for row in items}
@@ -179,7 +145,7 @@ async def _conversation_page(
 
 
 async def list_conversations(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+    ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None
 ) -> dict[str, Any]:
     filters = WorkbenchList.model_validate(payload)
     page = await _conversation_page(ctx, filters)
@@ -187,7 +153,7 @@ async def list_conversations(
         await _own_conversation(ctx, filters.conversation_id)
         selected = await _canonical(ctx, "GET", f"conversations/{filters.conversation_id}")
         if filters.workspace_id and selected.get("workspace_id") != filters.workspace_id:
-            raise OptionalBusinessError("forbidden", "conversation unavailable for this workspace")
+            raise CommandError("forbidden", "conversation unavailable for this workspace")
         page.insert(0, selected)
     items: list[dict[str, Any]] = []
     for row in page:
@@ -219,37 +185,28 @@ async def list_conversations(
                 ),
             }
         )
-    local_ids = set(
-        await ctx.db.scalars(
-            select(Conversation.id).where(
-                Conversation.id.in_([row["id"] for row in items]),
-                Conversation.tenant_id == ctx.scope.tenant_id,
-                Conversation.project_id == ctx.scope.project_id,
-                Conversation.user_id == ctx.user.id,
-                Conversation.meta["execution_target"].as_string() == "local",
-            )
-        )
-    )
+    local_ids = set(await current().local_ids([row["id"] for row in items])) if bound() else set()
     for row in items:
         if row["id"] in local_ids:
             row["execution_target"] = "local"
     return {"items": items}
 
 
-async def create(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+async def create(_ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
+    from plugins.business.agent.guest.models import DeviceConversationCreate
+
     data = DeviceConversationCreate.model_validate(payload)
     if data.execution_target == "local":
-        return await create_owned(ctx, payload, progress)
+        return await current().device("create", payload)
+    project_id = _project_of(_ctx)
     return _conversation(
         await _canonical(
-            ctx,
+            _ctx,
             "POST",
             "conversations",
             body={
                 "title": data.title,
-                "project_id": ctx.scope.project_id,
+                "project_id": project_id,
                 **(
                     {"workspace_id": data.workspace_id, "agent_config": {"capability_mode": "work"}}
                     if data.workspace_id
@@ -260,9 +217,9 @@ async def create(
     )
 
 
-async def rename(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+async def rename(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
+    from plugins.business.agent.guest.models import ConversationRename
+
     data = ConversationRename.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
     row = await _canonical(
@@ -281,7 +238,7 @@ USAGE_KEYS = (
     ("tasks", "tasks"),
 )
 
-type Counter = int | float | dict[str, Counter]
+type Counter = int | float | dict[str, "Counter"]
 
 
 def _counters(value: object) -> Counter | None:
@@ -299,7 +256,6 @@ def _counters(value: object) -> Counter | None:
 
 
 def usage_summary(row: dict[str, Any]) -> dict[str, Any]:
-    """Counters of a finished answer. Nothing else of the message metadata leaves."""
     summary = (row.get("metadata") or {}).get("executionSummary")
     if row.get("type") != "assistant_message" or not isinstance(summary, dict):
         return {}
@@ -314,35 +270,23 @@ def usage_summary(row: dict[str, Any]) -> dict[str, Any]:
     return {"summary": usage} if usage else {}
 
 
-async def history(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+async def history(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     data = History.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
-    preferred = await ctx.db.scalar(
-        select(Conversation.meta).where(Conversation.id == data.conversation_id)
-    )
-    placements = await latest_execution_placements(
-        ctx.db,
-        tenant_id=ctx.scope.tenant_id,
-        project_id=ctx.scope.project_id,
-        conversation_ids=[data.conversation_id],
-    )
+    preferred = await current().meta(data.conversation_id) if bound() else None
+    placements = await current().placements([data.conversation_id]) if bound() else {}
     actual = placements.get(data.conversation_id)
-    if (actual and actual.execution_target == "local") or (preferred or {}).get(
-        "execution_target"
-    ) == "local":
+    if actual == "local" or (preferred or {}).get("execution_target") == "local":
         replay = {key: value for key, value in payload.items() if key != "limit"}
-        return await local_history(ctx, replay, progress)
-    query = {"limit": data.limit}
+        return await current().device("history", replay)
+
+    query: dict[str, int] = {"limit": data.limit}
     if data.before_time_us is not None:
         query.update(before_time_us=data.before_time_us, before_counter=data.before_counter)
     result = await _canonical(
         ctx, "GET", f"conversations/{data.conversation_id}/messages", query=query
     )
 
-    # Every row carries its position, because a transcript interleaves messages
-    # with the reasoning and the tool steps of the same turn.
     def positioned(row: dict[str, Any]) -> dict[str, Any]:
         return {
             key: row[key]
@@ -356,9 +300,6 @@ async def history(
         if row.get("type") in {"user_message", "assistant_message", "thought"}
         and isinstance(row.get("content"), str)
     ]
-    # P5 contains tool arguments and execution authorizations as well as messages.
-    # Only return the text presentation that this capability promises: reasoning
-    # is part of what a reader sees, while tool arguments belong to interactions.
     return {
         "before": {
             "before_time_us": result["first_time_us"],
@@ -367,13 +308,7 @@ async def history(
         if result["has_more"]
         else None,
         "messages": [
-            {
-                "id": identifier,
-                "role": kind,
-                "content": content,
-                **position,
-                **usage,
-            }
+            {"id": identifier, "role": kind, "content": content, **position, **usage}
             for identifier, kind, content, position, usage in text
             if kind != "thought"
         ],
@@ -385,39 +320,26 @@ async def history(
     }
 
 
-async def turn(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+async def turn(ctx: CommandContext, payload: dict[str, Any], progress: Progress | None) -> dict[str, Any]:
     return await _turn(ctx, Turn.model_validate(payload), progress)
 
 
 async def _turn(
-    ctx: "PackageOperationContext",
+    ctx: CommandContext,
     data: Turn,
-    progress: "Progress | None",
+    progress: Progress | None,
     files: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     await _own_conversation(ctx, data.conversation_id)
-    placements = await latest_execution_placements(
-        ctx.db,
-        tenant_id=ctx.scope.tenant_id,
-        project_id=ctx.scope.project_id,
-        conversation_ids=[data.conversation_id],
-    )
+    placements = await latest_execution_placements(ctx, data.conversation_id)
     previous = placements.get(data.conversation_id)
-    preferred = await ctx.db.scalar(
-        select(Conversation.meta).where(Conversation.id == data.conversation_id)
-    )
-    if (previous is not None and previous.execution_target == "local") or (preferred or {}).get(
-        "execution_target"
-    ) == "local":
-        raise OptionalBusinessError(
-            "forbidden", "Local conversations support read-only cloud replay"
-        )
+    preferred = await current().meta(data.conversation_id) if bound() else None
+    if previous == "local" or (preferred or {}).get("execution_target") == "local":
+        raise CommandError("forbidden", "Local conversations support read-only cloud replay")
     if data.forced_skill_name is not None:
         skills = await visible_skills(ctx, limit=500, search=data.forced_skill_name)
         if not any(skill["name"] == data.forced_skill_name for skill in skills):
-            raise OptionalBusinessError("forbidden", "Skill unavailable for this project")
+            raise CommandError("forbidden", "Skill unavailable for this project")
     message = data.model_dump(exclude_none=True)
     if files:
         message["attachment_ids"] = [file["id"] for file in files]
@@ -427,22 +349,26 @@ async def _turn(
     return await stream_turn(ctx, message, progress)
 
 
-async def cancel(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+async def latest_execution_placements(
+    _ctx: CommandContext, conversation_id: str
+) -> dict[str, str]:
+    if not bound():
+        return {}
+    return await current().placements([conversation_id])
+
+
+async def stream_turn(
+    ctx: CommandContext, message: dict[str, Any], progress: Progress | None
 ) -> dict[str, Any]:
+    del ctx
+    return await current().stream(message, progress)
+
+
+async def cancel(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     data = Cancel.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
-    run = await ctx.db.scalar(
-        select(AgentRunAuthorityModel.id).where(
-            AgentRunAuthorityModel.id == data.run_id,
-            AgentRunAuthorityModel.conversation_id == data.conversation_id,
-            AgentRunAuthorityModel.tenant_id == ctx.scope.tenant_id,
-            AgentRunAuthorityModel.project_id == ctx.scope.project_id,
-            AgentRunAuthorityModel.execution_target == "cloud",
-        )
-    )
-    if run is None:
-        raise OptionalBusinessError("forbidden", "cloud run unavailable for this conversation")
+    if bound() and not await current().run_cloud(data.run_id, data.conversation_id):
+        raise CommandError("forbidden", "cloud run unavailable for this conversation")
     result = await _canonical(
         ctx,
         "POST",
@@ -452,11 +378,4 @@ async def cancel(
     return {"status": result["status"]}
 
 
-AGENT_OPERATIONS = {
-    "app.agent.list": list_conversations,
-    "app.agent.create": create,
-    "app.agent.rename": rename,
-    "app.agent.history": history,
-    "app.agent.turn": turn,
-    "app.agent.cancel": cancel,
-}
+AGENT_OPERATIONS: dict[str, Any] = {}

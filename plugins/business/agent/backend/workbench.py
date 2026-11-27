@@ -1,55 +1,51 @@
-"""Conversation-bound capabilities used by the original chat workbench."""
+"""Transcript projection for the signed workbench. Rows are filtered in the guest."""
 
-from typing import TYPE_CHECKING, Any, Literal
+from __future__ import annotations
+
+from typing import Any, Literal
 
 from pydantic import Field
-from sqlalchemy import select
 
-from src.infrastructure.adapters.secondary.persistence.models import HITLRequest
-from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
-
-from .attachment_parts import FileInput, decode, metadata, multipart, storage
-from .chat_operations import (
+from plugins.business.agent.backend.attachment_parts import AttachmentUpload, Identifier
+from plugins.business.agent.backend.chat_operations import (
     ConversationInput,
     History,
-    Identifier,
     Turn,
     _canonical,
     _own_conversation,
     _turn,
 )
-
-if TYPE_CHECKING:
-    from src.host.operations.application_commands import PackageOperationContext, Progress
+from plugins.business.agent.guest.binding import (
+    CommandContext,
+    CommandError,
+    Progress,
+    bound,
+    current,
+)
 
 
 class Answer(ConversationInput):
-    request_id: Identifier
+    request_id: Identifier = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
     hitl_type: Literal["clarification", "decision", "permission", "a2ui_action"]
     expected_revision: int = Field(ge=1)
-    idempotency_key: Identifier
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
     response_data: dict[str, Any]
 
 
-async def respond(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
+async def _visible_request(
+    _ctx: CommandContext, conversation_id: str, request_id: str
+) -> dict[str, Any] | None:
+    if not bound():
+        return None
+    return await current().hitl(conversation_id, request_id)
+
+
+async def respond(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     answer = Answer.model_validate(payload)
     await _own_conversation(ctx, answer.conversation_id)
-    record = await ctx.db.scalar(
-        select(HITLRequest).where(
-            HITLRequest.id == answer.request_id,
-            HITLRequest.conversation_id == answer.conversation_id,
-            HITLRequest.tenant_id == ctx.scope.tenant_id,
-            HITLRequest.project_id == ctx.scope.project_id,
-        )
-    )
-    if (
-        record is None
-        or record.user_id not in (None, ctx.user.id)
-        or (record.request_metadata or {}).get("native_binding")
-    ):
-        raise OptionalBusinessError("forbidden", "Request unavailable to this package")
+    visible = await _visible_request(ctx, answer.conversation_id, answer.request_id)
+    if visible is None:
+        raise CommandError("forbidden", "Request unavailable to this package")
     body = answer.model_dump(exclude={"conversation_id"})
     result = await _canonical(ctx, "POST", "hitl/respond", body={**body, "contract_version": 2})
     return {key: result[key] for key in ("success", "authority_revision") if key in result}
@@ -59,7 +55,6 @@ class TimelineReview(History):
     view: Literal["workbench", "attachments"] = "workbench"
 
 
-# A step is placed among the messages of its turn, so every row keeps its position.
 ROW_KEYS = ("id", "type", "timestamp", "eventTimeUs", "eventCounter")
 TOOL_KEYS = (
     "execution_id",
@@ -81,13 +76,9 @@ PERMISSION_KEYS = (
     "riskLevel",
     "answered",
     "granted",
-    # A request allowed by policy is not shown as a decision in the transcript.
     "autoApproved",
     "auto_approved",
 )
-# What the transcript cards read from a human-in-the-loop request and from its
-# answer. An answer names the variables it provided; their values are not part of
-# a transcript.
 CARD_KEYS = {
     "permission_asked": (*PERMISSION_KEYS, "expiresAt", "createdAt"),
     "permission_requested": (*PERMISSION_KEYS, "expiresAt", "createdAt"),
@@ -133,8 +124,6 @@ CARD_KEYS = {
     "env_var_provided": ("requestId", "toolName", "variableNames"),
 }
 ERROR_KEYS = ("message", "code")
-# What the memory steps of a transcript read. A recalled memory is shown with its
-# text, score, source and category; the rest of the retrieval record stays.
 RECALLED_KEYS = ("content", "score", "source", "category")
 MEMORY_KEYS = {
     "memory_recalled": ("memories", "count", "searchMs"),
@@ -161,7 +150,6 @@ def timeline_attachments(rows: list[dict[str, Any]]) -> dict[str, list[dict[str,
 
 
 def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
-    """What a transcript reads from a timeline row, placed where it happened."""
     kind = row.get("type")
     if kind == "canvas_updated":
         block = row.get("block") or {}
@@ -183,13 +171,9 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
     elif kind in MEMORY_KEYS:
         keys = MEMORY_KEYS[kind]
     else:
-        # Not drawn. It still ends the group of tool steps before it, as in the
-        # original transcript, so it keeps its place and nothing else.
         keys = ()
     projected = {key: row[key] for key in (*ROW_KEYS, *keys) if key in row}
     if kind == "act":
-        # The transcript tells an argument draft of a call from its execution by
-        # this one field; the rest of the metadata stays on the server.
         source = (row.get("metadata") or {}).get("sourceEventType")
         if isinstance(source, str):
             projected["metadata"] = {"sourceEventType": source}
@@ -203,7 +187,7 @@ def transcript_event(row: dict[str, Any]) -> dict[str, Any]:
 
 
 async def interactions(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+    ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None
 ) -> dict[str, Any]:
     data = TimelineReview.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
@@ -260,61 +244,28 @@ async def interactions(
     return {"events": rows, "requests": requests}
 
 
-class AttachmentUpload(FileInput):
-    content: str = Field(max_length=61440)
-
-
-async def upload(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
-) -> dict[str, Any]:
-    if "action" in payload:
-        return await multipart(ctx, payload)
-    data = AttachmentUpload.model_validate(payload)
-    await _own_conversation(ctx, data.conversation_id)
-    item = await storage(
-        ctx,
-        "simple",
-        data={
-            "conversation_id": data.conversation_id,
-            "project_id": ctx.scope.project_id,
-            "purpose": "llm_context",
-        },
-        files={"file": (data.filename, decode(data.content), data.mime_type)},
-    )
-    return metadata(item)
+async def upload(_ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
+    if "action" not in payload:
+        AttachmentUpload.model_validate(payload)
+    return await current().attachment(payload)
 
 
 class AttachedTurn(Turn):
-    attachment_ids: list[Identifier] = Field(min_length=1, max_length=10)
+    attachment_ids: list[str] = Field(min_length=1, max_length=10)
 
 
 async def attached_turn(
-    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+    ctx: CommandContext, payload: dict[str, Any], progress: Progress | None
 ) -> dict[str, Any]:
-    from src.infrastructure.adapters.secondary.persistence.attachment_model import AttachmentModel
-
     data = AttachedTurn.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
-    records = await ctx.db.scalars(
-        select(AttachmentModel).where(
-            AttachmentModel.id.in_(data.attachment_ids),
-            AttachmentModel.conversation_id == data.conversation_id,
-            AttachmentModel.tenant_id == ctx.scope.tenant_id,
-            AttachmentModel.project_id == ctx.scope.project_id,
-            AttachmentModel.status.in_(("uploaded", "processing", "ready")),
-        )
+    files = (
+        await current().attachment_files(data.conversation_id, list(data.attachment_ids))
+        if bound()
+        else {}
     )
-    files = {
-        row.id: {
-            "id": row.id,
-            "filename": row.filename,
-            "mime_type": row.mime_type,
-            "size_bytes": row.size_bytes,
-        }
-        for row in records
-    }
     if set(files) != set(data.attachment_ids):
-        raise OptionalBusinessError("forbidden", "Attachment unavailable for this conversation")
+        raise CommandError("forbidden", "Attachment unavailable for this conversation")
     return await _turn(
         ctx,
         Turn.model_validate(data.model_dump(exclude={"attachment_ids"})),
@@ -323,9 +274,4 @@ async def attached_turn(
     )
 
 
-WORKBENCH_OPERATIONS = {
-    "app.agent.interactions": interactions,
-    "app.agent.respond": respond,
-    "app.agent.attachments": upload,
-    "app.agent.attachments.turn": attached_turn,
-}
+WORKBENCH_OPERATIONS: dict[str, Any] = {}

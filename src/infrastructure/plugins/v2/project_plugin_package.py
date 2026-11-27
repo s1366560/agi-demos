@@ -56,9 +56,18 @@ def admit_package(
     signed_permissions = declared_bundle_permissions_v2(raw)
     package = _verify_package(raw, keys, signed_permissions, binding)
     source = package.contribution
+    from memstack_plugin_sdk.contract import is_application_capability
+
     commands = tuple(command for command in source.commands if command.scope != "tenant")
     pages = tuple(page for page in source.pages if page.scope == "project")
-    project = replace(source, commands=commands, pages=pages)
+    tenant_tools = {
+        command.tool for command in source.commands if command.scope == "tenant" and command.tool
+    }
+    project_tools = {command.tool for command in commands if command.tool}
+    tools = tuple(
+        tool for tool in source.tools if tool.name not in tenant_tools or tool.name in project_tools
+    )
+    project = replace(source, commands=commands, pages=pages, tools=tools)
     exclusively_tenant = frozenset(
         permission
         for command in source.commands
@@ -67,9 +76,9 @@ def admit_package(
     ) - declared_permissions(project)
     # Device permissions belong to the nested signed target, even if a tenant command
     # also names one. Only application operation names may be scoped out at this boundary.
-    removable = exclusively_tenant & {
-        command.host_operation for command in source.commands if command.host_operation
-    }
+    removable = frozenset(
+        permission for permission in exclusively_tenant if is_application_capability(permission)
+    )
     missing = signed_permissions - removable - approved
     if missing:
         raise BundleArchiveV2Error(
@@ -243,9 +252,14 @@ def _package_grants(
     contribution: "ContributionDocument",
     device_permissions: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
-    from memstack_plugin_sdk.contract import PERMISSIONS
+    from memstack_plugin_sdk.contract import PERMISSIONS, is_application_capability
 
     named = {command.host_operation for command in contribution.commands if command.host_operation}
+    named.update(
+        permission
+        for permission in declared_permissions(contribution)
+        if is_application_capability(permission)
+    )
     named.update(device_permissions)
     if not set(plugin.permissions) <= PERMISSIONS | named:
         raise OptionalBusinessError("invalid_package", "unsupported package permission")

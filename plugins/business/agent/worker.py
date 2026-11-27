@@ -54,6 +54,8 @@ async def _run() -> None:
             result = react_loop(arguments)
         elif params.name == "execution_statistics":
             result = summarize(arguments["events"])
+        elif params.name.startswith("agent."):
+            raise ValueError("agent commands run outside the OCI worker")
         else:
             raise ValueError("unknown tool")
         return types.CallToolResult(content=[], structured_content=result)

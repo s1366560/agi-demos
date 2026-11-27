@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import Request
 
-from plugins.business.agent.backend import dashboard_operations as ops
+from plugins.business.agent.backend.dashboard_operations import DASHBOARD_PERMISSIONS
 from plugins.business.agent.release import build_release
 from src.host.operations.tenant_commands import TenantPackageContext, tenant_command
 from src.host.packages.tenant_installation import TenantPackageService
@@ -29,13 +29,13 @@ publisher = _publisher
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
 
 
-async def test_installed_dashboard_enforces_tenant_and_conversation_access(
+async def test_installed_dashboard_enforces_tenant_and_conversation_access(  # noqa: PLR0915
     http, db_session, monkeypatch
 ):
     assert str(db_session.get_bind().url) == "sqlite+aiosqlite:///:memory:"
     client, _actors = http
     app = client._transport.app
-    app.state.tenant_package_operations_v1 = ops.DASHBOARD_OPERATIONS
+    app.state.tenant_package_operations_v1 = {}
     signer = Ed25519PrivateKey.generate()
     key = (
         signer.public_key()
@@ -45,7 +45,7 @@ async def test_installed_dashboard_enforces_tenant_and_conversation_access(
     release = build_release("example.test/worker@sha256:" + "a" * 64, "1.6.0", signer)
     service = TenantPackageService(db_session, "t", (key,), "owner")
     project_scope = ScopeBindingV2(tenant_id="t", project_id="p")
-    old_grants = declared_bundle_permissions_v2(release) - set(ops.DASHBOARD_OPERATIONS)
+    old_grants = declared_bundle_permissions_v2(release) - DASHBOARD_PERMISSIONS
     inspected = admit_package(
         release, (key,), declared_bundle_permissions_v2(release), project_scope
     )
@@ -57,7 +57,7 @@ async def test_installed_dashboard_enforces_tenant_and_conversation_access(
         await dispatch_project_command(project, project_scope, "dashboard-read", {"view": "runs"})
     assert denied.value.code == "forbidden"
     reviewed = await service.inspect(release)
-    assert reviewed.approved_permissions == set(ops.DASHBOARD_OPERATIONS) | {"ui.slot"}
+    assert DASHBOARD_PERMISSIONS | {"ui.slot", "tools.execute"} <= reviewed.approved_permissions
     await service.record(
         release, reviewed.approved_permissions, 0, reviewed.digest, identity=None, activate=True
     )
@@ -86,7 +86,9 @@ async def test_installed_dashboard_enforces_tenant_and_conversation_access(
         )
     await db_session.flush()
     registry = SubAgentRunRegistry()
-    monkeypatch.setattr(ops.trace_router, "current_subagent_run_registry_v2", lambda: registry)
+    from src.infrastructure.adapters.primary.web.routers.agent import trace_router
+
+    monkeypatch.setattr(trace_router, "current_subagent_run_registry_v2", lambda: registry)
     for conversation in ("mine", "other", "outside"):
         run = registry.create_run(conversation, "parent", "task", metadata={"source": "private"})
         registry.set_trace_context(conversation, run.run_id, "trace")

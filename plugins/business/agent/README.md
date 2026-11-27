@@ -18,7 +18,7 @@ The full Web client keeps conversation state and history actions in [ui/web/stor
 
 A tenant administrator can approve the dashboard independently in the tenant marketplace. Open **Multi-agent dashboard** or the original Web bookmark `/tenant/:tenantId/agents`. Members see their own conversations, and tenant administrators can inspect runs across the tenant. Selecting a run opens its original trace chain. The tenant configuration editor checks the current revision on save. V2 Profiles own lifecycle hook mutations.
 
-The tenant installation grants `ui.slot`, `app.agent.dashboard.read`, `app.agent.dashboard.trace` and `app.agent.dashboard.configure`. A project installation continues to use its existing chat and device permissions. The signed project and tenant pages use the same release.
+The tenant installation grants `ui.slot`, `tools.execute`, `app.agent.dashboard.read`, `app.agent.dashboard.trace` and `app.agent.dashboard.configure`. Listing or creating sessions without a selected project also needs `app.agent.list`, `app.agent.create` and `app.agent.history` on that tenant installation. A project installation continues to use its existing chat and device permissions. The signed project and tenant pages use the same release. Agent commands run in a separate guest process; they are not in-process `host_operation` handlers.
 
 ## Publish and install
 

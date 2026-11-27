@@ -238,6 +238,411 @@
           "action"
         ]
       }
+    },
+    {
+      "name": "agent.chat-list",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-list command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.list"
+      ]
+    },
+    {
+      "name": "agent.chat-create",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-create command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.create"
+      ]
+    },
+    {
+      "name": "agent.chat-history",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-history command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.history"
+      ]
+    },
+    {
+      "name": "agent.chat-turn",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-turn command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.turn"
+      ]
+    },
+    {
+      "name": "agent.chat-cancel",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-cancel command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.cancel"
+      ]
+    },
+    {
+      "name": "agent.chat-rename",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-rename command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.rename"
+      ]
+    },
+    {
+      "name": "agent.chat-interactions",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-interactions command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.interactions"
+      ]
+    },
+    {
+      "name": "agent.chat-respond",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-respond command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.respond"
+      ]
+    },
+    {
+      "name": "agent.chat-upload",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-upload command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.attachments"
+      ]
+    },
+    {
+      "name": "agent.chat-attached-turn",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-attached-turn command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.attachments.turn"
+      ]
+    },
+    {
+      "name": "agent.activity-list",
+      "abi": "mcp.stdio",
+      "description": "Run the signed activity-list command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.activity.read"
+      ]
+    },
+    {
+      "name": "agent.activity-mark",
+      "abi": "mcp.stdio",
+      "description": "Run the signed activity-mark command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.activity.receipts"
+      ]
+    },
+    {
+      "name": "agent.review-latest",
+      "abi": "mcp.stdio",
+      "description": "Run the signed review-latest command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.review.latest"
+      ]
+    },
+    {
+      "name": "agent.review-details",
+      "abi": "mcp.stdio",
+      "description": "Run the signed review-details command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.review.details"
+      ]
+    },
+    {
+      "name": "agent.dashboard-read",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.read"
+      ]
+    },
+    {
+      "name": "agent.dashboard-trace",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-trace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.trace"
+      ]
+    },
+    {
+      "name": "agent.dashboard-configure",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-configure command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.configure"
+      ]
+    },
+    {
+      "name": "agent.chat-composer-read",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-composer-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.read"
+      ]
+    },
+    {
+      "name": "agent.chat-composer-save",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-composer-save command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.save"
+      ]
+    },
+    {
+      "name": "agent.chat-models",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-models command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.models"
+      ]
+    },
+    {
+      "name": "agent.chat-project-context",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-project-context command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.context"
+      ]
+    },
+    {
+      "name": "agent.chat-welcome",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-welcome command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.welcome"
+      ]
+    },
+    {
+      "name": "agent.chat-lifecycle-control",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-lifecycle-control command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.lifecycle.control"
+      ]
+    },
+    {
+      "name": "agent.chat-voice-authorize",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-voice-authorize command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.voice.authorize"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-list",
+      "abi": "mcp.stdio",
+      "description": "List this caller's sessions in the tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.list"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-create",
+      "abi": "mcp.stdio",
+      "description": "Create a session in a project of this tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.create"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-open",
+      "abi": "mcp.stdio",
+      "description": "Open one session the caller owns in this tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.history"
+      ]
     }
   ],
   "commands": [
@@ -260,7 +665,6 @@
     },
     {
       "id": "chat-list",
-      "host_operation": "app.agent.list",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -271,11 +675,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-list"
     },
     {
       "id": "chat-create",
-      "host_operation": "app.agent.create",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -286,11 +690,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-create"
     },
     {
       "id": "chat-history",
-      "host_operation": "app.agent.history",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -301,11 +705,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-history"
     },
     {
       "id": "chat-turn",
-      "host_operation": "app.agent.turn",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -316,11 +720,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-turn"
     },
     {
       "id": "chat-cancel",
-      "host_operation": "app.agent.cancel",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -331,11 +735,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-cancel"
     },
     {
       "id": "chat-rename",
-      "host_operation": "app.agent.rename",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -346,11 +750,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-rename"
     },
     {
       "id": "chat-interactions",
-      "host_operation": "app.agent.interactions",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -361,11 +765,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-interactions"
     },
     {
       "id": "chat-respond",
-      "host_operation": "app.agent.respond",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -376,11 +780,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-respond"
     },
     {
       "id": "chat-upload",
-      "host_operation": "app.agent.attachments",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -391,11 +795,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-upload"
     },
     {
       "id": "chat-attached-turn",
-      "host_operation": "app.agent.attachments.turn",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -406,11 +810,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-attached-turn"
     },
     {
       "id": "activity-list",
-      "host_operation": "app.agent.activity.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -421,11 +825,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.activity-list"
     },
     {
       "id": "activity-mark",
-      "host_operation": "app.agent.activity.receipts",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -436,11 +840,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.activity-mark"
     },
     {
       "id": "review-latest",
-      "host_operation": "app.agent.review.latest",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -451,11 +855,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.review-latest"
     },
     {
       "id": "review-details",
-      "host_operation": "app.agent.review.details",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -466,11 +870,11 @@
       ],
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.review-details"
     },
     {
       "id": "dashboard-read",
-      "host_operation": "app.agent.dashboard.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -482,11 +886,11 @@
       "scope": "tenant",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.dashboard-read"
     },
     {
       "id": "dashboard-trace",
-      "host_operation": "app.agent.dashboard.trace",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -498,11 +902,11 @@
       "scope": "tenant",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.dashboard-trace"
     },
     {
       "id": "dashboard-configure",
-      "host_operation": "app.agent.dashboard.configure",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -514,11 +918,11 @@
       "scope": "tenant",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.dashboard-configure"
     },
     {
       "id": "chat-composer-read",
-      "host_operation": "app.agent.composer.read",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -530,11 +934,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-composer-read"
     },
     {
       "id": "chat-composer-save",
-      "host_operation": "app.agent.composer.save",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -546,11 +950,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-composer-save"
     },
     {
       "id": "chat-models",
-      "host_operation": "app.agent.composer.models",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -562,11 +966,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-models"
     },
     {
       "id": "chat-project-context",
-      "host_operation": "app.agent.composer.context",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -578,11 +982,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-project-context"
     },
     {
       "id": "chat-welcome",
-      "host_operation": "app.agent.composer.welcome",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -594,11 +998,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-welcome"
     },
     {
       "id": "chat-lifecycle-control",
-      "host_operation": "app.agent.lifecycle.control",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -610,11 +1014,11 @@
       "scope": "project",
       "output_schema": {
         "type": "object"
-      }
+      },
+      "tool": "agent.chat-lifecycle-control"
     },
     {
       "id": "chat-voice-authorize",
-      "host_operation": "app.agent.voice.authorize",
       "payload": {},
       "input_schema": {
         "type": "object"
@@ -624,6 +1028,55 @@
         "app.agent.voice.authorize"
       ],
       "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-voice-authorize"
+    },
+    {
+      "id": "tenant-session-list",
+      "tool": "agent.tenant-session-list",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.list"
+      ],
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "tenant-session-create",
+      "tool": "agent.tenant-session-create",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.create"
+      ],
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "tenant-session-open",
+      "tool": "agent.tenant-session-open",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.history"
+      ],
+      "scope": "tenant",
       "output_schema": {
         "type": "object"
       }
@@ -785,11 +1238,15 @@
         "web",
         "desktop-renderer"
       ],
-      "commands": [],
+      "commands": [
+        "tenant-session-list",
+        "tenant-session-create",
+        "tenant-session-open"
+      ],
       "device_tools": [],
       "entry": {
         "path": "ui/tenant-scope.js",
-        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+        "digest": "sha256:5e96bcc22ebbba4f63e63419d4c90612f75fb22c186a65d50f79ad7b3e779570"
       }
     },
     {

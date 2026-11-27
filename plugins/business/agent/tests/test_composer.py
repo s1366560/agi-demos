@@ -103,8 +103,7 @@ async def test_reject_device_mutation_and_foreign_model(monkeypatch, row, change
 
 
 async def test_roster_applies_provider_filters_and_tenant_priority() -> None:
-    from types import SimpleNamespace
-
+    from src.host.operations.agent_package.model_routes import routes_for
     from src.infrastructure.persistence.llm_providers_models import LLMProvider
 
     blocked = LLMProvider(
@@ -118,11 +117,7 @@ async def test_roster_applies_provider_filters_and_tenant_priority() -> None:
     eligible = LLMProvider(
         name="second", id="b", llm_model="model-chat", secondary_models=["model-shared"]
     )
-    ctx = SimpleNamespace(
-        scope=SimpleNamespace(tenant_id="tenant"),
-        db=SimpleNamespace(scalars=AsyncMock(return_value=[blocked, eligible])),
-    )
-    default, routes = await composer._routes(ctx)
+    default, routes = routes_for([blocked, eligible])
     assert default == "model-chat"
     assert routes["model-shared"] == "a"
     assert routes["model-chat"] == "b"
