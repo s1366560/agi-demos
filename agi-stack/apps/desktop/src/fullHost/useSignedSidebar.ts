@@ -18,6 +18,7 @@ import {
   workspacePagePath,
   type ConversationSource,
   type ExecutionTargetFilter,
+  type SignedSidebarLoadPhase,
 } from './signedSidebarModel';
 
 function message(error: unknown): string {
@@ -48,7 +49,14 @@ async function collect(
   }
 }
 
-export function useSignedSidebar(tenant: string, project: string | null, entries: readonly InstalledPage[], address: string) {
+export function useSignedSidebar(
+  tenant: string,
+  project: string | null,
+  entries: readonly InstalledPage[],
+  address: string,
+  phase: SignedSidebarLoadPhase = 'ready',
+  blockedError = '',
+) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<ExecutionTargetFilter>('all');
   const [sources, setSources] = useState<ConversationSource[]>([]);
@@ -82,10 +90,26 @@ export function useSignedSidebar(tenant: string, project: string | null, entries
     knownWorkspaces.current = new Set();
     hasData.current = false;
     setExpandedWorkspaceIds(new Set());
+    setSources([]);
+    setGroups([]);
+    setError('');
+    setLoading(Boolean(project));
   }, [project]);
 
   useEffect(() => {
     const controller = new AbortController();
+    if (phase === 'wait') {
+      setLoading(true);
+      setError('');
+      return () => controller.abort();
+    }
+    if (phase === 'blocked') {
+      setSources([]);
+      setGroups([]);
+      setLoading(false);
+      setError(blockedError);
+      return () => controller.abort();
+    }
     const rowsPage = rowsOwner;
     const groupsPage = groupsOwner;
     if (!project || (!rowsPage && !groupsPage)) {
@@ -114,7 +138,7 @@ export function useSignedSidebar(tenant: string, project: string | null, entries
       setLoading(false);
     })();
     return () => controller.abort();
-  }, [loadKey, groupsOwner, project, rowsOwner, tenant]);
+  }, [blockedError, groupsOwner, loadKey, phase, project, rowsOwner, tenant]);
 
   const reload = useCallback(() => setRevision((current) => current + 1), []);
   useEffect(() => {

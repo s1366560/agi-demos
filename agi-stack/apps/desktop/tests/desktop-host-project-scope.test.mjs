@@ -6,8 +6,11 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   explicitWorkbenchProject,
+  FULL_HOST_SIDEBAR_CONSTRAINTS,
+  pageInstallationMatches,
   pendingWorkspaceSelection,
   resolveWorkbenchScope,
+  selectInstalledPage,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/workbenchModel.js');
 const {
   PACKAGE_PROJECT_CATALOG_PATH,
@@ -107,6 +110,106 @@ test('a later saved workspace still persists the same deep-linked project', () =
   assert.match(workbench, /pendingWorkspaceSelection/);
   assert.match(workbench, /workspaceContext\.revision/);
   assert.doesNotMatch(workbench, /persistedScope/);
+});
+
+test('the full-host sidebar defaults to the web width and can be dragged within it', () => {
+  assert.deepEqual(FULL_HOST_SIDEBAR_CONSTRAINTS, { min: 200, max: 400, default: 256 });
+  const workbench = read('../src/fullHost/FullWorkbench.tsx');
+  assert.match(workbench, /SIDEBAR_WIDTH_STORAGE_KEY/);
+  assert.match(workbench, /onResize=\{sidebarWidth\.resize\}/);
+});
+
+test('a project installation does not satisfy a tenant workspace route', () => {
+  const projectPage = {
+    projectId: 'project-saved',
+    page: { routes: ['/tenant/:tenantId/workspaces', '/tenant/:tenantId/workspaces/new'] },
+  };
+  const projectDetail = {
+    projectId: 'project-saved',
+    page: { routes: ['/tenant/:tenantId/project/:projectId/workspaces'] },
+  };
+  const tenantPage = {
+    projectId: null,
+    page: { routes: ['/tenant/:tenantId/workspaces'] },
+  };
+  assert.equal(pageInstallationMatches('/tenant/tenant-a/workspaces', 'project-saved'), false);
+  assert.equal(pageInstallationMatches('/tenant/tenant-a/workspaces/new', 'project-saved'), false);
+  assert.equal(pageInstallationMatches('/tenant/tenant-a/workspaces', null), true);
+  assert.equal(
+    selectInstalledPage([projectPage, projectDetail], 'tenant-a', '/tenant/tenant-a/workspaces'),
+    null,
+  );
+  assert.equal(
+    selectInstalledPage([projectPage, tenantPage], 'tenant-a', '/tenant/tenant-a/workspaces'),
+    tenantPage,
+  );
+  assert.equal(
+    selectInstalledPage(
+      [projectPage, projectDetail],
+      'tenant-a',
+      '/tenant/tenant-a/project/project-saved/workspaces',
+    ),
+    projectDetail,
+  );
+  assert.equal(
+    selectInstalledPage(
+      [tenantPage],
+      'tenant-a',
+      '/tenant/tenant-a/project/project-saved/workspaces',
+    ),
+    null,
+  );
+});
+
+test('the project catalog keeps usage fields for the card layout', () => {
+  assert.deepEqual(
+    readProjectCatalogPage({
+      projects: [
+        {
+          id: 'p',
+          tenant_id: 'tenant a',
+          name: 'Default',
+          is_public: false,
+          stats: {
+            memory_count: 2,
+            storage_used: 2048,
+            storage_limit: 4096,
+            node_count: 3,
+            member_count: 4,
+            last_active: '2026-11-01T00:00:00Z',
+          },
+        },
+      ],
+      total: 1,
+      page: 1,
+    }),
+    {
+      projects: [
+        {
+          id: 'p',
+          tenant_id: 'tenant a',
+          name: 'Default',
+          is_public: false,
+          stats: {
+            memory_count: 2,
+            storage_used: 2048,
+            storage_limit: 4096,
+            node_count: 3,
+            member_count: 4,
+            last_active: '2026-11-01T00:00:00Z',
+          },
+        },
+      ],
+      total: 1,
+      page: 1,
+    },
+  );
+  const directory = read('../src/fullHost/ProjectDirectory.tsx');
+  assert.match(directory, /desktop-project-card/);
+  assert.match(directory, /fullHost\.project\.usage/);
+  const settings = read('../src/fullHost/HostSettings.tsx');
+  assert.match(settings, /role="alert"/);
+  assert.match(settings, /setProjects\(\[\]\)/);
 });
 
 test('marketplace scope and the missing-page state match the web host', () => {
