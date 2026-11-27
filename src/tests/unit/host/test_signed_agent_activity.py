@@ -44,11 +44,38 @@ async def test_receipts_require_revision_and_pass_authority_conflict(ctx, monkey
     )
 
 
+async def test_receipts_accept_iso_read_timestamps(ctx, monkeypatch):
+    authority = AsyncMock(return_value={"authority_revision": 5})
+    monkeypatch.setattr(operations, "_canonical", authority)
+    payload = {
+        "expected_authority_revision": 4,
+        "entries": [
+            {
+                "entry_id": "item",
+                "entry_revision": 2,
+                "read_at": "2026-11-27T06:00:00Z",
+            }
+        ],
+    }
+    assert await operations.mark_read(ctx, payload, None) == {"authority_revision": 5}
+    body = authority.await_args.kwargs["body"]
+    assert body["entries"][0]["read_at"].startswith("2026-11-27T06:00:00")
+
+
 @pytest.mark.parametrize("values", [[None], ["other-conversation", None]])
 async def test_run_detail_rejects_foreign_project_or_owner(ctx, monkeypatch, values):
     authority = AsyncMock()
     monkeypatch.setattr(operations, "_canonical", authority)
-    ctx.db.scalar.side_effect = values
+
+    async def missing(_run_id):
+        return values[0]
+
+    monkeypatch.setattr(operations, "_run_conversation", missing)
+    monkeypatch.setattr(
+        operations,
+        "_own_conversation",
+        AsyncMock(side_effect=OptionalBusinessError("forbidden", "owned")),
+    )
     with pytest.raises(OptionalBusinessError):
         await operations.run_detail(ctx, {"run_id": "run", "view": "summary"}, None)
     authority.assert_not_awaited()
@@ -57,7 +84,8 @@ async def test_run_detail_rejects_foreign_project_or_owner(ctx, monkeypatch, val
 async def test_scoped_turn_changes_are_revision_bound(ctx, monkeypatch):
     authority = AsyncMock(return_value={"status": "ready"})
     monkeypatch.setattr(operations, "_canonical", authority)
-    ctx.db.scalar.side_effect = ["conversation", "conversation"]
+    monkeypatch.setattr(operations, "_run_conversation", AsyncMock(return_value="conversation"))
+    monkeypatch.setattr(operations, "_own_conversation", AsyncMock())
     data = {
         "run_id": "run",
         "view": "changes",
@@ -77,7 +105,8 @@ async def test_scoped_turn_changes_are_revision_bound(ctx, monkeypatch):
 async def test_latest_run_checks_owner_and_handles_empty_history(ctx, monkeypatch):
     authority = AsyncMock(return_value={"latest_run": None})
     monkeypatch.setattr(operations, "_canonical", authority)
-    ctx.db.scalar.side_effect = [None, "conversation"]
+    owned = AsyncMock(side_effect=[OptionalBusinessError("forbidden", "owned"), None])
+    monkeypatch.setattr(operations, "_own_conversation", owned)
     with pytest.raises(OptionalBusinessError):
         await operations.latest_run(ctx, {"conversation_id": "conversation"}, None)
     assert await operations.latest_run(ctx, {"conversation_id": "conversation"}, None) == {

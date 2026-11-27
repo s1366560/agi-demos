@@ -1,25 +1,23 @@
-"""Project-scoped lifecycle controls used by the signed Agent status bar."""
+"""Project lifecycle commands. Pool and actor calls stay on the host port."""
 
-from typing import TYPE_CHECKING, Any, Literal
+from __future__ import annotations
 
-from src.infrastructure.agent.actor.lifecycle_snapshot import project_lifecycle_snapshot
-from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
+from typing import Any, Literal
 
-from .chat_operations import _canonical_http, _Input
-from .chat_stream import call_actor_control
-
-if TYPE_CHECKING:
-    from src.host.operations.application_commands import PackageOperationContext, Progress
+from plugins.business.agent.backend.chat_operations import _Input
+from plugins.business.agent.guest.binding import CommandContext, CommandError, Progress, current
 
 
 class ActorControl(_Input):
     action: Literal["stop", "restart", "pause", "resume"]
 
 
-def _pool_path(ctx: "PackageOperationContext") -> str:
-    return (
-        f"/api/v1/tenants/{ctx.scope.tenant_id}/projects/{ctx.scope.project_id}/pool/instances/chat"
-    )
+def _pool_path(ctx: CommandContext) -> str:
+    tenant = getattr(getattr(ctx, "scope", None), "tenant_id", None) or current().tenant_id
+    project = getattr(getattr(ctx, "scope", None), "project_id", None) or current().project_id
+    if not isinstance(tenant, str) or not isinstance(project, str):
+        raise CommandError("forbidden", "project scope required")
+    return f"/api/v1/tenants/{tenant}/projects/{project}/pool/instances/chat"
 
 
 def _pool_state(status: str | None) -> str:
@@ -36,9 +34,31 @@ def _pool_state(status: str | None) -> str:
     }.get(status or "", "uninitialized")
 
 
-async def snapshot(ctx: "PackageOperationContext") -> dict[str, Any]:
+async def _canonical_http(
+    ctx: CommandContext,
+    method: str,
+    path: str,
+    *,
+    body: dict[str, Any] | None = None,
+    query: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return await current().http(method, path, body=body, query=query, absolute=True)
+
+
+async def project_lifecycle_snapshot(_tenant_id: str, _project_id: str) -> dict[str, Any]:
+    return await current().lifecycle_snapshot()
+
+
+async def call_actor_control(_ctx: CommandContext, action: str) -> str:
+    return await current().actor(action)
+
+
+async def snapshot(ctx: CommandContext) -> dict[str, Any]:
     pool = await _canonical_http(ctx, "GET", _pool_path(ctx))
-    actor = await project_lifecycle_snapshot(ctx.scope.tenant_id, ctx.scope.project_id)
+    project_id = ctx.scope.project_id
+    if not isinstance(project_id, str):
+        raise CommandError("forbidden", "project scope required")
+    actor = await project_lifecycle_snapshot(ctx.scope.tenant_id, project_id)
     state = actor["lifecycle_state"]
     pool_managed = pool["enabled"]
     if pool_managed:
@@ -63,13 +83,11 @@ async def snapshot(ctx: "PackageOperationContext") -> dict[str, Any]:
     }
 
 
-async def control(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def control(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     action = ActorControl.model_validate(payload).action
     status = await snapshot(ctx)
     if action not in status["allowed_actions"]:
-        raise OptionalBusinessError("forbidden", "Agent lifecycle action unavailable")
+        raise CommandError("forbidden", "Agent lifecycle action unavailable")
     if not status["pool_managed"]:
         return {"action": action, "status": await call_actor_control(ctx, action + "_agent")}
     path = _pool_path(ctx)
@@ -78,5 +96,5 @@ async def control(
     else:
         result = await _canonical_http(ctx, "DELETE", path)
     if not result.get("success"):
-        raise OptionalBusinessError("apply_failed", "Agent pool did not accept the action")
+        raise CommandError("apply_failed", "Agent pool did not accept the action")
     return {"action": action, "status": result["action"]}

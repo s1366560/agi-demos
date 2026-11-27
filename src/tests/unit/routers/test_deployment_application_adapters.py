@@ -23,7 +23,6 @@ async def test_signed_package_and_scope_select_the_deployed_provider(account_app
     tenant = TenantBindingV2(tenant_id="t")
     resolve = deployment_adapters.resolve_application_operation
     for package, binding, capability in (
-        ("agent", project, "app.agent.list"),
         ("automation", project, "app.automation.playbooks.read"),
         ("billing", tenant, "app.billing.account.read"),
         ("environments", tenant, "app.environments.inventory.read"),
@@ -33,6 +32,7 @@ async def test_signed_package_and_scope_select_the_deployed_provider(account_app
         assert callable(resolve("memstack-" + package, capability, binding))
     for package, binding, name, code in (
         ("memstack-knowledge", tenant, "app.knowledge.memories.write", "forbidden"),
+        ("memstack-agent", project, "app.agent.list", "forbidden"),
         ("memstack-agent", project, "app.billing.plan.write", "forbidden"),
         ("unknown-package", tenant, "app.billing.account.read", "runtime_unavailable"),
     ):

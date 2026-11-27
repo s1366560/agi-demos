@@ -8,10 +8,11 @@ Business logic is delegated to AuthService in the application layer.
 
 import logging
 from datetime import datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,9 +83,14 @@ def get_password_hash(password: str) -> str:
 
 
 async def get_api_key_from_header(
+    request: Request,
     authorization: str | None = Header(None),
 ) -> str:
     """Extract API key from Authorization header."""
+    from src.host.operations.agent_package.admission import admitted_api_key
+
+    if admitted := admitted_api_key():
+        return admitted
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -324,13 +330,28 @@ async def get_current_user_from_header_or_query(
 
 
 async def verify_api_key_dependency(
-    api_key: str = Depends(get_api_key_from_header), db: AsyncSession = Depends(get_db)
+    request: Request,
+    api_key: str = Depends(get_api_key_from_header),
+    db: AsyncSession = Depends(get_db),
 ) -> DBAPIKey | None:
     """
     Dependency to verify API key from request header.
 
     This is a FastAPI adapter that uses the AuthService for business logic.
     """
+    from src.host.operations.agent_package.admission import (
+        ADMITTED_KEY_PREFIX,
+        actor_for_admitted_key,
+    )
+
+    if api_key.startswith(ADMITTED_KEY_PREFIX):
+        user_id = actor_for_admitted_key(api_key)
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=_("Invalid API key"),
+            )
+        return SimpleNamespace(id="command-admission", user_id=user_id)  # type: ignore[return-value]
     # Create AuthService with repositories
     auth_service = AuthService(
         user_repository=SqlUserRepository(db),
@@ -460,9 +481,11 @@ async def get_current_user_tenant(
     statement = select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id)
     if tenant := application_tenant_for(current_user.id):
         statement = statement.where(UserTenant.tenant_id == tenant)
-    result = await db.execute(refresh_select_statement(
-        statement.order_by(UserTenant.created_at.asc(), UserTenant.id.asc()).limit(1)
-    ))
+    result = await db.execute(
+        refresh_select_statement(
+            statement.order_by(UserTenant.created_at.asc(), UserTenant.id.asc()).limit(1)
+        )
+    )
     tenant_id = result.scalar_one_or_none()
 
     if not tenant_id:

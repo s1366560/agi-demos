@@ -1,30 +1,24 @@
-"""Scoped presentation and mutation of preferences exposed by the original Web composer."""
+"""Composer commands. Preference shaping stays in the guest."""
 
-from typing import TYPE_CHECKING, Any, Literal, Self
+from __future__ import annotations
+
+from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
-from sqlalchemy import select
 
-from src.host.operations.package_voice_lease import voice_ticket
-from src.host.operations.voice_scope import voice_conversation_tenant
-from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.persistence.tenant_model_roster import (
-    selectable_provider_models,
-    tenant_chat_providers,
-)
-from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
-
-from .chat_operations import (
+from plugins.business.agent.backend.chat_operations import (
     ConversationInput,
     _canonical,
     _Input,
     _own_conversation,
 )
-from .composer_context import project_context
-from .lifecycle_control import control
-
-if TYPE_CHECKING:
-    from src.host.operations.application_commands import PackageOperationContext, Progress
+from plugins.business.agent.guest.binding import (
+    CommandContext,
+    CommandError,
+    Progress,
+    bound,
+    current,
+)
 
 
 class LlmOverrides(_Input):
@@ -53,27 +47,6 @@ class SavePreference(ConversationInput):
         return self
 
 
-async def _routes(ctx: "PackageOperationContext") -> tuple[str | None, dict[str, str]]:
-    providers = list(await ctx.db.scalars(tenant_chat_providers(ctx.scope.tenant_id)))
-    routes: dict[str, str] = {}
-    default = None
-    for provider in providers:
-        offered = selectable_provider_models(provider)
-        if default is None and provider.llm_model in offered:
-            default = provider.llm_model
-        for model in offered:
-            routes.setdefault(model, str(provider.id))
-    return default, routes
-
-
-async def models(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    _Input.model_validate(payload)
-    default, routes = await _routes(ctx)
-    return {"default_model": default, "models": sorted(routes)}
-
-
 def _settings(row: dict[str, Any], mode: str) -> dict[str, Any]:
     config = row.get("agent_config") or {}
     return {
@@ -90,34 +63,65 @@ def _settings(row: dict[str, Any], mode: str) -> dict[str, Any]:
     }
 
 
+async def voice_conversation_tenant(
+    db: object,
+    *,
+    user_id: str,
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+) -> str | None:
+    from typing import cast
+
+    from src.host.operations.voice_scope import voice_conversation_tenant as real
+
+    return await real(
+        cast("Any", db),
+        user_id=user_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+    )
+
+
+def voice_ticket(*, principal: str, tenant: str, project: str, conversation: str) -> str:
+    from src.host.operations.package_voice_lease import voice_ticket as real
+
+    return real(principal=principal, tenant=tenant, project=project, conversation=conversation)
+
+
 async def authorize_voice(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None
 ) -> dict[str, str]:
     data = ConversationInput.model_validate(payload)
+    if bound():
+        return await current().voice(data.conversation_id)
+    session = getattr(ctx, "db", None)
+    project_id = ctx.scope.project_id
+    if not isinstance(project_id, str):
+        raise CommandError("forbidden", "Voice requires an accessible cloud conversation")
     tenant = await voice_conversation_tenant(
-        ctx.db,
+        session,
         user_id=str(ctx.user.id),
         tenant_id=ctx.scope.tenant_id,
-        project_id=ctx.scope.project_id,
+        project_id=project_id,
         conversation_id=data.conversation_id,
     )
     if not tenant:
-        raise OptionalBusinessError("forbidden", "Voice requires an accessible cloud conversation")
+        raise CommandError("forbidden", "Voice requires an accessible cloud conversation")
     return {
         "conversation_id": data.conversation_id,
         "principal_id": str(ctx.user.id),
         "ticket": voice_ticket(
             principal=str(ctx.user.id),
             tenant=tenant,
-            project=ctx.scope.project_id,
+            project=project_id,
             conversation=data.conversation_id,
         ),
     }
 
 
-async def read(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def read(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     data = ConversationInput.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
     row = await _canonical(ctx, "GET", f"conversations/{data.conversation_id}")
@@ -125,9 +129,12 @@ async def read(
     return _settings(row, mode["mode"])
 
 
-async def save(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def _routes(_ctx: CommandContext | None = None) -> tuple[str | None, dict[str, str]]:
+    roster = await current().model_routes()
+    return roster["default_model"], roster["models"]
+
+
+async def save(ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     data = SavePreference.model_validate(payload)
     await _own_conversation(ctx, data.conversation_id)
     path = f"conversations/{data.conversation_id}"
@@ -136,7 +143,7 @@ async def save(
         row.get("execution_target") == "local"
         or (row.get("metadata") or {}).get("execution_target") == "local"
     ):
-        raise OptionalBusinessError("forbidden", "Device conversations only support Web replay")
+        raise CommandError("forbidden", "Device conversations only support Web replay")
     if data.mode is not None:
         mode = await _canonical(
             ctx,
@@ -165,9 +172,9 @@ async def save(
         model = data.llm_model_override
         change = {"llm_model_override": model}
         if model not in (None, "auto"):
-            _, routes = await _routes(ctx)
+            _, routes = await _routes()
             if model not in routes:
-                raise OptionalBusinessError("forbidden", "Model unavailable for this tenant")
+                raise CommandError("forbidden", "Model unavailable for this tenant")
             change["llm_route_override"] = {"provider_id": routes[model], "model_id": model}
     row = await _canonical(ctx, "PATCH", path + "/config", body=change)
     mode = await _canonical(ctx, "GET", f"plan/mode/{data.conversation_id}")
@@ -178,34 +185,15 @@ class Welcome(_Input):
     complete: Literal[True] | None = None
 
 
-async def welcome(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def welcome(_ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
     preference = Welcome.model_validate(payload)
-    field = "memstack_agent_web_onboarding_complete"
-    if preference.complete is None:
-        profile = await ctx.db.scalar(select(User.profile).where(User.id == ctx.user.id))
-        return {"complete": (profile or {}).get(field) is True}
-    user = await ctx.db.scalar(
-        select(User)
-        .where(User.id == ctx.user.id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if user is None:
-        raise OptionalBusinessError("forbidden", "User unavailable")
-    if (user.profile or {}).get(field) is not True:
-        user.profile = {**(user.profile or {}), field: True}
-    await ctx.db.commit()
-    return {"complete": True}
+    return await current().welcome(preference.complete)
 
 
-COMPOSER_OPERATIONS = {
-    "app.agent.lifecycle.control": control,
-    "app.agent.voice.authorize": authorize_voice,
-    "app.agent.composer.welcome": welcome,
-    "app.agent.composer.read": read,
-    "app.agent.composer.save": save,
-    "app.agent.composer.models": models,
-    "app.agent.composer.context": project_context,
-}
+async def models(_ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None) -> dict[str, Any]:
+    _Input.model_validate(payload)
+    default, routes = await _routes()
+    return {"default_model": default, "models": sorted(routes)}
+
+
+COMPOSER_OPERATIONS: dict[str, Any] = {}

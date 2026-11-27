@@ -226,7 +226,8 @@ export function routeRank(
     const value = actual[index];
     if (part.startsWith(":")) {
       const required = scopeParam(part.slice(1), scope);
-      if (required !== undefined && required !== value) return null;
+      // A tenant page has no project binding. Its declared project route may name one.
+      if (required != null && required !== value) return null;
       rank += "0";
     } else if (part === value) rank += "1";
     else return null;

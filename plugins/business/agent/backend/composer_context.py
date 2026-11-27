@@ -1,22 +1,20 @@
-"""Project and conversation context shown in the signed Agent workbench."""
+"""Project context shown by the signed workbench."""
 
-from typing import TYPE_CHECKING, Any, Literal
+from __future__ import annotations
+
+from typing import Any, Literal
 
 from pydantic import Field
 
-from src.infrastructure.adapters.primary.web.routers.agent.templates import list_templates
-
-from .chat_operations import (
+from plugins.business.agent.backend.chat_operations import (
     ConversationInput,
     _canonical,
     _Input,
     _own_conversation,
     visible_skills,
 )
-from .lifecycle_control import snapshot
-
-if TYPE_CHECKING:
-    from src.host.operations.application_commands import PackageOperationContext, Progress
+from plugins.business.agent.backend.lifecycle_control import snapshot
+from plugins.business.agent.guest.binding import CommandContext, Progress, current
 
 
 class Context(_Input):
@@ -28,9 +26,7 @@ class ConversationView(ConversationInput):
     view: Literal["tasks", "context-window"]
 
 
-async def _conversation_view(
-    ctx: "PackageOperationContext", item: ConversationView
-) -> dict[str, Any]:
+async def _conversation_view(ctx: CommandContext, item: ConversationView) -> dict[str, Any]:
     await _own_conversation(ctx, item.conversation_id)
     if item.view == "context-window":
         return await _canonical(ctx, "GET", f"conversations/{item.conversation_id}/context-status")
@@ -39,7 +35,7 @@ async def _conversation_view(
 
 
 async def project_context(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: CommandContext, payload: dict[str, Any], _progress: Progress | None
 ) -> dict[str, Any]:
     if payload.get("view") in ("tasks", "context-window"):
         return await _conversation_view(ctx, ConversationView.model_validate(payload))
@@ -57,22 +53,7 @@ async def project_context(
             "skills": skills,
         }
     if query.view == "templates":
-        templates = await list_templates(
-            tenant_id=ctx.scope.tenant_id,
-            project_id=ctx.scope.project_id,
-            limit=query.limit or 50,
-            offset=0,
-            category=None,
-            current_user=ctx.user,
-            db=ctx.db,
-        )
-        return {
-            "templates": [
-                t.model_dump(mode="json")
-                for t in templates
-                if t.tenant_id == ctx.scope.tenant_id and t.project_id == ctx.scope.project_id
-            ]
-        }
+        return {"templates": await current().templates(query.limit or 50)}
     result = await _canonical(
         ctx,
         "GET",

@@ -178,7 +178,13 @@ def parse_contribution(payload: dict[str, Any]) -> ContributionDocument:
         declared |= storage.permissions
     for command in commands:
         declared |= command.permissions
-    named = {command.host_operation for command in commands if command.host_operation}
+    # Application capabilities stay named permissions after a command leaves host_operation.
+    named = {
+        permission
+        for permission in declared
+        if is_application_capability(permission)
+        or permission in {command.host_operation for command in commands if command.host_operation}
+    }
     unknown = sorted(declared - PERMISSIONS - named)
     if unknown:
         raise ContractError("permission_unknown", f"unknown permissions: {', '.join(unknown)}")

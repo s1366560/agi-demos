@@ -42,10 +42,12 @@ def tenant_package(
         for c in source.commands
         if c.scope != "project" and any(c.command_id in page.commands for page in pages)
     )
+    from src.host.operations.agent_package.runtime import is_guest_tool
+
     tools = tuple(
         t for t in source.tools if any(not c.host_operation and c.tool == t.name for c in commands)
     )
-    if pkg.worker and tools:
+    if pkg.worker and any(not is_guest_tool(tool.name) for tool in tools):
         raise OptionalBusinessError(
             "invalid_package", "Tenant commands cannot start a project worker"
         )
@@ -176,7 +178,9 @@ class TenantPackageService:
                     raise OptionalBusinessError(
                         "conflict", "Tenant page route is already installed"
                     )
-            if pkg.contribution.tools:
+            from src.host.operations.agent_package.runtime import is_guest_tool
+
+            if any(not is_guest_tool(tool.name) for tool in pkg.contribution.tools):
                 await with_wasm_runtime(pkg, lambda _: None)
         except (OptionalBusinessError, ValueError, WasmHostError) as error:
             state.failure = str(error)[:512]

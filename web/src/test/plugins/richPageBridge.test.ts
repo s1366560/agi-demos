@@ -118,6 +118,37 @@ describe('connectPage appearance', () => {
     expect(posted.some((message) => message.error === 'page_navigation_denied')).toBe(false);
   });
 
+  it('lets a tenant page open a named project session on its declared route', () => {
+    const navigate = vi.fn();
+    const port = {
+      postMessage: vi.fn(),
+      close: vi.fn(),
+      onmessage: null as ((event: MessageEvent) => void) | null,
+    };
+    const page: RichPage = {
+      ...signedPage(false),
+      routes: ['/tenant/:tenantId/agent-workspace/:conversationId'],
+      navigation_routes: [
+        '/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId',
+      ],
+    };
+    const disconnect = connectPage(port as unknown as MessagePort, page, {
+      scope: { tenantId: 't', projectId: null },
+      target: 'web',
+      pathname: '/tenant/t/agent-workspace',
+      locale: 'en',
+      status: vi.fn(),
+      navigate,
+      invoke: vi.fn(),
+    });
+    const destination = '/tenant/t/project/p/agent-workspace/conversation';
+    port.onmessage?.({
+      data: { id: 'nav-2', method: 'navigate', path: destination },
+    } as MessageEvent);
+    expect(navigate).toHaveBeenCalledWith(destination, { replace: false });
+    disconnect();
+  });
+
   it('stops mirroring the theme once the page is released', async () => {
     const { posted, disconnect } = connectedPort(signedPage(false));
     disconnect();

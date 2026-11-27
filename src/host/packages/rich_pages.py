@@ -73,12 +73,19 @@ def rich_page_resource(
         **page.descriptor(),
         "target": target,
         "release_digest": package.digest,
-        "navigation_routes": [
-            route
-            for sibling in package.contribution.pages
-            if target in sibling.targets and sibling.scope == scope
-            for route in sibling.routes
-        ],
+        "navigation_routes": list(
+            dict.fromkeys(
+                [
+                    *page.navigation_routes,
+                    *[
+                        route
+                        for sibling in package.contribution.pages
+                        if target in sibling.targets and sibling.scope == scope
+                        for route in sibling.routes
+                    ],
+                ]
+            )
+        ),
         "commands": page.commands,
         "device_tools": page.device_tools,
         "entry": resource(page.entry),

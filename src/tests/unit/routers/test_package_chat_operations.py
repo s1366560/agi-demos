@@ -32,7 +32,7 @@ async def test_turn_stream_dispatches_fixed_cloud_operation_and_projects_own_eve
 
     @app.websocket("/api/v1/agent/ws")
     async def socket(ws: WebSocket):
-        assert ws.headers.get("authorization") == "Bearer fixture-only"
+        assert ws.headers.get("authorization") in (None, "")
         await ws.accept()
         await ws.send_json({"type": "connected", "data": {"user_id": "u"}})
         turn = await ws.receive_json()
@@ -76,7 +76,18 @@ async def test_turn_stream_dispatches_fixed_cloud_operation_and_projects_own_eve
 
 
 async def test_chat_operations_reject_cross_project_before_calling_handler(db_session):
+    from plugins.business.agent.guest.binding import bind, reset
+    from src.host.operations.agent_package.bridge import HostBridge
+
     ctx = context(FastAPI(), db_session)
+    token = bind(HostBridge(ctx))
+    try:
+        await _reject_cross_project(ctx)
+    finally:
+        reset(token)
+
+
+async def _reject_cross_project(ctx):
     for op, payload in [
         (ops.rename, {"conversation_id": "other", "title": "new title"}),
         (ops.history, {"conversation_id": "other"}),

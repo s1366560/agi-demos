@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from plugins.business.agent.backend import attachment_parts, workbench
+from plugins.business.agent.guest.binding import CommandError
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
 pytestmark = pytest.mark.unit
@@ -94,7 +95,7 @@ async def test_rejects_invalid_part_coordinates_before_buffering(number, offset,
         content=content,
     )
     redis = AsyncMock()
-    with pytest.raises(OptionalBusinessError, match="Unexpected attachment chunk"):
+    with pytest.raises((OptionalBusinessError, CommandError), match="Unexpected attachment chunk"):
         await attachment_parts.store_chunk(ctx, SimpleNamespace(size_bytes=3), step, redis, "key")
     redis.hexists.assert_not_awaited()
 

@@ -49,7 +49,24 @@ async def tenant_command(
         identify_signed_operation(pkg, command=command_id)
         inputs = dict(c.payload) if payload is None else payload
         validate_command_document(c.input_schema, inputs, "input_schema")
-        if c.host_operation:
+        from src.host.operations.agent_package.runtime import guest_operation, run_agent_command
+
+        if operation := guest_operation(pkg.plugin_id, c):
+            origin = getattr(ctx.request.app.state, "package_application_runtime_origin", None)
+            result = (
+                await forward_command(
+                    origin,
+                    ctx,
+                    plugin=pkg.plugin_id,
+                    digest=pkg.digest,
+                    command=command_id,
+                    payload=payload,
+                    progress=None,
+                )
+                if origin
+                else await run_agent_command(ctx, operation, inputs, None)
+            )
+        elif c.host_operation:
             if resolver := getattr(
                 ctx.request.app.state, "resolve_package_application_operation", None
             ):
