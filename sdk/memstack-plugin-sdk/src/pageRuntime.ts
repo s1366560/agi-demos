@@ -19,20 +19,38 @@ export interface RichPageNavigateOptions {
   readonly keepMounted?: boolean | undefined;
 }
 
+export interface RichPageFileContent {
+  readonly text?: string | undefined;
+  readonly bytes_base64?: string | undefined;
+}
+
 export interface RichPageCallOptions {
   readonly signal?: AbortSignal | undefined;
   readonly onEvent?: (value: unknown) => void;
 }
 
 export interface RichPageRuntime {
-  anchorSlot(name: string, element: HTMLElement, search?: string, onError?: (reason: string) => void): () => void;
-  voice(mode: "voice" | "dictation", conversationId: string, options: RichPageCallOptions): Promise<void>;
+  anchorSlot(
+    name: string,
+    element: HTMLElement,
+    search?: string,
+    onError?: (reason: string) => void,
+  ): () => void;
+  voice(
+    mode: "voice" | "dictation",
+    conversationId: string,
+    options: RichPageCallOptions,
+  ): Promise<void>;
   muteVoice(handle: string, value: boolean): Promise<void>;
   assetUrl(path: string): string;
   scope(): Promise<RichPageContext>;
   getContext(): Promise<RichPageContext>;
   reviewDevice?(): Promise<void>;
-  openPage(pluginId: string, pageId: string, destination?: string): Promise<void>;
+  openPage(
+    pluginId: string,
+    pageId: string,
+    destination?: string,
+  ): Promise<void>;
   /** Move to another route of this page. With `keepMounted` the page is not loaded again. */
   navigate(path: string, options?: RichPageNavigateOptions): Promise<void>;
   /**
@@ -50,7 +68,32 @@ export interface RichPageRuntime {
    * in the first is kept by the workbench for this tenant, project and package.
    */
   openUrl?(url: string): Promise<void>;
-  exportCsv(name: string, payload: Record<string, unknown>, options?: Pick<RichPageCallOptions, "signal">): Promise<void>;
+  exportCsv(
+    name: string,
+    payload: Record<string, unknown>,
+    options?: Pick<RichPageCallOptions, "signal">,
+  ): Promise<void>;
+  /**
+   * Hand a file to the user, which the workbench offers to save under this name.
+   * The content is text, or bytes as base64. A host of an earlier version has
+   * none; read it as optional.
+   */
+  saveFile?(
+    name: string,
+    content: RichPageFileContent,
+    mimeType?: string,
+    options?: Pick<RichPageCallOptions, "signal">,
+  ): Promise<void>;
+  /**
+   * Print an HTML document to a PDF file and offer it to the user under this name.
+   * The workbench lays the document out as it prints its own. The document runs no
+   * script and reaches no address. A host of an earlier version has none.
+   */
+  printPdf?(
+    name: string,
+    html: string,
+    options?: Pick<RichPageCallOptions, "signal">,
+  ): Promise<void>;
   invoke(
     command: string,
     payload?: Record<string, unknown>,

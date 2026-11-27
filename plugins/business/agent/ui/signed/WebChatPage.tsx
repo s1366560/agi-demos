@@ -3,11 +3,11 @@ import { useSlashCommand } from '../../../../../web/src/components/agent/hooks/u
 import { SelectedSkillChip } from '../web/chat/SelectedSkillChip';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App, ConfigProvider, theme } from 'antd';
+import { App, ConfigProvider, Dropdown, theme } from 'antd';
 import enUS from 'antd/es/locale/en_US';
 import zhCN from 'antd/es/locale/zh_CN';
 import { lightTheme, darkTheme } from '../../../../../web/src/theme/antdTheme';
-import { Clock3, ListChecks } from 'lucide-react';
+import { ChevronDown, Clock3, Download, GitCompareArrows, ListChecks } from 'lucide-react';
 import i18n from 'i18next';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
@@ -29,7 +29,11 @@ import { ChatDraftInput } from '../web/chat/ChatDraftInput';
 import { ChatLayoutSelector } from '../web/chat/ChatLayoutSelector';
 import { formatDateTime } from '../../../../../sdk/memstack-plugin-sdk/ui/localDate';
 import { EmptyConversation } from '../web/chat/EmptyConversation';
-import { LAYOUT_BG_CLASSES } from '../web/chat/styles';
+import { ICON_BUTTON_CLASSES, LAYOUT_BG_CLASSES } from '../web/chat/styles';
+import { ConversationCompareView } from '../../../../../web/src/components/agent/comparison/ConversationCompareView';
+import { ConversationPickerModal } from '../../../../../web/src/components/agent/comparison/ConversationPickerModal';
+import type { Conversation } from '../../../../../web/src/types/agent';
+import { conversationTimeline, exportConversation } from './exportConversation';
 import english from '../web/locales/en-US.json';
 import chinese from '../web/locales/zh-CN.json';
 import { Transcript } from './ChatTranscriptView';
@@ -98,6 +102,7 @@ function ConversationTitle({
 
 function WebChatPage({ scope }: { scope: RichPageContext }) {
   const { t } = useTranslation();
+  const toast = App.useApp().message;
   // Reasoning that streams in follows the events the page has read so far.
   const read = useRef<[number, number] | undefined>(undefined);
   const chat = useChat(scope, () => read.current);
@@ -278,6 +283,23 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
   }, [chat.selected]);
   // The original workbench keeps the division of a layout only for the session.
   const setLayout = (next: LayoutMode) => setMode(next);
+  // The conversation beside another one, and the conversation as a file, as in the
+  // original status bar.
+  const [compare, setCompare] = useState(false);
+  const [compareWith, setCompareWith] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const exportable = chat.messages.length > 0;
+  const comparable = !!chat.selected && exportable;
+  const doExport = (format: 'markdown' | 'pdf') =>
+    exportConversation(
+      conversationTimeline(chat, interactions.events),
+      format,
+      chat.selectedRow?.title ?? t('agent.sidebar.conversations', 'Conversation'),
+      `conversation-${chat.selected}.${format === 'pdf' ? 'pdf' : 'md'}`
+    ).catch((error: unknown) =>
+      toast.error(error instanceof Error ? error.message : String(error))
+    );
+  const conversations = chat.list as unknown as Conversation[];
   const header = (
     <>
       <WebActivity scope={scope} onOpen={chat.choose} />
@@ -501,9 +523,76 @@ function WebChatPage({ scope }: { scope: RichPageContext }) {
           running={chat.writing}
         />
       }
-      actions={<ChatLayoutSelector mode={mode} setMode={setLayout} hasWorkspace={!!workspace} />}
+      actions={
+        <>
+          {comparable && (
+            <button
+              type="button"
+              onClick={() => {
+                setCompare(true);
+                setPicking(true);
+              }}
+              className={ICON_BUTTON_CLASSES}
+              title={t('comparison.compare', 'Compare')}
+              aria-label={t('comparison.compare', 'Compare')}
+            >
+              <GitCompareArrows size={14} />
+            </button>
+          )}
+          {exportable && (
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'markdown', label: t('agent.actions.exportMarkdown', 'Export as Markdown') },
+                  // A workbench without a printer does not offer a PDF.
+                  ...(window.memstack.printPdf
+                    ? [{ key: 'pdf', label: t('agent.actions.exportPdf', 'Export as PDF') }]
+                    : []),
+                ],
+                onClick: ({ key }) => void doExport(key === 'pdf' ? 'pdf' : 'markdown'),
+              }}
+              trigger={['click']}
+            >
+              <button
+                type="button"
+                className={`${ICON_BUTTON_CLASSES} gap-0.5`}
+                title={t('agent.actions.export', 'Export')}
+                aria-label={t('agent.actions.export', 'Export')}
+              >
+                <Download size={14} />
+                <ChevronDown size={10} />
+              </button>
+            </Dropdown>
+          )}
+          <ChatLayoutSelector mode={mode} setMode={setLayout} hasWorkspace={!!workspace} />
+        </>
+      }
     />
   );
+  // The comparison stands in place of the conversation, as in the original workbench.
+  if (compare && chat.selected)
+    return (
+      <div className={'flex h-full w-full flex-col overflow-hidden ' + LAYOUT_BG_CLASSES}>
+        <ConversationCompareView
+          projectId={scope.projectId ?? ''}
+          leftConversationId={chat.selected}
+          rightConversationId={compareWith}
+          conversations={conversations}
+          onClose={() => {
+            setCompare(false);
+            setCompareWith(null);
+          }}
+          onSelectRight={() => setPicking(true)}
+        />
+        <ConversationPickerModal
+          visible={picking}
+          currentConversationId={chat.selected}
+          conversations={conversations}
+          onSelect={setCompareWith}
+          onClose={() => setPicking(false)}
+        />
+      </div>
+    );
   return (
     <div className={'flex h-full w-full flex-col overflow-hidden ' + LAYOUT_BG_CLASSES}>
       <ShortcutOverlay />

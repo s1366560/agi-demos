@@ -303,6 +303,33 @@ async def test_conversation_list_of_a_workspace_reports_whether_more_follow(
     assert isinstance(result["cursor"], str)
 
 
+async def test_conversation_list_names_how_much_a_conversation_holds(db_session, monkeypatch):
+    from plugins.business.agent.backend import chat_operations as operations
+
+    ctx = context(FastAPI(), db_session)
+
+    async def owned(*_args):
+        return None
+
+    async def canonical(_ctx, method, path, **_kwargs):
+        return {
+            "items": [
+                {**_conversation_row("c1"), "message_count": 12},
+                {**_conversation_row("c2"), "message_count": "many"},
+                _conversation_row("c3"),
+            ],
+            "has_more": False,
+        }
+
+    monkeypatch.setattr(operations, "_own_conversation", owned)
+    monkeypatch.setattr(operations, "_canonical", canonical)
+
+    items = (await operations.list_conversations(ctx, {"workbench": True}, None))["items"]
+
+    # A count the workbench can show is passed on; anything else is left out.
+    assert [item.get("message_count") for item in items] == [12, None, None]
+
+
 async def test_history_keeps_turn_order_and_reasoning_without_tool_arguments(
     db_session, monkeypatch
 ):
@@ -899,28 +926,59 @@ async def test_artifact_of_another_conversation_is_not_read(db_session, monkeypa
 
 
 @pytest.mark.parametrize(
-    ("row", "expected"),
+    ("row", "expected", "carried"),
     [
-        ({"status": "pending", "mime_type": "image/png", "size_bytes": 10}, {"status": "pending"}),
-        ({"status": "error", "mime_type": "text/plain", "size_bytes": 10}, {"status": "error"}),
+        (
+            {"status": "pending", "mime_type": "image/png", "size_bytes": 10},
+            {"status": "pending"},
+            False,
+        ),
+        (
+            {"status": "error", "mime_type": "text/plain", "size_bytes": 10},
+            {"status": "error"},
+            False,
+        ),
         # A picture too large to carry is opened by its address instead.
         (
             {"status": "ready", "mime_type": "image/png", "size_bytes": 3_000_000},
             {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
+        ),
+        # A document the page cannot show as it is is opened by its address.
+        (
+            {"status": "ready", "mime_type": "application/pdf", "size_bytes": 10},
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
+        ),
+        (
+            {
+                "status": "ready",
+                "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "size_bytes": 10,
+            },
+            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            False,
         ),
         (
             {"status": "ready", "mime_type": "text/plain", "size_bytes": 10},
-            {"status": "ready", "url": "http://files/a1.png?X-Amz-Signature=new"},
+            {
+                "status": "ready",
+                "url": "http://files/a1.png?X-Amz-Signature=new",
+                "mime_type": "text/plain",
+                "content": "hello",
+            },
+            True,
         ),
     ],
 )
-async def test_artifact_that_cannot_be_shown_as_a_picture_is_only_named(
-    db_session, monkeypatch, row, expected
+async def test_artifact_is_carried_only_as_what_the_page_can_show(
+    db_session, monkeypatch, row, expected, carried
 ):
     from plugins.business.agent.backend import workbench
 
     ctx = context(FastAPI(), db_session)
     calls = []
+    pieces = []
 
     async def owned(*_args):
         return None
@@ -931,12 +989,13 @@ async def test_artifact_that_cannot_be_shown_as_a_picture_is_only_named(
             return {"conversation_id": "c", "project_id": "p", **row}
         return {"artifact_id": "a1", "url": "http://files/a1.png?X-Amz-Signature=new"}
 
-    async def pieces(*_args):
-        raise AssertionError("only a small picture is carried into the page")
+    async def read_pieces(_ctx, path):
+        pieces.append(path)
+        return "text/plain", b"hello"
 
     monkeypatch.setattr(workbench, "_own_conversation", owned)
     monkeypatch.setattr(workbench, "_canonical_http", http)
-    monkeypatch.setattr(workbench, "canonical_bytes", pieces)
+    monkeypatch.setattr(workbench, "canonical_bytes", read_pieces)
 
     result = await workbench.interactions(
         ctx, {"conversation_id": "c", "view": "artifact", "artifact_id": "a1"}, None
@@ -945,6 +1004,8 @@ async def test_artifact_that_cannot_be_shown_as_a_picture_is_only_named(
     assert result == {"artifact": {"id": "a1", **expected}}
     assert calls[0] == ("GET", "/api/v1/artifacts/a1")
     assert len(calls) == (2 if row["status"] == "ready" else 1)
+    # Only what the page can show is read from the storage.
+    assert pieces == (["/api/v1/artifacts/a1/content/bytes"] if carried else [])
 
 
 async def test_artifact_view_names_a_file(db_session, monkeypatch):
@@ -967,6 +1028,159 @@ async def test_artifact_view_names_a_file(db_session, monkeypatch):
         )
 
     assert refused.value.code == "page_request_invalid"
+
+
+async def test_canvas_files_list_and_read_the_project_sandbox_with_fixed_tools(
+    db_session, monkeypatch
+):
+    from plugins.business.agent.backend import workbench
+
+    ctx = context(FastAPI(), db_session)
+    calls = []
+
+    async def canonical(_ctx, method, path, **options):
+        calls.append((method, path, options))
+        return {
+            "success": True,
+            "is_error": False,
+            "content": [
+                {"type": "text", "text": "Found 2 files\n/workspace/a.py\n/workspace/out/b.txt"}
+            ],
+        }
+
+    async def http(_ctx, method, path, **options):
+        calls.append((method, path, options))
+        return {
+            "artifacts": [
+                {
+                    "id": "x",
+                    "filename": "a.txt",
+                    "mime_type": "text/plain",
+                    "category": "text",
+                    "size_bytes": 3,
+                    "status": "ready",
+                    "url": "http://files/signed",
+                    "project_id": "p",
+                }
+            ],
+            "total": 1,
+        }
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+    monkeypatch.setattr(workbench, "_canonical_http", http)
+
+    listed = await workbench.canvas_files(ctx, {"view": "sandbox"}, None)
+
+    assert listed == {
+        "content": "Found 2 files\n/workspace/a.py\n/workspace/out/b.txt",
+        "is_error": False,
+    }
+    assert calls == [
+        (
+            "POST",
+            "sandbox/execute",
+            {
+                "project_route": True,
+                "body": {
+                    "tool_name": "glob",
+                    "arguments": {
+                        "pattern": "**/*",
+                        "path": "/workspace",
+                        "max_results": 500,
+                    },
+                    "timeout": 30,
+                },
+            },
+        )
+    ]
+
+    calls.clear()
+    read = await workbench.canvas_files(ctx, {"view": "read", "path": "/workspace/out/b.txt"}, None)
+
+    assert read == listed
+    method, path, options = calls[0]
+    assert (method, path) == ("POST", "sandbox/execute")
+    assert options["body"]["tool_name"] == "read"
+    assert options["body"]["arguments"] == {
+        "file_path": "/workspace/out/b.txt",
+        "offset": 0,
+        "limit": 50000,
+        "raw": True,
+    }
+
+    calls.clear()
+    produced = await workbench.canvas_files(ctx, {"view": "artifacts"}, None)
+
+    # What the page lists is the file and its kind; where it is stored stays on the server.
+    assert produced == {
+        "artifacts": [
+            {
+                "id": "x",
+                "filename": "a.txt",
+                "mime_type": "text/plain",
+                "category": "text",
+                "size_bytes": 3,
+                "status": "ready",
+            }
+        ]
+    }
+    assert calls[0][:2] == ("GET", "/api/v1/artifacts")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/etc/passwd",
+        "/workspace",
+        "/workspace/",
+        "/workspace/../etc/passwd",
+        "/workspace//a.txt",
+        "workspace/a.txt",
+        "/workspace/a\\b.txt",
+        "/workspace/a\u0000b.txt",
+        "/workspace/./a.txt",
+        "/other/workspace/a.txt",
+    ],
+)
+async def test_canvas_files_do_not_read_outside_the_workspace(db_session, monkeypatch, path):
+    from plugins.business.agent.backend import workbench
+
+    async def canonical(*_args, **_options):
+        raise AssertionError("a path outside the workspace is not sent to the sandbox")
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+
+    with pytest.raises(OptionalBusinessError) as refused:
+        await workbench.canvas_files(
+            context(FastAPI(), db_session), {"view": "read", "path": path}, None
+        )
+
+    assert refused.value.code == "page_request_invalid"
+
+
+async def test_canvas_files_show_what_the_sandbox_answered(db_session, monkeypatch):
+    from plugins.business.agent.backend import workbench
+
+    async def canonical(*_args, **_options):
+        return {"is_error": True, "content": [{"type": "text", "text": "File not found"}]}
+
+    monkeypatch.setattr(workbench, "_canonical", canonical)
+
+    # An error of the sandbox is the page's to show; it is not a failure of the command.
+    assert await workbench.canvas_files(
+        context(FastAPI(), db_session), {"view": "read", "path": "/workspace/gone.txt"}, None
+    ) == {"content": "File not found", "is_error": True}
+
+
+async def test_canvas_files_do_not_take_a_tool_from_the_page(db_session):
+    from plugins.business.agent.backend import workbench
+
+    with pytest.raises(ValidationError):
+        await workbench.canvas_files(
+            context(FastAPI(), db_session),
+            {"view": "read", "path": "/workspace/a.txt", "tool_name": "bash"},
+            None,
+        )
 
 
 async def test_follow_streams_the_running_turn_and_ends_when_it_ends(monkeypatch):

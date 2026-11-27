@@ -312,3 +312,109 @@ describe('the storage of a page', () => {
     page.disconnect();
   });
 });
+
+describe('a page that hands over a file', () => {
+  async function offering(extra: Partial<PageBridge> = {}) {
+    const saveFile = vi.fn().mockResolvedValue(undefined);
+    return { saveFile, ...asking(navigable, { saveFile, ...extra }) };
+  }
+
+  it('is offered under its name, as text or as bytes', async () => {
+    const page = await offering();
+    await page.ask({
+      method: 'saveFile',
+      name: 'conversation.md',
+      content: { text: '# Title\n\n正文' },
+      mimeType: 'text/markdown;charset=utf-8',
+    });
+    await page.ask({
+      method: 'saveFile',
+      name: 'report.pdf',
+      content: { bytes_base64: btoa('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n') },
+      mimeType: 'application/pdf',
+    });
+    // Without a type, a text file is still a text file.
+    await page.ask({ method: 'saveFile', name: 'plain.txt', content: { text: 'hi' } });
+    const calls = page.saveFile.mock.calls as [string, Blob, AbortSignal][];
+    expect(calls.map(([name, file]) => [name, file.type, file.size])).toEqual([
+      ['conversation.md', 'text/markdown;charset=utf-8', 15],
+      ['report.pdf', 'application/pdf', 15],
+      ['plain.txt', 'text/plain;charset=utf-8', 2],
+    ]);
+    expect(await calls[0]![1].text()).toBe('# Title\n\n正文');
+    page.disconnect();
+  });
+
+  it.each([
+    { name: '../etc/passwd', content: { text: 'x' } },
+    { name: 'a/b.txt', content: { text: 'x' } },
+    { name: 'a\\b.txt', content: { text: 'x' } },
+    { name: '', content: { text: 'x' } },
+    { name: 'a\u0000b', content: { text: 'x' } },
+    { name: 'x'.repeat(129), content: { text: 'x' } },
+    { name: 'ok.txt', content: { text: 'x' }, mimeType: 'text/plain\nx' },
+    { name: 'ok.txt', content: { text: 'x' }, mimeType: 'javascript:alert(1)' },
+    { name: 'ok.txt', content: 'text' },
+    { name: 'ok.txt', content: {} },
+    { name: 'ok.txt', content: { text: 7 } },
+    { name: 'ok.txt', content: { text: 'x'.repeat(4 * 1024 * 1024 + 1) } },
+    { name: 'ok.bin', content: { bytes_base64: 'not base64!' } },
+    { name: 'ok.bin', content: { bytes_base64: 'abc' } },
+  ])('is refused when made like %j', async (request) => {
+    const page = await offering();
+    expect(await page.ask({ method: 'saveFile', ...request })).toEqual([
+      { id: '1', type: 'error', error: 'page_request_invalid' },
+    ]);
+    expect(page.saveFile).not.toHaveBeenCalled();
+    page.disconnect();
+  });
+
+  it('is refused when the workbench has no way to save one', async () => {
+    const page = asking(navigable);
+    expect(await page.ask({ method: 'saveFile', name: 'a.txt', content: { text: 'x' } })).toEqual([
+      { id: '1', type: 'error', error: 'page_export_unavailable' },
+    ]);
+    page.disconnect();
+  });
+});
+
+describe('a page that prints a document', () => {
+  it('has the workbench print it to a PDF offered under its name', async () => {
+    const printPdf = vi.fn().mockResolvedValue(undefined);
+    const page = asking(navigable, { printPdf });
+    expect(
+      await page.ask({ method: 'printPdf', name: 'conversation.pdf', html: '<p>正文</p>' })
+    ).toEqual([{ id: '1', type: 'result', value: undefined }]);
+    expect(printPdf).toHaveBeenCalledWith(
+      'conversation.pdf',
+      '<p>正文</p>',
+      expect.any(AbortSignal)
+    );
+    page.disconnect();
+  });
+
+  it.each([
+    { name: '../conversation.pdf', html: '<p/>' },
+    { name: 'a/b.pdf', html: '<p/>' },
+    { name: '', html: '<p/>' },
+    { name: 'ok.pdf', html: 7 },
+    { name: 'ok.pdf' },
+    { name: 'ok.pdf', html: 'x'.repeat(2 * 1024 * 1024 + 1) },
+  ])('is refused when made like %j', async (request) => {
+    const printPdf = vi.fn();
+    const page = asking(navigable, { printPdf });
+    expect(await page.ask({ method: 'printPdf', ...request })).toEqual([
+      { id: '1', type: 'error', error: 'page_request_invalid' },
+    ]);
+    expect(printPdf).not.toHaveBeenCalled();
+    page.disconnect();
+  });
+
+  it('is refused when the workbench has no printer', async () => {
+    const page = asking(navigable);
+    expect(await page.ask({ method: 'printPdf', name: 'a.pdf', html: '<p/>' })).toEqual([
+      { id: '1', type: 'error', error: 'page_export_unavailable' },
+    ]);
+    page.disconnect();
+  });
+});

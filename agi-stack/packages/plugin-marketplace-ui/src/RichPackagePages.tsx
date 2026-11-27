@@ -11,8 +11,14 @@ import {
   routeRank,
   verifyPageDocument,
 } from "../../plugin-slots/src/richPage";
-import { createPageStorage, windowPageStorage } from "../../plugin-slots/src/pageStorage";
-import { arrived, type RequestedAddress } from "../../plugin-slots/src/pageArrival";
+import {
+  createPageStorage,
+  windowPageStorage,
+} from "../../plugin-slots/src/pageStorage";
+import {
+  arrived,
+  type RequestedAddress,
+} from "../../plugin-slots/src/pageArrival";
 import type {
   DevicePageCall,
   PackagePage,
@@ -20,7 +26,12 @@ import type {
   PageTarget,
   RichPage,
 } from "../../plugin-slots/src/richPage";
-import { savePageExport } from "./savePageExport";
+import {
+  savePageExport,
+  savePageFile,
+  type PageFileSaver,
+} from "./savePageExport";
+import { printPagePdf, type PagePrinter } from "./printPagePdf";
 import { openPageAddress } from "./openPageAddress";
 import { createPageVoiceAuthority } from "./pageVoiceAuthority";
 import type { OpenVoiceSocket } from "../../plugin-slots/src/pageVoice";
@@ -53,10 +64,17 @@ export interface RichPackagePagesProps {
   backToMarket?: ReactNode;
   managementLabel?: string;
   invokeDevice?: DevicePageCall;
-  saveNativeExport?(blob: Blob): Promise<unknown>;
+  /** Save a file of a page through the window of a native host, under the name it was given. */
+  saveNativeExport?: PageFileSaver;
+  /** Print a document of a page to a PDF file. A host without one does not offer it. */
+  printDocument?: PagePrinter;
   /** Open an address of the web for a page. The workbench window is used unless a host has its own. */
   openUrl?(url: string): void;
-  reviewDevice?(pluginId: string, digest: string, signal: AbortSignal): Promise<void>;
+  reviewDevice?(
+    pluginId: string,
+    digest: string,
+    signal: AbortSignal,
+  ): Promise<void>;
   openVoiceSocket?: OpenVoiceSocket;
   streamCommand?: (
     path: string,
@@ -122,7 +140,11 @@ function PackageFrame(
   }, [props.pathname]);
   // What the pages of this release stored in this tenant and project.
   const storage = useMemo(
-    () => createPageStorage(windowPageStorage(), [tenantId, projectId, pluginId].join(":")),
+    () =>
+      createPageStorage(
+        windowPageStorage(),
+        [tenantId, projectId, pluginId].join(":"),
+      ),
     [tenantId, projectId, pluginId],
   );
   const [loaded, setLoaded] = useState<{ page: RichPage; html: string } | null>(
@@ -132,7 +154,9 @@ function PackageFrame(
   const [ready, setReady] = useState(false);
   const [sourceCapturing, setSourceCapturing] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [anchors, setAnchors] = useState<Record<string, { target: string; rect: number[]; search: string }>>({});
+  const [anchors, setAnchors] = useState<
+    Record<string, { target: string; rect: number[]; search: string }>
+  >({});
   useEffect(() => {
     if (ready && !props.retired && !error) {
       current.current.onStatus?.({ pluginId, digest, pageId: id, ready: true });
@@ -222,14 +246,22 @@ function PackageFrame(
         encodeURIComponent(pluginId) +
         "/commands";
       const voice = createPageVoiceAuthority({
-        tenantId, projectId, pluginId, locale: current.current.locale || navigator.language,
+        tenantId,
+        projectId,
+        pluginId,
+        locale: current.current.locale || navigator.language,
         open: current.current.openVoiceSocket,
-        authorize: (conversation, signal) => transport(path, {
-          method: "POST", signal, body: {
-            ...packageScope(tenantId, projectId), expected_digest: digest,
-            command_id: page.voice_authorization, payload: { conversation_id: conversation },
-          },
-        }),
+        authorize: (conversation, signal) =>
+          transport(path, {
+            method: "POST",
+            signal,
+            body: {
+              ...packageScope(tenantId, projectId),
+              expected_digest: digest,
+              command_id: page.voice_authorization,
+              payload: { conversation_id: conversation },
+            },
+          }),
       });
       stopVoice.current = voice.stop;
       close = connectPage(event.ports[0]!, page, {
@@ -261,27 +293,65 @@ function PackageFrame(
             dispose.current?.();
           }
         },
-        saveCsv: (text, signal) => savePageExport(text, signal, current.current.locale || navigator.language, current.current.saveNativeExport),
+        saveCsv: (text, signal) =>
+          savePageExport(
+            text,
+            signal,
+            current.current.locale || navigator.language,
+            current.current.saveNativeExport,
+          ),
+        saveFile: (name, file, signal) =>
+          savePageFile(
+            name,
+            file,
+            file.type,
+            signal,
+            current.current.locale || navigator.language,
+            current.current.saveNativeExport,
+          ),
+        ...(current.current.printDocument
+          ? {
+              printPdf: (name: string, html: string, signal: AbortSignal) =>
+                printPagePdf(
+                  name,
+                  html,
+                  signal,
+                  current.current.locale || navigator.language,
+                  current.current.saveNativeExport,
+                  current.current.printDocument!,
+                ),
+            }
+          : {}),
         pointerCapture: setSourceCapturing,
         anchorSlot(name, targetPage, rect, search) {
           if (current.current.inSlot) throw new Error("page_slot_denied");
           const query = pageSearch(search, true);
-          setAnchors(previous => {
+          setAnchors((previous) => {
             const next = { ...previous };
             if (rect) next[name] = { target: targetPage, rect, search: query };
             else delete next[name];
             return next;
           });
         },
-        reviewDevice: signal => {
-          if (current.current.retired || !current.current.reviewDevice) throw new Error("page_capability_unavailable");
-          if (deviceReview.current) throw new Error("device_review_unavailable");
+        reviewDevice: (signal) => {
+          if (current.current.retired || !current.current.reviewDevice)
+            throw new Error("page_capability_unavailable");
+          if (deviceReview.current)
+            throw new Error("device_review_unavailable");
           const controller = new AbortController();
           deviceReview.current = controller;
-          return current.current.reviewDevice(pluginId, digest, AbortSignal.any([signal, controller.signal]))
-            .finally(() => { deviceReview.current = null; });
+          return current.current
+            .reviewDevice(
+              pluginId,
+              digest,
+              AbortSignal.any([signal, controller.signal]),
+            )
+            .finally(() => {
+              deviceReview.current = null;
+            });
         },
-        openPage: (pluginId, pageId, destination) => current.current.openPage(pluginId, pageId, destination),
+        openPage: (pluginId, pageId, destination) =>
+          current.current.openPage(pluginId, pageId, destination),
         navigate: (newPath, options) =>
           current.current.navigate(newPath, options),
         contextChanged(listener) {
@@ -291,7 +361,12 @@ function PackageFrame(
         ...(storage ? { storage } : {}),
         openUrl: (url, signal) => {
           if (current.current.openUrl) return current.current.openUrl(url);
-          return openPageAddress(url, signal, current.current.locale || navigator.language, target);
+          return openPageAddress(
+            url,
+            signal,
+            current.current.locale || navigator.language,
+            target,
+          );
         },
         invoke(name, payload, signal, progress) {
           const body = {
@@ -333,11 +408,25 @@ function PackageFrame(
       [host.port2],
     );
   }
-  if (error) return <div role="alert">{error}
-    {props.inSlot && <button type="button" onClick={() => {
-      setError(""); setLoaded(null); setReady(false); setAttempt(previous => previous + 1);
-    }}>{props.locale?.startsWith("zh") ? "重试" : "Retry"}</button>}
-  </div>;
+  if (error)
+    return (
+      <div role="alert">
+        {error}
+        {props.inSlot && (
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setLoaded(null);
+              setReady(false);
+              setAttempt((previous) => previous + 1);
+            }}
+          >
+            {props.locale?.startsWith("zh") ? "重试" : "Retry"}
+          </button>
+        )}
+      </div>
+    );
   if (!loaded) return null;
   const frameUrl = new URL(
     target === "web"
@@ -358,33 +447,72 @@ function PackageFrame(
         display: "block",
         width: "100%",
         ...(props.inSlot ? { height: "100%" } : {}),
-        minHeight: props.inSlot ? 0 : loaded.page.workbench ? "var(--workbench-frame-height, calc(100dvh - 6rem))" : "65vh",
+        minHeight: props.inSlot
+          ? 0
+          : loaded.page.workbench
+            ? "var(--workbench-frame-height, calc(100dvh - 6rem))"
+            : "65vh",
         border: 0,
       }}
     />
   );
   if (!loaded.page.anchored_slots || props.inSlot) return surface;
-  return <div style={{ position: "relative", overflow: "hidden" }}>
-    {surface}
-    {!props.retired && Object.entries(anchors).map(([name, anchor]) => {
-      const targetItem = props.catalog?.find(candidate =>
-        candidate.pluginId + "/" + candidate.page.id === anchor.target &&
-        candidate.page.contributes_to === pluginId + "/" + name);
-      const [left, top, width, height] = anchor.rect;
-      return <section key={name} aria-label={targetItem?.page.title || name}
-        style={{ position: "absolute", left, top, width, height, overflow: "hidden", pointerEvents: sourceCapturing ? "none" : "auto" }}>
-        {targetItem ? <PageRelease key={JSON.stringify([anchor.target, anchor.search])}
-          {...props} inSlot item={targetItem}
-          pathname={"/" + pageSearch(anchor.search, false, targetItem.page.query_params ?? [])}
-          onStatus={() => {}} />
-          : <div role="status">
-            {props.locale?.startsWith("zh") ? "当前项目未安装所需插件" : "The required package is unavailable in this project"}
-            {" · "}{anchor.target}
-            {props.backToMarket}
-          </div>}
-      </section>;
-    })}
-  </div>;
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      {surface}
+      {!props.retired &&
+        Object.entries(anchors).map(([name, anchor]) => {
+          const targetItem = props.catalog?.find(
+            (candidate) =>
+              candidate.pluginId + "/" + candidate.page.id === anchor.target &&
+              candidate.page.contributes_to === pluginId + "/" + name,
+          );
+          const [left, top, width, height] = anchor.rect;
+          return (
+            <section
+              key={name}
+              aria-label={targetItem?.page.title || name}
+              style={{
+                position: "absolute",
+                left,
+                top,
+                width,
+                height,
+                overflow: "hidden",
+                pointerEvents: sourceCapturing ? "none" : "auto",
+              }}
+            >
+              {targetItem ? (
+                <PageRelease
+                  key={JSON.stringify([anchor.target, anchor.search])}
+                  {...props}
+                  inSlot
+                  item={targetItem}
+                  pathname={
+                    "/" +
+                    pageSearch(
+                      anchor.search,
+                      false,
+                      targetItem.page.query_params ?? [],
+                    )
+                  }
+                  onStatus={() => {}}
+                />
+              ) : (
+                <div role="status">
+                  {props.locale?.startsWith("zh")
+                    ? "当前项目未安装所需插件"
+                    : "The required package is unavailable in this project"}
+                  {" · "}
+                  {anchor.target}
+                  {props.backToMarket}
+                </div>
+              )}
+            </section>
+          );
+        })}
+    </div>
+  );
 }
 
 function PageDiagnostics({
@@ -449,7 +577,9 @@ function RoutedPageRelease(props: Selected) {
     requested.current = null;
     setView({
       address,
-      generation: view.generation + (arrived(arrival, address, performance.now()) ? 0 : 1),
+      generation:
+        view.generation +
+        (arrived(arrival, address, performance.now()) ? 0 : 1),
     });
   }
   return (
@@ -458,7 +588,10 @@ function RoutedPageRelease(props: Selected) {
       {...props}
       navigate={(path, options) => {
         const next = splitPageLocation(path);
-        if (options?.keepMounted || (options?.replace && next.pathname === pathname))
+        if (
+          options?.keepMounted ||
+          (options?.replace && next.pathname === pathname)
+        )
           requested.current = {
             address: next.pathname + pageSearch(next.search) + next.hash,
             at: performance.now(),
@@ -496,7 +629,11 @@ function PageRelease(props: Selected) {
   return (
     <>
       {releases.map((release) => (
-        <div key={release.digest} hidden={release.digest !== visible} style={props.inSlot ? { height: "100%" } : undefined}>
+        <div
+          key={release.digest}
+          hidden={release.digest !== visible}
+          style={props.inSlot ? { height: "100%" } : undefined}
+        >
           <PackageFrame
             {...props}
             item={release}
@@ -541,28 +678,48 @@ function PageRelease(props: Selected) {
         </div>
       ))}
       {preparing && failure?.digest === item.digest && (
-        <p role="alert" style={props.inSlot ? { position: "absolute", insetInline: 0, top: 0, background: "Canvas", color: "CanvasText" } : undefined}>
+        <p
+          role="alert"
+          style={
+            props.inSlot
+              ? {
+                  position: "absolute",
+                  insetInline: 0,
+                  top: 0,
+                  background: "Canvas",
+                  color: "CanvasText",
+                }
+              : undefined
+          }
+        >
           {failure.reason}
         </p>
       )}
-      {!props.inSlot && props.diagnostics && <PageDiagnostics
-        target={props.target}
-        locale={
-          props.locale || document.documentElement.lang || navigator.language
-        }
-        plugin={item.pluginId}
-        page={item.page.id}
-        selected={item.digest}
-        actual={active?.digest}
-        error={failure?.digest === item.digest ? failure.reason : undefined}
-      />}
+      {!props.inSlot && props.diagnostics && (
+        <PageDiagnostics
+          target={props.target}
+          locale={
+            props.locale || document.documentElement.lang || navigator.language
+          }
+          plugin={item.pluginId}
+          page={item.page.id}
+          selected={item.digest}
+          actual={active?.digest}
+          error={failure?.digest === item.digest ? failure.reason : undefined}
+        />
+      )}
     </>
   );
 }
 
 export function RichPackagePages(props: RichPackagePagesProps) {
   const { tenantId, projectId } = props.scope;
-  return <ScopedPackagePages key={JSON.stringify([tenantId, projectId, props.target])} {...props} />;
+  return (
+    <ScopedPackagePages
+      key={JSON.stringify([tenantId, projectId, props.target])}
+      {...props}
+    />
+  );
 }
 
 function ScopedPackagePages(props: RichPackagePagesProps) {
@@ -644,17 +801,29 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
     }
   }
   function openPage(pluginId: string, pageId: string, destination?: string) {
-    const targetPage = items.find((item) => item.pluginId === pluginId && item.page.id === pageId);
+    const targetPage = items.find(
+      (item) => item.pluginId === pluginId && item.page.id === pageId,
+    );
     if (!targetPage) throw new Error("page_destination_unavailable");
     if (destination !== undefined) {
-      const {pathname, search, hash} = splitPageLocation(destination);
-      if (!targetPage.page.routes.some((route) => routeRank(route, pathname, scope) !== null))
+      const { pathname, search, hash } = splitPageLocation(destination);
+      if (
+        !targetPage.page.routes.some(
+          (route) => routeRank(route, pathname, scope) !== null,
+        )
+      )
         throw new Error("page_navigation_denied");
-      const query = pageSearch(search, true, targetPage.page.query_params ?? []);
-      props.navigate(pathname + query + hash, {pluginId});
+      const query = pageSearch(
+        search,
+        true,
+        targetPage.page.query_params ?? [],
+      );
+      props.navigate(pathname + query + hash, { pluginId });
       return;
     }
-    const path = targetPage.page.routes.map((route) => menuPath(route, scope)).find(Boolean);
+    const path = targetPage.page.routes
+      .map((route) => menuPath(route, scope))
+      .find(Boolean);
     if (!path) throw new Error("page_destination_unavailable");
     props.navigate(path, { pluginId });
   }
@@ -699,20 +868,29 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
   const embedded = items.filter(
     (i) => i.page.contributes_to && slots.has(i.page.contributes_to),
   );
-  const workbenchReturn = selected?.page.workbench && props.target === "web" && props.management == null
-    ? props.backToMarket : null;
-  const pageMenu = props.pageMenu !== false && (!selected?.page.workbench || props.management != null);
+  const workbenchReturn =
+    selected?.page.workbench &&
+    props.target === "web" &&
+    props.management == null
+      ? props.backToMarket
+      : null;
+  const pageMenu =
+    props.pageMenu !== false &&
+    (!selected?.page.workbench || props.management != null);
   return (
     <div
       className="project-business-pages"
       data-testid="project-business-pages"
     >
-      {(pageMenu || (props.backToMarket && !workbenchReturn) || props.management != null) && <nav
-        className="project-business-navigation"
-        aria-label={zh ? "项目导航" : "Project navigation"}
-      >
-        {props.backToMarket}
-        {pageMenu && (
+      {(pageMenu ||
+        (props.backToMarket && !workbenchReturn) ||
+        props.management != null) && (
+        <nav
+          className="project-business-navigation"
+          aria-label={zh ? "项目导航" : "Project navigation"}
+        >
+          {props.backToMarket}
+          {pageMenu && (
             <label>
               {zh ? "业务页面" : "Applications"}
               <select
@@ -730,16 +908,17 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
               </select>
             </label>
           )}
-        {props.management != null && (
-          <button
-            type="button"
-            aria-current={atManagement ? "page" : undefined}
-            onClick={() => props.navigate("/plugins")}
-          >
-            {managementLabel}
-          </button>
-        )}
-      </nav>}
+          {props.management != null && (
+            <button
+              type="button"
+              aria-current={atManagement ? "page" : undefined}
+              onClick={() => props.navigate("/plugins")}
+            >
+              {managementLabel}
+            </button>
+          )}
+        </nav>
+      )}
       {error && <p role="alert">{error}</p>}
       {atManagement ? (
         props.management
@@ -798,7 +977,10 @@ function ScopedPackagePages(props: RichPackagePagesProps) {
         </section>
       ))}
       {workbenchReturn && (
-        <nav className="project-business-navigation" aria-label={managementLabel}>
+        <nav
+          className="project-business-navigation"
+          aria-label={managementLabel}
+        >
           {workbenchReturn}
         </nav>
       )}

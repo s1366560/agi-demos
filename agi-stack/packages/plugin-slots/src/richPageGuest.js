@@ -231,6 +231,9 @@
           options,
         ),
       exportCsv: (name, payload, options = {}) => request("exportCsv", { name, payload }, options),
+      saveFile: (name, content, mimeType, options = {}) =>
+        request("saveFile", { name, content, mimeType }, options),
+      printPdf: (name, html, options = {}) => request("printPdf", { name, html }, options),
       device: (name, payload = {}, options = {}) =>
         request("device", { name, payload }, options),
     }),

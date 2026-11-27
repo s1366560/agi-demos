@@ -11,6 +11,7 @@ import { getAuthToken, subscribeCloudIdentity } from '@/utils/tokenResolver';
 import { RichPackagePages } from '../../../agi-stack/packages/plugin-marketplace-ui/src/RichPackagePages';
 
 import { businessRouteScope, tenantPageScope } from './businessLocation';
+import { printDocument } from './printDocument';
 import { useWebPackageSession } from './useWebPackageSession';
 
 export type FullWorkbenchMatcher = (
@@ -137,6 +138,7 @@ export function ProjectBusinessRoute({
         transport={session.transport}
         openVoiceSocket={session.openVoiceSocket}
         streamCommand={session.stream}
+        printDocument={printDocument}
         navigate={(path, options) => {
           const next: Record<string, string> = { tenant };
           const owner = options?.pluginId ?? plugin;

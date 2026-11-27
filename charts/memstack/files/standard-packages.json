@@ -26,6 +26,7 @@
       "app.agent.composer.save",
       "app.agent.composer.models",
       "app.agent.composer.context",
+      "app.agent.canvas.files",
       "app.agent.templates.save",
       "app.agent.composer.welcome",
       "app.agent.lifecycle.control",

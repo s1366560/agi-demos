@@ -468,6 +468,16 @@
       "scope": "project"
     },
     {
+      "id": "chat-canvas-files",
+      "host_operation": "app.agent.canvas.files",
+      "payload": {},
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.canvas.files"
+      ],
+      "scope": "project"
+    },
+    {
       "id": "chat-welcome",
       "host_operation": "app.agent.composer.welcome",
       "payload": {},
@@ -548,7 +558,7 @@
       ],
       "entry": {
         "path": "ui/chat-web.js",
-        "digest": "sha256:ea49155886d878b6672ea7d16ee20ccbb2da80f467c12eb7c2224739887b2427"
+        "digest": "sha256:592d1fb3387545943c3e4dca2936a39cd7d1603eba408017f4413dccf7b2e530"
       },
       "commands": [
         "chat-list",
@@ -571,6 +581,7 @@
         "chat-models",
         "chat-project-context",
         "chat-save-template",
+        "chat-canvas-files",
         "chat-welcome",
         "chat-lifecycle-control",
         "chat-voice-authorize"
@@ -667,7 +678,7 @@
       "workbench": true,
       "entry": {
         "path": "ui/web-dashboard.js",
-        "digest": "sha256:e313b8cde70f06371d8fb24154f1d95cb8ed1a539460459495919fd7b4fa7622"
+        "digest": "sha256:660e7e54395f2a3a8275e44f49ac67f080f80e09357e4c0edfec59764ce2212b"
       },
       "style": {
         "path": "ui/web-dashboard.css",

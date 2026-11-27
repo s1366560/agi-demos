@@ -304,6 +304,12 @@ async def list_conversations(
                     )
                     if row.get(key)
                 },
+                # How much a conversation holds, which the workbench shows when one is picked.
+                **(
+                    {"message_count": row["message_count"]}
+                    if isinstance(row.get("message_count"), int)
+                    else {}
+                ),
                 "sidebar_active": row.get("status") == "active",
                 "sidebar_hidden": bool(
                     row.get("parent_conversation_id")

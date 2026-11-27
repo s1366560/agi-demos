@@ -4343,7 +4343,18 @@
     }
   },
   "comparison": {
-    "compare": "Compare"
+    "compare": "Compare",
+      "exitCompare": "Exit comparison",
+      "loadFailed": "Failed to load messages",
+      "loading": "Loading…",
+      "messageCount": "{{count}} messages",
+      "messageCount_one": "{{count}} message",
+      "messageCount_other": "{{count}} messages",
+      "noMessages": "No messages",
+      "noResults": "No conversations found",
+      "search": "Search conversations…",
+      "selectConversation": "Select conversation to compare",
+      "title": "Compare Conversations"
   },
   "nav": {
     "agentBindings": "Agent Bindings",
