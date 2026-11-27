@@ -451,8 +451,10 @@ export async function executeVaultBoundCloudRequest(
   } else {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
+  assertSingleProjectScope(request, endpoint);
+  const adopted = await adoptVisibleProject(endpoint, selected, session, dependencies);
   const context = fullDesktop
-    ? await observeEndpointWorkspaceScope(endpoint, selected, session, dependencies) : selected;
+    ? await observeEndpointWorkspaceScope(endpoint, adopted, session, dependencies) : adopted;
   assertEndpointScope(endpoint, context);
   if (fullDesktop && request.memory_scope !== undefined) {
     assertCloudMemoryContext(request.memory_scope, contextBody);
@@ -1633,6 +1635,70 @@ async function observeEndpointWorkspaceScope(
     throw new Error('cloud request workspace scope observation failed');
   }
   return Object.freeze({ ...context, workspaceId: endpoint.workspaceId });
+}
+
+function declaredProjectIds(
+  request: VaultBoundCloudRequestInput,
+  endpoint: AuthorizedEndpoint,
+): Set<string> {
+  const target = new URL(request.path, 'https://desktop.invalid');
+  const names = new Set<string>();
+  if (endpoint.projectId !== null) names.add(endpoint.projectId);
+  for (const value of target.searchParams.getAll('project_id')) {
+    if (value) names.add(value);
+  }
+  const bodyProject = request.body?.project_id;
+  if (typeof bodyProject === 'string' && bodyProject.length > 0) names.add(bodyProject);
+  const parts = target.pathname.split('/');
+  if (parts[3] === 'tenants' && parts[5] === 'projects' && parts[6]) {
+    names.add(decodeURIComponent(parts[6]));
+  }
+  return names;
+}
+
+/** Path, query, and body may name one project. Two different ids are a contradiction. */
+function assertSingleProjectScope(
+  request: VaultBoundCloudRequestInput,
+  endpoint: AuthorizedEndpoint,
+): void {
+  if (declaredProjectIds(request, endpoint).size > 1) {
+    throw new Error('cloud request project scope mismatch');
+  }
+}
+
+/**
+ * A catalog-visible project on the request is authoritative. The saved workspace
+ * context is replaced for this call and no longer blocks the request by itself.
+ */
+async function adoptVisibleProject(
+  endpoint: AuthorizedEndpoint,
+  context: Readonly<{ tenantId: string; projectId: string | null; workspaceId: string | null }>,
+  session: TrustedCloudSession,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<typeof context> {
+  if (endpoint.tenantId !== null && endpoint.tenantId !== context.tenantId) {
+    throw new Error('cloud request tenant scope mismatch');
+  }
+  if (endpoint.projectId === null || endpoint.projectId === context.projectId) return context;
+  const response = await authorizedFetch(session, dependencies, {
+    path: `/api/v1/projects/${encodeURIComponent(endpoint.projectId)}?tenant_id=${encodeURIComponent(context.tenantId)}`,
+    method: 'GET',
+  });
+  const body = await boundedJson(response, false, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (
+    !response.ok ||
+    !isRecord(body) ||
+    body.id !== endpoint.projectId ||
+    body.tenant_id !== context.tenantId
+  ) {
+    throw new Error('cloud request project scope mismatch');
+  }
+  return Object.freeze({
+    tenantId: context.tenantId,
+    projectId: endpoint.projectId,
+    workspaceId: null,
+  });
 }
 
 function assertEndpointScope(

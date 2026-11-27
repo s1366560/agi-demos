@@ -247,236 +247,386 @@
       "payload": {
         "content": "---\nname: example\ndescription: Validate the document structure.\n---\n# Example"
       },
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "tools.execute"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-list",
       "host_operation": "app.agent.list",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.list"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-create",
       "host_operation": "app.agent.create",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.create"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-history",
       "host_operation": "app.agent.history",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.history"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-turn",
       "host_operation": "app.agent.turn",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.turn"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-cancel",
       "host_operation": "app.agent.cancel",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.cancel"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-rename",
       "host_operation": "app.agent.rename",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.rename"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-interactions",
       "host_operation": "app.agent.interactions",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.interactions"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-respond",
       "host_operation": "app.agent.respond",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.respond"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-upload",
       "host_operation": "app.agent.attachments",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.attachments"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-attached-turn",
       "host_operation": "app.agent.attachments.turn",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.attachments.turn"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "activity-list",
       "host_operation": "app.agent.activity.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.activity.read"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "activity-mark",
       "host_operation": "app.agent.activity.receipts",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.activity.receipts"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "review-latest",
       "host_operation": "app.agent.review.latest",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.review.latest"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "review-details",
       "host_operation": "app.agent.review.details",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.review.details"
-      ]
+      ],
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "dashboard-read",
       "host_operation": "app.agent.dashboard.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.agent.dashboard.read"
       ],
       "accepts_input": true,
-      "scope": "tenant"
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "dashboard-trace",
       "host_operation": "app.agent.dashboard.trace",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.agent.dashboard.trace"
       ],
       "accepts_input": true,
-      "scope": "tenant"
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "dashboard-configure",
       "host_operation": "app.agent.dashboard.configure",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.agent.dashboard.configure"
       ],
       "accepts_input": true,
-      "scope": "tenant"
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-composer-read",
       "host_operation": "app.agent.composer.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.composer.read"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-composer-save",
       "host_operation": "app.agent.composer.save",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.composer.save"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-models",
       "host_operation": "app.agent.composer.models",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.composer.models"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-project-context",
       "host_operation": "app.agent.composer.context",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.composer.context"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-welcome",
       "host_operation": "app.agent.composer.welcome",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.composer.welcome"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-lifecycle-control",
       "host_operation": "app.agent.lifecycle.control",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.lifecycle.control"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "chat-voice-authorize",
       "host_operation": "app.agent.voice.authorize",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "accepts_input": true,
       "permissions": [
         "app.agent.voice.authorize"
       ],
-      "scope": "project"
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [
@@ -518,10 +668,10 @@
       "home": true,
       "title": "Agent chat",
       "routes": [
-        "/tenant/:tenantId/agent-workspace",
-        "/tenant/:tenantId/agent-workspace/:conversationId",
         "/agent/chat",
-        "/agent/chat/:conversationId"
+        "/agent/chat/:conversationId",
+        "/tenant/:tenantId/project/:projectId/agent-workspace",
+        "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId"
       ],
       "targets": [
         "web",
@@ -556,6 +706,103 @@
       ],
       "device_tools": [
         "local_chat"
+      ],
+      "style": {
+        "path": "ui/chat-web.css",
+        "digest": "sha256:76751fae9078406635e580e473438f16a492f5de4365fbfeed196d429baa0f14"
+      },
+      "workbench": true,
+      "sidebar": {
+        "rows": {
+          "command": "chat-list",
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title",
+            "target": "execution_target",
+            "group": "workspace_id",
+            "child": "linked_workspace_task_id",
+            "groupLabel": "workspace_name",
+            "updatedAt": "updated_at",
+            "createdAt": "created_at",
+            "active": "sidebar_active",
+            "role": "sidebar_role",
+            "hidden": "sidebar_hidden"
+          },
+          "route": "/tenant/:tenantId/project/:projectId/agent-workspace",
+          "row_route": "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId",
+          "row_param": "conversationId",
+          "group_query": "workspaceId",
+          "constants": {
+            "workbench": true,
+            "limit": 10
+          }
+        },
+        "create": {
+          "command": "chat-create",
+          "inputs": {
+            "title": "label",
+            "workspace_id": "group"
+          },
+          "fields": {
+            "id": "id"
+          }
+        },
+        "rename": {
+          "command": "chat-rename",
+          "inputs": {
+            "conversation_id": "id",
+            "title": "label"
+          }
+        }
+      },
+      "query_params": [
+        "workspaceId",
+        "conversationId"
+      ],
+      "page_links": [
+        "memstack-environments/sandbox-interaction",
+        "memstack-workspace/workspace-posts"
+      ],
+      "navigation_actions": [
+        "primary-create"
+      ],
+      "anchored_slots": {
+        "code@1": "memstack-environments/agent-code",
+        "collab@1": "memstack-workspace/agent-collab"
+      },
+      "voice_authorization": "chat-voice-authorize"
+    },
+    {
+      "id": "tenant-chat",
+      "title": "Agent chat",
+      "routes": [
+        "/tenant/:tenantId/agent-workspace",
+        "/tenant/:tenantId/agent-workspace/:conversationId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/chat-web.js",
+        "digest": "sha256:c3fb6ab62ac41dd06de5577c3f73d9942ddab2bf404c7e7903d63125fc71f56c"
+      },
+      "commands": [
+        "chat-list",
+        "chat-create",
+        "chat-history",
+        "chat-turn",
+        "chat-cancel",
+        "chat-rename",
+        "chat-interactions",
+        "chat-respond",
+        "chat-upload",
+        "chat-attached-turn",
+        "activity-list",
+        "activity-mark",
+        "review-latest",
+        "review-details"
       ],
       "style": {
         "path": "ui/chat-web.css",
@@ -617,11 +864,7 @@
       "navigation_actions": [
         "primary-create"
       ],
-      "anchored_slots": {
-        "code@1": "memstack-environments/agent-code",
-        "collab@1": "memstack-workspace/agent-collab"
-      },
-      "voice_authorization": "chat-voice-authorize"
+      "scope": "tenant"
     },
     {
       "id": "dashboard",

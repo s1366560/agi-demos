@@ -325,6 +325,9 @@ def _check_contributions(contribution: "ContributionDocument", entrypoint: str) 
             )
         for schema in (tool.input_schema, tool.output_schema):
             _check_schema(schema)
+    for command in contribution.commands:
+        for schema in (command.input_schema, command.output_schema):
+            _check_schema(schema)
 
 
 def _executable(

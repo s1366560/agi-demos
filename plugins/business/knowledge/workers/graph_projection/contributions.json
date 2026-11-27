@@ -178,128 +178,212 @@
         "nodes": [],
         "edges": []
       },
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "tools.execute",
         "graph.projection.compute"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-memories",
       "host_operation": "app.knowledge.memories.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.read"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-memory",
       "host_operation": "app.knowledge.memories.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.read"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "save-memory",
       "host_operation": "app.knowledge.memories.write",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.write"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-entities",
       "host_operation": "app.knowledge.entities.list",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.entities.list"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "entity-types",
       "host_operation": "app.knowledge.entities.types",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.entities.types"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "entity-relationships",
       "host_operation": "app.knowledge.entities.relationships",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.entities.relationships"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "delete-memory",
       "host_operation": "app.knowledge.memories.delete",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.delete"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "reindex-memory",
       "host_operation": "app.knowledge.memories.reindex",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.reindex"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "index-status",
       "host_operation": "app.knowledge.memories.index_status",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.index_status"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "optimize-content",
       "host_operation": "app.knowledge.memories.optimize",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.memories.optimize"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-graph",
       "host_operation": "app.knowledge.graph.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.graph.read"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-subgraph",
       "host_operation": "app.knowledge.graph.subgraph",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.graph.subgraph"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "search-project",
       "host_operation": "app.knowledge.search",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.knowledge.search"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [

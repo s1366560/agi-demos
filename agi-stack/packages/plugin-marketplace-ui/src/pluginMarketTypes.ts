@@ -82,6 +82,10 @@ export function packageBase(projectId: string | null) {
   return projectId === null ? TENANT_MARKET_BASE : MARKET_BASE;
 }
 
+export function npmResourcePath(projectId: string | null, action: 'detail' | 'resolve'): string {
+  return `${packageBase(projectId)}/npm/${action}`;
+}
+
 export function packageScope(tenantId: string, projectId: string | null): Record<string, string> {
   return projectId === null ? { tenant_id: tenantId } : { tenant_id: tenantId, project_id: projectId };
 }

@@ -157,7 +157,7 @@ desktop-cua-repl: ## 桌面:暂存独立 Node computer-use REPL
 ifneq ($(filter run-desktop run-desktop-electron,$(MAKECMDGOALS)),)
 MEMSTACK_DEV_ROOT := $(abspath ..)
 include $(dir $(lastword $(MAKEFILE_LIST)))../scripts/dev/profile.mk
-AGISTACK_DESKTOP_PROFILE ?= $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),full,thin)
+AGISTACK_DESKTOP_PROFILE ?= $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),full,package-host)
 AGISTACK_WEB_CONTROL_PLANE_ORIGIN ?= http://localhost:3000
 AGISTACK_DESKTOP_GRANTS_API_BASE ?= http://127.0.0.1:8000
 # A checkout operator may provision device publisher trust separately from cloud signing trust.

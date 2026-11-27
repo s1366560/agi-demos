@@ -1,7 +1,8 @@
-// Electron Vite replaces this flag in both privileged bundles. Direct module tests
-// exercise the historical full client unless they explicitly compile the package profile.
-declare const __AGISTACK_FULL_DESKTOP__: boolean;
-export const fullDesktop = typeof __AGISTACK_FULL_DESKTOP__ === 'undefined' || __AGISTACK_FULL_DESKTOP__;
+// Electron Vite replaces this flag in both privileged bundles. A missing flag is the
+// package host: the full client is opt-in, never the fallback.
+declare const __AGISTACK_FULL_DESKTOP__: boolean | undefined;
+export const fullDesktop =
+  typeof __AGISTACK_FULL_DESKTOP__ === 'boolean' && __AGISTACK_FULL_DESKTOP__;
 
 declare const __AGISTACK_COMPAT_DESKTOP__: boolean;
 export const sidecarRuntimeProfile =

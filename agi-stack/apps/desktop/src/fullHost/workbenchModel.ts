@@ -1,5 +1,13 @@
-import { scopedPageLocation, splitPageLocation } from '../../../../packages/plugin-slots/src/pageLocation';
-import { menuPath, routeRank, type PackagePage } from '../../../../packages/plugin-slots/src/richPage';
+import {
+  routeMatchPaths,
+  scopedPageLocation,
+  splitPageLocation,
+} from '../../../../packages/plugin-slots/src/pageLocation';
+import {
+  menuPath,
+  routeRank,
+  type PackagePage,
+} from '../../../../packages/plugin-slots/src/richPage';
 import {
   groupWorkbenchHeader,
   layoutWorkbenchHeader,
@@ -203,13 +211,18 @@ export function selectInstalledPage<
   for (const entry of entries) {
     if (!pageInstallationMatches(address, entry.projectId)) continue;
     for (const route of entry.page.routes) {
-      const rank = routeRank(route, pathname, {
+      for (const candidate of routeMatchPaths(pathname, {
         tenantId,
         projectId: entry.projectId,
-      });
-      if (rank !== null && (!winner || rank > best)) {
-        winner = entry;
-        best = rank;
+      })) {
+        const rank = routeRank(route, candidate, {
+          tenantId,
+          projectId: entry.projectId,
+        });
+        if (rank !== null && (!winner || rank > best)) {
+          winner = entry;
+          best = rank;
+        }
       }
     }
   }

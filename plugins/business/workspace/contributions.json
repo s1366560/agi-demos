@@ -74,10 +74,16 @@
         "header": true,
         "rows": []
       },
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "tools.execute"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-directory",
@@ -86,7 +92,13 @@
         "app.workspace.directory.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-workspace",
@@ -95,7 +107,13 @@
         "app.workspace.detail.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "create-workspace",
@@ -104,7 +122,13 @@
         "app.workspace.create"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "update-workspace",
@@ -113,7 +137,13 @@
         "app.workspace.settings.update"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-members",
@@ -122,7 +152,13 @@
         "app.workspace.members.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-members",
@@ -131,7 +167,13 @@
         "app.workspace.members.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-posts",
@@ -140,7 +182,13 @@
         "app.workspace.posts.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-posts",
@@ -149,7 +197,13 @@
         "app.workspace.posts.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-tasks",
@@ -158,7 +212,13 @@
         "app.workspace.tasks.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "change-tasks",
@@ -167,25 +227,43 @@
         "app.workspace.tasks.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "blackboard-read",
       "host_operation": "app.workspace.blackboard.read",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.workspace.blackboard.read"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "blackboard-change",
       "host_operation": "app.workspace.blackboard.write",
       "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "app.workspace.blackboard.write"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-project-overview",
@@ -193,7 +271,15 @@
       "permissions": [
         "app.workspace.overview.read"
       ],
-      "payload": {}
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-group-chat",
@@ -202,7 +288,13 @@
         "app.workspace.chat.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "send-group-message",
@@ -211,7 +303,13 @@
         "app.workspace.chat.send"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [
@@ -234,8 +332,7 @@
       "title": "Workspace directory",
       "routes": [
         "/workspaces",
-        "/tenant/:tenantId/project/:projectId/workspaces",
-        "/tenant/:tenantId/workspaces"
+        "/tenant/:tenantId/project/:projectId/workspaces"
       ],
       "targets": [
         "web",
@@ -308,6 +405,83 @@
       }
     },
     {
+      "id": "tenant-directory",
+      "title": "Workspace directory",
+      "routes": [
+        "/tenant/:tenantId/workspaces"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspaces-web.js",
+        "digest": "sha256:7a931dcff242ffea08a1113195412d06d290087c5b6094a17737d9d139c8dba0"
+      },
+      "commands": [
+        "list-directory"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspaces-web.css",
+        "digest": "sha256:05d000975c016ebfd45585ef70db794a5ffceb247860244e4f4e7565cd8ab098"
+      },
+      "workbench": true,
+      "query_params": [
+        "q",
+        "page"
+      ],
+      "sidebar": {
+        "groups": {
+          "command": "list-directory",
+          "inputs": {
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "constants": {
+            "cards": true
+          },
+          "collection": "rows",
+          "fields": {
+            "id": "id",
+            "label": "name"
+          },
+          "match": {
+            "tenant_id": "tenant",
+            "project_id": "project",
+            "is_archived": "inactive"
+          }
+        },
+        "group": {
+          "command": "read-workspace",
+          "inputs": {
+            "workspace_id": "id"
+          },
+          "fields": {
+            "id": "id",
+            "label": "name"
+          }
+        },
+        "children": {
+          "command": "list-tasks",
+          "inputs": {
+            "workspace_id": "id",
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title"
+          },
+          "match": {
+            "workspace_id": "id"
+          }
+        }
+      },
+      "scope": "tenant"
+    },
+    {
       "id": "directory-export",
       "title": "Workspace CSV export",
       "routes": [
@@ -368,9 +542,7 @@
       "title": "Create workspace",
       "routes": [
         "/workspaces/new",
-        "/tenant/:tenantId/project/:projectId/workspaces/new",
-        "/tenant/:tenantId/workspaces/new",
-        "/tenant/workspaces/new"
+        "/tenant/:tenantId/project/:projectId/workspaces/new"
       ],
       "targets": [
         "web",
@@ -392,6 +564,34 @@
       "navigation_actions": [
         "group-create"
       ]
+    },
+    {
+      "id": "tenant-create",
+      "title": "Create workspace",
+      "routes": [
+        "/tenant/:tenantId/workspaces/new"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspace-create-web.js",
+        "digest": "sha256:2e8153d46cdd7ce46ed5ae45e4500b8eb9e4f12775d288f173568208effdb7d2"
+      },
+      "commands": [
+        "create-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspace-create-web.css",
+        "digest": "sha256:4ab38188dbf00b35acd443c86b6443d055c4c7534a2abf620f793aaf3c5ee5db"
+      },
+      "workbench": true,
+      "navigation_actions": [
+        "group-create"
+      ],
+      "scope": "tenant"
     },
     {
       "id": "settings",

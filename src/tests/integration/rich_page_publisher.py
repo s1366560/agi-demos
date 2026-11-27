@@ -99,6 +99,8 @@ def publish_page(
                 "tool": "cloud_label",
                 "permissions": ["tools.execute"],
                 "payload": {},
+                "input_schema": {"type": "object"},
+                "output_schema": {"type": "object"},
             }
         ],
         "pages": [

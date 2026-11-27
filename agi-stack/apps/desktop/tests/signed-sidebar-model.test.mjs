@@ -170,6 +170,46 @@ test('the sidebar follows the signed page that owns the open route', () => {
   );
 });
 
+test('a tenant installation owns the sidebar when the address names no project', () => {
+  const tenant = page();
+  tenant.projectId = null;
+  tenant.pluginId = 'memstack-billing';
+  tenant.page = {
+    ...tenant.page,
+    id: 'billing',
+    routes: ['/tenant/:tenantId/billing'],
+    sidebar: { rows: rowsBinding },
+  };
+  const owner = findSidebarOwner(
+    [page(), tenant],
+    't',
+    null,
+    'rows',
+    '/tenant/t/billing?packageScope=tenant',
+  );
+  assert.equal(owner.pluginId, 'memstack-billing');
+  assert.equal(
+    findSidebarOwner([page()], 't', null, 'rows', '/tenant/t/agent-workspace'),
+    null,
+  );
+});
+
+test('a project page matches the tenant address once the query names that project', () => {
+  const chat = page();
+  chat.page = {
+    ...chat.page,
+    routes: ['/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId'],
+  };
+  const owner = findSidebarOwner(
+    [chat],
+    't',
+    'p',
+    'rows',
+    '/tenant/t/agent-workspace/c?project=p',
+  );
+  assert.equal(owner.pluginId, 'memstack-agent');
+});
+
 test('the session tree waits out a project switch instead of showing an empty project', () => {
   const base = { project: 'project-next', scopeBlocked: false, pagesLoading: false, switchFailed: false };
   assert.equal(signedSidebarLoadPhase({ ...base, scopeBlocked: true }), 'wait');

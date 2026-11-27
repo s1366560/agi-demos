@@ -1,5 +1,10 @@
 import { richPageFramePlugin } from '../../packages/plugin-slots/viteRichPageFrame.mjs';
-import { compatibilityProfile, fullDesktopProfile, legacyRendererEntry } from './scripts/legacyRendererProfile';
+import {
+  compatibilityProfile,
+  fullDesktopProfile,
+  legacyBusinessProfile,
+  legacyRendererEntry,
+} from './scripts/legacyRendererProfile';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import { dirname, resolve } from 'node:path';
@@ -34,7 +39,7 @@ export default defineConfig(({ command }) => ({
       // production build would leave Rollup in watch mode forever.
       ...(command === 'serve' ? { watch: { exclude: generatedOutputWatchIgnores } } : {}),
       rollupOptions: {
-        ...(fullDesktopProfile ? {} : {
+        ...(legacyBusinessProfile ? {} : {
           treeshake: { moduleSideEffects: (id: string) => !id.includes('/electron/main/iab/') },
         }),
         input: {
@@ -55,7 +60,7 @@ export default defineConfig(({ command }) => ({
       rollupOptions: {
         input: {
           index: resolve(desktopRoot, 'electron/preload/index.ts'),
-          ...(fullDesktopProfile ? {
+          ...(legacyBusinessProfile ? {
             iab: resolve(desktopRoot, 'electron/preload/iabPreload.ts'),
             mcpAppGuest: resolve(desktopRoot, 'electron/preload/mcpAppGuestPreload.ts'),
           } : {}),
@@ -74,13 +79,13 @@ export default defineConfig(({ command }) => ({
       rendererRootHotReload(desktopRoot),
       react(),
       richPageFramePlugin(),
-      ...(fullDesktopProfile ? [legacyRendererEntry] : []),
+      ...(legacyBusinessProfile ? [legacyRendererEntry] : []),
     ],
     resolve: {
       dedupe: ['@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/xterm', 'react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'],
       alias: {
         '@desktop': resolve(desktopRoot, 'src'),
-        ...(fullDesktopProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
+        ...(legacyBusinessProfile ? {'@business': resolve(desktopRoot, '../../../plugins/business')} : {}),
         '@agistack/plugin-runtime': resolve(
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
@@ -102,7 +107,7 @@ export default defineConfig(({ command }) => ({
       outDir: resolve(desktopRoot, desktopOutput, 'renderer'),
       emptyOutDir: true,
       rollupOptions: {
-        input: { index: resolve(desktopRoot, 'index.html'), ...(fullDesktopProfile
+        input: { index: resolve(desktopRoot, 'index.html'), ...(legacyBusinessProfile
           ? { mcpApp: resolve(desktopRoot, 'mcp-app.html') } : {}) },
       },
     },

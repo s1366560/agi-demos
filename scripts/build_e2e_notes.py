@@ -46,6 +46,8 @@ def build_notes(signer: Ed25519PrivateKey, version: str, title: str, result: str
                     "id": "save",
                     "tool": tool["name"],
                     "payload": {"op": "ping"},
+                    "input_schema": {"type": "object"},
+                    "output_schema": {"type": "object"},
                     "permissions": ["tools.execute"],
                 }
             ],

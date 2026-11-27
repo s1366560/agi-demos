@@ -19,6 +19,24 @@ const hostParameters = new Set([
   "state",
 ]);
 
+export type PageMatchScope = { tenantId: string; projectId: string | null };
+
+/**
+ * A project-scoped declaration names `:projectId` in the path. The same address
+ * without that segment still reaches it when the query already names the project.
+ */
+export function routeMatchPaths(pathname: string, scope: PageMatchScope): readonly string[] {
+  if (!scope.projectId) return [pathname];
+  const parts = pathname.split("/");
+  if (parts[1] !== "tenant" || parts[2] !== scope.tenantId || parts[3] === "project") {
+    return [pathname];
+  }
+  return [
+    pathname,
+    ["", "tenant", parts[2], "project", scope.projectId, ...parts.slice(3)].join("/"),
+  ];
+}
+
 /** Split before matching: URL would normalize dot segments before the route authorization check. */
 export function splitPageLocation(path: string) {
   const fragment = path.indexOf("#");

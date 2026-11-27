@@ -157,6 +157,12 @@ def _strings(value: object, pattern: re.Pattern[str]) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _tenant_route_without_project(route: str) -> bool:
+    """A `/tenant/...` path that never names `:projectId` is a tenant page."""
+    parts = route.split("/")
+    return len(parts) >= 3 and parts[1] == "tenant" and ":projectId" not in parts
+
+
 def _check_route(route: str) -> None:
     parts = route[1:].split("/")
     root = parts[0].lower()
@@ -264,6 +270,8 @@ def _parse_page(value: object, commands: set[str]) -> RichPage:
     scope = value.get("scope", "project")
     if scope not in ("tenant", "project"):
         raise ValueError("unsupported rich page scope")
+    if scope != "tenant" and any(_tenant_route_without_project(route) for route in routes):
+        raise ValueError("tenant path without a project parameter requires scope tenant")
     if scope == "tenant" and (
         not routes
         or any(

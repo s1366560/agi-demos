@@ -1,4 +1,8 @@
-import { scopedPageLocation, splitPageLocation } from '../../../../packages/plugin-slots/src/pageLocation';
+import {
+  routeMatchPaths,
+  scopedPageLocation,
+  splitPageLocation,
+} from '../../../../packages/plugin-slots/src/pageLocation';
 import type { SidebarBindings } from '../../../../packages/plugin-slots/src/sidebar';
 import type { AgentConversation, WorkspaceSummary } from '../types';
 
@@ -148,8 +152,8 @@ export function findSidebarOwner<T extends SidebarHostPage>(
   slot: 'rows' | 'groups',
   address: string,
 ): T | null {
-  if (!project) return null;
   const { pathname } = splitPageLocation(address);
+  const scope = { tenantId: tenant, projectId: project };
   const eligible = entries.filter((entry) => {
     const binding = entry.page.sidebar?.[slot];
     return (
@@ -163,11 +167,12 @@ export function findSidebarOwner<T extends SidebarHostPage>(
   return (
     eligible.find((entry) =>
       entry.page.routes.some((route) =>
-        routeMatches(route, pathname, { tenantId: tenant, projectId: project }),
+        routeMatchPaths(pathname, scope).some((candidate) =>
+          routeMatches(route, candidate, scope),
+        ),
       ),
     ) ??
-    eligible[0] ??
-    null
+    (project ? eligible[0] ?? null : null)
   );
 }
 

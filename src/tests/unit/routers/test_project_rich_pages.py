@@ -70,6 +70,19 @@ def test_invalid_rich_declarations(modify):
         parse_rich_pages([{**page(), **modify}], {"ping"})
 
 
+def test_tenant_path_without_project_requires_tenant_scope():
+    with pytest.raises(ValueError, match="requires scope tenant"):
+        parse_rich_pages(
+            [{**page(), "routes": ["/tenant/:tenantId/workspaces"]}],
+            {"ping"},
+        )
+    (declared,) = parse_rich_pages(
+        [{**page(), "scope": "tenant", "routes": ["/tenant/:tenantId/workspaces"]}],
+        {"ping"},
+    )
+    assert declared.scope == "tenant"
+
+
 def test_signed_embedded_views_use_versioned_slots_and_have_no_navigation_route():
     owner, widget = parse_rich_pages(
         [

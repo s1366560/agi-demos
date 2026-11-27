@@ -1,6 +1,8 @@
 import { decodeSlotActionV2, type SlotActionV2 } from './ownerContext';
+import { SLOT_MESSAGE_SOURCE } from './protocol';
 
-export const SLOT_PORT_MESSAGE_SOURCE_V2 = 'memstack-plugin-slot-v2' as const;
+/** Frame and port messages share one source. Identity fields still distinguish a port message. */
+export const SLOT_PORT_MESSAGE_SOURCE_V2 = SLOT_MESSAGE_SOURCE;
 
 export interface SlotBridgeIdentityV2 {
   readonly slotId: string;

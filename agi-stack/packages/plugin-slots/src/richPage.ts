@@ -148,6 +148,7 @@ export async function verifyPageDocument(
   )
     ? "data:"
     : "'none'";
+  const contentSecurityPolicy = richPageContentSecurityPolicy(workerPolicy);
   const guest = btoa(guestSource);
   // The full Web layout inherits the original application typography below the shell.
   const workbenchTypography = target === "web" ? "#root{font-size:14px;line-height:22px}:where(h1,h2,h3,h4,h5,h6){font-size:inherit;line-height:inherit}" : "";
@@ -156,8 +157,8 @@ export async function verifyPageDocument(
     : "<style>html{font:16px/1.5 system-ui;color-scheme:light dark}body{margin:0;padding:1.25rem}main{max-width:72rem;margin:auto}form,label{display:grid;gap:.5rem}form{gap:1rem;margin-bottom:1rem}input,textarea,select,button{max-width:100%;box-sizing:border-box;font:inherit;padding:.45rem}button{cursor:pointer}fieldset{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:start;padding:.4rem .65rem}</style>";
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
-    '<meta http-equiv="Content-Security-Policy" content="worker-src ' +
-    workerPolicy +
+    '<meta http-equiv="Content-Security-Policy" content="' +
+    contentSecurityPolicy +
     '">' +
     baseStyle +
     css +
@@ -190,6 +191,22 @@ function segments(path: string) {
     return null;
   }
 }
+/** Inner signed page. Network stays closed; fonts and images are package data URLs. */
+export function richPageContentSecurityPolicy(workerPolicy: "data:" | "'none'"): string {
+  return [
+    "default-src 'none'",
+    "connect-src 'none'",
+    "font-src data:",
+    "img-src data:",
+    "style-src 'unsafe-inline' data:",
+    "script-src data:",
+    `worker-src ${workerPolicy}`,
+    "frame-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
+
 function scopeParam(key: string, scope: PageScope) {
   if (key === "tenantId" || key === "tenant_id") return scope.tenantId;
   if (key === "projectId" || key === "project_id") return scope.projectId;

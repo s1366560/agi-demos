@@ -67,6 +67,8 @@ def _body() -> dict[str, object]:
                     "id": "ping",
                     "tool": "note.ping",
                     "payload": {"op": "ping"},
+                    "input_schema": {"type": "object"},
+                    "output_schema": {"type": "object"},
                     "permissions": ["tools.execute"],
                 }
             ],
@@ -123,6 +125,8 @@ def publisher(tmp_path):
                     "host_operation": capability,
                     "payload": {},
                     "accepts_input": True,
+                    "input_schema": {"type": "object"},
+                    "output_schema": {"type": "object"},
                     "permissions": [capability],
                 }
             )

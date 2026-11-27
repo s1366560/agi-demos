@@ -398,10 +398,16 @@
         },
         "start": "2026-01-01T00:00:00Z"
       },
+      "input_schema": {
+        "type": "object"
+      },
       "permissions": [
         "tools.execute"
       ],
-      "accepts_input": true
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "run-workflow",
@@ -412,7 +418,13 @@
       "payload": {
         "steps": []
       },
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-playbooks",
@@ -420,7 +432,15 @@
       "permissions": [
         "app.automation.playbooks.read"
       ],
-      "payload": {}
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-schedules",
@@ -429,7 +449,13 @@
         "app.automation.schedules.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "save-schedule",
@@ -438,7 +464,13 @@
         "app.automation.schedules.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "run-schedule",
@@ -447,7 +479,13 @@
         "app.automation.schedules.run"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "save-workflow",
@@ -458,7 +496,13 @@
         "storage.write"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-workflows",
@@ -468,7 +512,13 @@
         "storage.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "execute-workflow",
@@ -478,7 +528,13 @@
         "storage.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "delete-schedule",
@@ -487,7 +543,13 @@
         "app.automation.schedules.delete"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-patterns",
@@ -496,7 +558,13 @@
         "app.automation.patterns.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "delete-pattern",
@@ -505,7 +573,13 @@
         "app.automation.patterns.delete"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-verdicts",
@@ -513,7 +587,15 @@
       "permissions": [
         "app.automation.verdicts.read"
       ],
-      "payload": {}
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "read-events",
@@ -522,7 +604,13 @@
         "app.automation.events.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "event-types",
@@ -531,7 +619,13 @@
         "app.automation.events.types"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "list-webhooks",
@@ -540,7 +634,13 @@
         "app.automation.webhooks.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "create-webhook",
@@ -549,7 +649,13 @@
         "app.automation.webhooks.create"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "update-webhook",
@@ -558,7 +664,13 @@
         "app.automation.webhooks.update"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "delete-webhook",
@@ -567,7 +679,13 @@
         "app.automation.webhooks.delete"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     },
     {
       "id": "schedule-conversations",
@@ -576,7 +694,13 @@
         "app.automation.conversations.read"
       ],
       "payload": {},
-      "accepts_input": true
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
     }
   ],
   "ui": [
