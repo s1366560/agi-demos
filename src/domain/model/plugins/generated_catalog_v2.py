@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca4c20'
-    '44","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:6c5d786b02d04c328e19591476b39d606a6ed8715c3e800b08b077b76fda07'
+    '91","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -3787,7 +3787,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'point":"src.infrastructure.plugins.v2.ai_tool_services:_apply_ai_tool_tenant_provider_v2'
     '","module_ref":"builtin://memstack/persistence/ai-tool-tenant-provider","plugin_id":"mem'
     'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":'
-    '"sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20","artifact_sour'
+    '"sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c","artifact_sour'
     'ce":"repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py","contra'
     'ct":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addition'
     'alProperties":false,"properties":{"batch_size":{"maximum":100,"minimum":1,"type":"intege'
@@ -3837,8 +3837,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '2c81e2f63522b72773df791eaa763","entrypoint":"src.infrastructure.plugins.v2.artifact_life'
     'cycle_persistence:artifact_lifecycle_persistence_provider_definition_v2","module_ref":"b'
     'uiltin://memstack/persistence/artifact-lifecycle-provider","plugin_id":"memstack-runtime'
-    '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:ce81e'
-    'f619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20","artifact_source":"repo+pyt'
+    '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:5dfa1'
+    'cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c","artifact_source":"repo+pyt'
     'hon://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py","contract":{"config_'
     'schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties"'
     ':false,"properties":{"strategy":{"const":"sqlalchemy-async-sessionmaker","type":"string"'
@@ -4687,7 +4687,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '4dcc64f0b9c","entrypoint":"src.infrastructure.plugins.v2.session_event_log:_apply_sessio'
     'n_event_log_v2","module_ref":"builtin://memstack/session/event-log","plugin_id":"memstac'
     'k-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha'
-    '256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20","artifact_source":'
+    '256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c","artifact_source":'
     '"repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py","contract":'
     '{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPr'
     'operties":false,"properties":{"strategy":{"const":"s3-settings","type":"string"}},"requi'
@@ -4846,7 +4846,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rsion":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca4c2044"
+    "sha256:6c5d786b02d04c328e19591476b39d606a6ed8715c3e800b08b077b76fda0791"
 )
 # fmt: on
 

@@ -1558,7 +1558,7 @@
       },
       "contract_digest": "sha256:f04be927f8996c45a457afe3e6cb45f23761de4c30387ca1446d6def476a4111",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
@@ -1599,7 +1599,7 @@
       },
       "contract_digest": "sha256:657cae4d7231d5e75e4fbf8ffc217a7d2333db11ffec875d545202189f80f4b0",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
@@ -3336,7 +3336,7 @@
       },
       "contract_digest": "sha256:84adfd2c132bf5d8c6cb7dc62b7d72984d68faebfec51733b98f8677904e798b",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
