@@ -14,6 +14,7 @@ const {
   settledWorkspaceNodes,
   signedDeepLink,
   signedSidebarLoadPhase,
+  signedSidebarRetryTarget,
   workspacePagePath,
 } = require('/tmp/agistack-desktop-test-dist/src/fullHost/signedSidebarModel.js');
 
@@ -180,4 +181,12 @@ test('the session tree waits out a project switch instead of showing an empty pr
   assert.match(hook, /phase === 'wait'/);
   assert.match(hook, /phase === 'blocked'/);
   assert.match(hook, /setLoading\(true\)/);
+  assert.equal(signedSidebarRetryTarget(true), 'scope-switch');
+  assert.equal(signedSidebarRetryTarget(false), 'catalog');
+  const workbench = readFileSync(new URL('../src/fullHost/FullWorkbench.tsx', import.meta.url), 'utf8');
+  assert.match(workbench, /signedSidebarRetryTarget\(Boolean\(scopeSwitchError\)\)/);
+  assert.match(workbench, /setSwitchAttempt\(\(attempt\) => attempt \+ 1\)/);
+  assert.match(workbench, /switchAttempt,/);
+  assert.match(workbench, /onRetryProject=\{retrySidebar\}/);
+  assert.doesNotMatch(workbench, /onRetryProject=\{sidebar\.reload\}/);
 });

@@ -34,6 +34,15 @@ export type ConversationSource = {
 const UNBOUND = '';
 
 export type SignedSidebarLoadPhase = 'ready' | 'wait' | 'blocked';
+export type SignedSidebarRetryTarget = 'scope-switch' | 'catalog';
+
+/**
+ * A failed workspace switch stays blocked until that request is posted again.
+ * Reloading the session tree leaves the phase blocked.
+ */
+export function signedSidebarRetryTarget(switchFailed: boolean): SignedSidebarRetryTarget {
+  return switchFailed ? 'scope-switch' : 'catalog';
+}
 
 /**
  * Hold the session tree while the saved workspace is catching up to the URL,

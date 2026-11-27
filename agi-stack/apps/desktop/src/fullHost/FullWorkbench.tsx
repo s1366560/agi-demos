@@ -33,7 +33,7 @@ import {
   selectWorkbenchSurface,
   shellLanding,
 } from './workbenchModel';
-import { signedSidebarLoadPhase } from './signedSidebarModel';
+import { signedSidebarLoadPhase, signedSidebarRetryTarget } from './signedSidebarModel';
 import './style.css';
 
 function subscribe(listener: () => void) {
@@ -89,6 +89,7 @@ export function FullWorkbench({
     : null;
   const [settings, setSettings] = useState<HostSettingsTab | null>(null);
   const [switchFailure, setSwitchFailure] = useState('');
+  const [switchAttempt, setSwitchAttempt] = useState(0);
   const sidebarWidth = useResizablePanelWidth(
     SIDEBAR_WIDTH_STORAGE_KEY,
     FULL_HOST_SIDEBAR_CONSTRAINTS,
@@ -125,6 +126,7 @@ export function FullWorkbench({
     session?.workspaceContext.projectId,
     session?.workspaceContext.revision,
     reload,
+    switchAttempt,
   ]);
   const [directory, setDirectory] = useState(false);
   const [collapsed, setCollapsed] = useState(
@@ -161,6 +163,13 @@ export function FullWorkbench({
     sidebarGate,
     scopeSwitchError,
   );
+  const retrySidebar = () => {
+    if (signedSidebarRetryTarget(Boolean(scopeSwitchError)) === 'scope-switch') {
+      setSwitchAttempt((attempt) => attempt + 1);
+      return;
+    }
+    sidebar.reload();
+  };
   const newTask = sidebar.canCreate || sidebar.openChatPath;
   const createWorkspace = sidebar.createWorkspacePath;
   const tenantName =
@@ -319,7 +328,7 @@ export function FullWorkbench({
               selectionMode={sidebar.selectionMode}
               expandedWorkspaceIds={sidebar.expandedWorkspaceIds}
               onToggleWorkspace={sidebar.toggleWorkspace}
-              onRetryProject={sidebar.reload}
+              onRetryProject={retrySidebar}
               onRetryWorkspace={sidebar.reload}
               workspaceHref={(workspaceId) => sidebar.workspacePath(workspaceId)}
               conversationHref={(conversation, workspaceId) =>
@@ -355,6 +364,9 @@ export function FullWorkbench({
               <main className="desktop-package-workbench">
                 <h1>{project ? projectName : tenantName}</h1>
                 <p role="alert">{scopeSwitchError}</p>
+                <button type="button" onClick={retrySidebar}>
+                  {t('workspaceTree.retry')}
+                </button>
               </main>
             ) : waitingForPage ? (
               <main className="desktop-package-workbench">
