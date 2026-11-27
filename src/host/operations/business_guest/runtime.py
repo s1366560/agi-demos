@@ -89,7 +89,6 @@ async def run_business_command(
     payload: dict[str, Any],
     on_progress: Progress | None,
 ) -> dict[str, Any]:
-    del on_progress
     module = _MODULES.get(plugin_id)
     if module is None or operation not in CAPABILITIES:
         raise OptionalBusinessError("forbidden", "unknown business command")
@@ -125,7 +124,7 @@ async def run_business_command(
             message = json.loads(line)
             kind = message.get("type")
             if kind == "call":
-                output, code, text = await _serve(bridge, message)
+                output, code, text = await _serve(bridge, message, on_progress)
                 reply: dict[str, Any] = {"id": message["id"], "ok": code is None, "output": output}
                 if code is not None:
                     reply["code"] = code
@@ -151,13 +150,15 @@ async def run_business_command(
     return output
 
 
-async def _serve(bridge: HostBridge, message: dict[str, Any]) -> tuple[Any, str | None, str | None]:
+async def _serve(
+    bridge: HostBridge, message: dict[str, Any], on_progress: Progress | None
+) -> tuple[Any, str | None, str | None]:
     method = message.get("method")
     params = message.get("params") or {}
     try:
         if method == "call":
             output: Any = await bridge.call(
-                str(params.get("name") or ""), params.get("payload") or {}
+                str(params.get("name") or ""), params.get("payload") or {}, on_progress
             )
         elif method == "http":
             output = await bridge.http(

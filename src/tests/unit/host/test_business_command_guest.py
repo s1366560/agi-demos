@@ -65,8 +65,8 @@ async def test_guest_process_reads_a_directory_without_a_bearer_or_database_url(
     monkeypatch.setenv("AUTHORIZATION", "Bearer secret")
     captured: dict[str, object] = {}
 
-    async def call(self, name, payload):  # type: ignore[no-untyped-def]
-        del self, payload
+    async def call(self, name, payload, progress=None):  # type: ignore[no-untyped-def]
+        del self, payload, progress
         captured["name"] = name
         return {"items": [{"id": "w", "name": "Guest"}]}
 
@@ -101,8 +101,8 @@ async def test_guest_process_reads_a_directory_without_a_bearer_or_database_url(
 async def test_guest_process_returns_a_page_larger_than_the_default_pipe_limit() -> None:
     title = "话" * 40_000
 
-    async def call(self, name, payload):  # type: ignore[no-untyped-def]
-        del self, name, payload
+    async def call(self, name, payload, progress=None):  # type: ignore[no-untyped-def]
+        del self, name, payload, progress
         return {"items": [{"id": "w", "name": title}]}
 
     from src.host.operations.business_guest import bridge as bridge_module
@@ -237,6 +237,35 @@ async def test_tenant_dispatch_forwards_billing_before_starting_a_guest(
     )
     assert await tenant_command(ctx, package, "tenant-account", None) == {"plan": "free"}  # type: ignore[arg-type]
     assert forwarded == [("http://127.0.0.1:9", "tenant-account")]
+
+
+async def test_guest_forwards_capability_progress_to_the_caller() -> None:
+    from src.host.operations.business_guest.capabilities import CAPABILITIES
+
+    events: list[dict[str, object]] = []
+
+    async def publish(frame: dict[str, object]) -> None:
+        events.append(frame)
+
+    async def capability(_ctx, _payload, progress):  # type: ignore[no-untyped-def]
+        assert progress is not None
+        await progress({"content": "YQ=="})
+        return {"size": 1}
+
+    original = CAPABILITIES["app.workspace.blackboard.read"]
+    CAPABILITIES["app.workspace.blackboard.read"] = capability
+    try:
+        result = await run_business_command(
+            _application(),
+            "memstack-workspace",
+            "app.workspace.blackboard.read",
+            {},
+            publish,
+        )
+    finally:
+        CAPABILITIES["app.workspace.blackboard.read"] = original
+    assert result == {"size": 1}
+    assert events == [{"content": "YQ=="}]
 
 
 class _Audit:

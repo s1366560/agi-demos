@@ -237,10 +237,17 @@ async def verify_api_key_from_header_or_query(
 
 
 async def verify_api_key_from_header_query_or_cookie(
+    connection: HTTPConnection,
     api_key: str = Depends(get_api_key_from_header_query_or_cookie),
     db: AsyncSession = Depends(get_db),
 ) -> DBAPIKey | None:
-    """Verify API key from header, query parameter, or cookie."""
+    """Verify API key from header, query parameter, cookie, or a host proxy ticket."""
+    app = connection.scope.get("app")
+    if app is not None:
+        from src.host.operations.sandbox_proxy_ticket import user_for_sandbox_proxy_ticket
+
+        if user_id := user_for_sandbox_proxy_ticket(app, api_key):
+            return SimpleNamespace(id="sandbox-proxy-ticket", user_id=user_id)  # type: ignore[return-value]
     auth_service = AuthService(
         user_repository=SqlUserRepository(db),
         api_key_repository=SqlAPIKeyRepository(db),

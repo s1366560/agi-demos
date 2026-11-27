@@ -5,6 +5,7 @@ Routes and capabilities run as the admitted actor. The caller bearer is not copi
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from src.host.operations.admitted_loopback import admitted_client
@@ -12,6 +13,8 @@ from src.host.operations.application_commands import PackageOperationContext
 from src.host.operations.business_guest.capabilities import CAPABILITIES
 from src.host.operations.tenant_commands import TenantPackageContext
 from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
+
+type Progress = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class HostBridge:
@@ -21,11 +24,13 @@ class HostBridge:
         self.tenant_id = ctx.scope.tenant_id
         self.project_id = getattr(ctx.scope, "project_id", None)
 
-    async def call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def call(
+        self, name: str, payload: dict[str, Any], progress: Progress | None = None
+    ) -> dict[str, Any]:
         handler = CAPABILITIES.get(name)
         if handler is None:
             raise OptionalBusinessError("forbidden", "unknown host capability")
-        result = await handler(self.ctx, payload, None)
+        result = await handler(self.ctx, payload, progress)
         if not isinstance(result, dict):
             raise OptionalBusinessError("runtime_unavailable", "host capability returned no object")
         return result
