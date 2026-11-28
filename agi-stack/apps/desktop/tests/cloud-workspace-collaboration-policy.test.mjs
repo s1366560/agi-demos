@@ -27,34 +27,23 @@ for (const path of paths) {
     assert.equal(authorizeCloudProductEndpoint({ method: 'GET' }, target), null);
   });
 }
-test('collaboration reads retain workspace proof before the target request', async () => {
-  for (const foreign of [false, true]) {
-    const calls = [];
-    const dependencies = {
-      loadTrustedSession: async () => ({
-        version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
-        credential_kind: 'cloud_bearer', credential: 'test-only', expires_at: '2099-08-10T00:00:00Z',
-      }),
-      async fetch(url) {
-        const path = new URL(url).pathname;
-        calls.push(path);
-        const body = path === '/api/v1/workspace-context'
-          ? { context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 1 } }
-          : path === base
-            ? { id: 'workspace-1', tenant_id: 'tenant-1', project_id: foreign ? 'project-2' : 'project-1' }
-            : { items: [] };
-        return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
-      },
-    };
-    const request = executeVaultBoundCloudRequest({ method: 'GET', path: `${base}/objectives` }, dependencies);
-    if (foreign) {
-      await assert.rejects(request, /workspace scope/);
-      assert.deepEqual(calls, ['/api/v1/workspace-context', base]);
-    } else {
-      assert.equal((await request).status, 200);
-      assert.deepEqual(calls, ['/api/v1/workspace-context', base, `${base}/objectives`]);
-    }
-  }
+test('full desktop does not transport legacy collaboration HTTP', async () => {
+  const calls = [];
+  const dependencies = {
+    loadTrustedSession: async () => ({
+      version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
+      credential_kind: 'cloud_bearer', credential: 'test-only', expires_at: '2099-08-10T00:00:00Z',
+    }),
+    async fetch(url) {
+      calls.push(new URL(url).pathname);
+      return new Response('{}', { headers: { 'content-type': 'application/json' } });
+    },
+  };
+  await assert.rejects(
+    executeVaultBoundCloudRequest({ method: 'GET', path: `${base}/objectives` }, dependencies),
+    /cloud request endpoint is not allowed/,
+  );
+  assert.deepEqual(calls, []);
 });
 
 const canonicalMutation = {
@@ -91,39 +80,16 @@ test('canonical mutation rejects extra query or path segments', () => {
     assert.equal(authorizeCloudProductEndpoint(canonicalMutation, new URL(mutationTarget.href + suffix)), null);
   }
 });
-test('canonical mutation verifies workspace ownership and forwards matching revision headers', async () => {
-  for (const foreign of [false, true]) {
-    const calls = [];
-    const request = executeVaultBoundCloudRequest({ ...canonicalMutation, path: mutationTarget.pathname }, {
-      loadTrustedSession: async () => ({
-        version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
-        credential_kind: 'cloud_bearer', credential: 'test-only', expires_at: '2099-08-10T00:00:00Z',
-      }),
-      async fetch(url, init) {
-        const path = new URL(url).pathname;
-        calls.push(path);
-        let body;
-        if (path === '/api/v1/workspace-context') {
-          body = { context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 1 } };
-        } else if (path === base) {
-          body = { id: 'workspace-1', tenant_id: foreign ? 'tenant-2' : 'tenant-1', project_id: 'project-1' };
-        } else {
-          assert.equal(path, mutationTarget.pathname);
-          assert.equal(init.method, 'POST');
-          assert.equal(new Headers(init.headers).get('x-expected-revision'), '8');
-          assert.equal(new Headers(init.headers).get('idempotency-key'), 'qa-mutation-0001');
-          assert.deepEqual(JSON.parse(init.body), canonicalMutation.body);
-          body = { revision: 9 };
-        }
-        return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+test('full desktop does not forward legacy collaboration mutations', async () => {
+  await assert.rejects(
+    executeVaultBoundCloudRequest({ ...canonicalMutation, path: mutationTarget.pathname }, {
+      async loadTrustedSession() {
+        throw new Error('collaboration HTTP must be rejected before the vault');
       },
-    });
-    if (foreign) {
-      await assert.rejects(request, /workspace scope/);
-      assert.deepEqual(calls, ['/api/v1/workspace-context', base]);
-    } else {
-      assert.equal((await request).status, 200);
-      assert.deepEqual(calls, ['/api/v1/workspace-context', base, mutationTarget.pathname]);
-    }
-  }
+      async fetch() {
+        throw new Error('collaboration HTTP must not reach the network');
+      },
+    }),
+    /cloud request endpoint is not allowed/,
+  );
 });

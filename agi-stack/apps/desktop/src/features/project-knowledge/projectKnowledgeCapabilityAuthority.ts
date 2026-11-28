@@ -7,27 +7,27 @@ import {
   type ProjectCommunitiesClient,
   PROJECT_COMMUNITIES_LOCAL_REASON,
   PROJECT_COMMUNITIES_ROUTE_ID,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectCommunitiesClient';
+} from './packageContract/projectCommunitiesClient';
 import {
   type ProjectEntitiesClient,
   PROJECT_ENTITIES_LOCAL_REASON,
   PROJECT_ENTITIES_ROUTE_ID,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectEntitiesClient';
+} from './packageContract/projectEntitiesClient';
 import {
   type ProjectGraphClient,
   PROJECT_GRAPH_LOCAL_REASON,
   PROJECT_GRAPH_ROUTE_ID,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphClient';
+} from './packageContract/projectGraphClient';
 import type {
   ProjectKnowledgeClient,
   ProjectKnowledgeScope,
   ProjectKnowledgeSnapshotBase,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+} from './packageContract/projectKnowledgeClient';
 import {
   type ProjectMemoriesClient,
   PROJECT_MEMORIES_LOCAL_REASON,
   PROJECT_MEMORIES_ROUTE_ID,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
+} from './packageContract/projectMemoriesClient';
 import {
   type ProjectTeamClient,
   PROJECT_TEAM_LOCAL_REASON,

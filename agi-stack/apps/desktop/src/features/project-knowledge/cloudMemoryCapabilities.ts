@@ -1,1 +1,1 @@
-export * from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryCapabilities';
+export * from './packageContract/cloudMemoryCapabilities';

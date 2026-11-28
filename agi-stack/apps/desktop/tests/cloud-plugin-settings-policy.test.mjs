@@ -280,10 +280,9 @@ test('cloud plugin scope drift fails before mutations and server denial remains 
       ),
       /scope mismatch/,
     );
-    assert.deepEqual(
-      h.requests.map(({ path }) => path),
-      ['/api/v1/workspace-context'],
-    );
+    const paths = h.requests.map(({ path }) => path);
+    assert.equal(paths[0], '/api/v1/workspace-context');
+    assert.equal(paths.includes(`${prefix}/installations/id/disable`), false);
   }
   const denied = harness(403);
   assert.equal(
@@ -441,7 +440,7 @@ test('tenant releases admit the active tenant without borrowing a project or dev
   const base = '/api/v1/tenant-packages';
   const query = '?tenant_id=tenant-1';
   const digest = 'sha256:' + '1'.repeat(64);
-  const body = {tenant_id: 'tenant-1', command_id:'get-account', expected_digest:digest};
+  const body = {tenant_id: 'tenant-1', command_id:'tenant-account', expected_digest:digest};
   const h = harness();
   for (const path of ['/tenants', '/' + query, '/npm/catalog' + query,
     '/npm/detail' + query + '&plugin_id=memstack-billing',

@@ -1,22 +1,22 @@
 import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
-import type { ProjectAgentScope, ProjectAgentSnapshotBase } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
+import type { ProjectAgentScope, ProjectAgentSnapshotBase } from './packageContract/projectAgentClient';
 import {
   PROJECT_AGENT_DASHBOARD_LOCAL_REASON,
   PROJECT_AGENT_DASHBOARD_ROUTE_ID,
   type ProjectAgentDashboardClient,
-} from '@business/agent/ui/desktop/project-agent/projectAgentDashboardClient';
+} from './packageContract/projectAgentDashboardClient';
 import {
   PROJECT_AGENT_LOGS_LOCAL_REASON,
   PROJECT_AGENT_LOGS_ROUTE_ID,
   type ProjectAgentLogsClient,
-} from '@business/agent/ui/desktop/project-agent/projectAgentLogsClient';
+} from './packageContract/projectAgentLogsClient';
 import {
   PROJECT_AGENT_PATTERNS_LOCAL_REASON,
   PROJECT_AGENT_PATTERNS_ROUTE_ID,
   type ProjectAgentPatternsClient,
-} from '@business/agent/ui/desktop/project-agent/projectAgentPatternsClient';
+} from './packageContract/projectAgentPatternsClient';
 
 export const PROJECT_AGENT_CAPABILITY_IDS = Object.freeze([
   PROJECT_AGENT_DASHBOARD_ROUTE_ID,

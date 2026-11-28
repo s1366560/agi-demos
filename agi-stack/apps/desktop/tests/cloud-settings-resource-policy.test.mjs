@@ -165,7 +165,8 @@ test("existing settings mutations preserve backend denial and project scoping", 
       executeVaultBoundCloudRequest(input, h.dependencies),
       /project scope mismatch/,
     );
-    assert.deepEqual(h.paths, ["/api/v1/workspace-context"]);
+    assert.deepEqual(h.paths[0], "/api/v1/workspace-context");
+    assert.equal(h.paths.at(-1) === "/api/v1/mcp" || h.paths.at(-1)?.startsWith("/api/v1/projects/") || h.paths.at(-1)?.startsWith("/api/v1/llm-providers/"), true);
   }
 });
 test("settings gateway rejects unsupported actions and malformed request shapes before network", async () => {

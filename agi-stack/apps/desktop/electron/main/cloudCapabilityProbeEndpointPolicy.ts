@@ -6,6 +6,34 @@ type Request = Readonly<{
   mutation?: unknown;
 }>;
 
+/** Project membership is host catalog proof, not a business package call. */
+export function authorizeHostProjectMembership(
+  request: Request,
+  target: URL,
+): CloudProductEndpoint | null {
+  if (request.method !== 'GET' || request.body !== undefined || request.mutation !== undefined) return null;
+  const segments = target.pathname.split('/');
+  if (
+    segments.length === 6 &&
+    segments.slice(0, 4).join('/') === '/api/v1/projects' &&
+    segments[5] === 'members' &&
+    exactQuery(target, { tenant_id: null })
+  ) {
+    const tenantId = identifier(target.searchParams.get('tenant_id'));
+    const catalogProjectId = identifier(segments[4]);
+    return tenantId === null || catalogProjectId === null
+      ? null
+      : Object.freeze({
+          kind: 'identity-catalog',
+          tenantId,
+          projectId: null,
+          workspaceId: null,
+          catalogProjectId,
+        });
+  }
+  return null;
+}
+
 /** Exact read contracts emitted by the desktop capability projections. */
 export function authorizeCloudCapabilityProbeEndpoint(
   request: Request,
@@ -37,14 +65,8 @@ export function authorizeCloudCapabilityProbeEndpoint(
       const tenantId = identifier(target.searchParams.get('tenant_id'));
       return tenantId === null ? null : project(identifier(target.searchParams.get('project_id')), tenantId);
     }
-    if (segments.length === 6 && segments.slice(0, 4).join('/') === '/api/v1/projects' &&
-        segments[5] === 'members' && exactQuery(target, { tenant_id: null })) {
-      const tenantId = identifier(target.searchParams.get('tenant_id'));
-      const catalogProjectId = identifier(segments[4]);
-      return tenantId === null || catalogProjectId === null ? null : Object.freeze({
-        kind: 'identity-catalog', tenantId, projectId: null, workspaceId: null, catalogProjectId,
-      });
-    }
+    const membership = authorizeHostProjectMembership(request, target);
+    if (membership) return membership;
     if (segments.slice(0, 7).join('/') === '/api/v1/agent/trace/runs/project') {
       const list = segments.length === 8 && exactQuery(target, { limit: ['8', '100'] });
       const count =

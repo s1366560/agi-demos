@@ -2,7 +2,10 @@ import { authorizeCloudToolMediaEndpoint } from './cloudToolMediaEndpointPolicy'
 import { authorizeCloudChildControlEndpoint } from './cloudChildControlEndpointPolicy';
 import { authorizeCloudSubagentTraceEndpoint } from './cloudSubagentTraceEndpointPolicy';
 import { authorizeCloudJourneyReadEndpoint } from './cloudJourneyReadEndpointPolicy';
-import { authorizeCloudCapabilityProbeEndpoint } from './cloudCapabilityProbeEndpointPolicy';
+import {
+  authorizeCloudCapabilityProbeEndpoint,
+  authorizeHostProjectMembership,
+} from './cloudCapabilityProbeEndpointPolicy';
 import { authorizeWorkspaceCollaborationMutation } from './cloudWorkspaceCollaborationMutationPolicy';
 import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
 import { authorizeCloudSettingsResourceEndpoint } from './cloudSettingsResourceEndpointPolicy';
@@ -183,6 +186,152 @@ function marketplaceStringList(value: unknown): boolean {
   );
 }
 
+function authorizePluginMarketplace(
+  request: EndpointRequest,
+  target: URL,
+  segments: readonly string[],
+): CloudProductEndpoint | null {
+  if (
+    target.pathname === '/api/v1/plugin-marketplace/packages' &&
+    request.method === 'GET' && request.body === undefined &&
+    request.mutation === undefined &&
+    [...target.searchParams].length === 1 &&
+    target.searchParams.get('include_revoked') === 'true'
+  ) {
+    return endpoint('identity-catalog', null, null, null);
+  }
+  if (
+    segments.length === 7 && segments[4] === 'packages' &&
+    segments[6] === 'install' && request.method === 'POST' &&
+    request.mutation === undefined && noQuery(target) &&
+    exactBodyKeys(request.body, PLUGIN_MARKETPLACE_INSTALL_BODY_KEYS) &&
+    typeof request.body.plugin_id === 'string' &&
+    requiredIdentifier(segments[5]) === request.body.plugin_id &&
+    typeof request.body.publisher === 'string' &&
+    typeof request.body.artifact_sha256 === 'string' &&
+    marketplaceBodyRecord(request.body.artifact) &&
+    marketplaceBodyRecord(request.body.manifest) &&
+    marketplaceBodyRecord(request.body.signature) &&
+    marketplaceBodyRecord(request.body.provenance) &&
+    marketplaceStringList(request.body.approved_permissions) &&
+    typeof request.body.tenant_admin_approved === 'boolean' &&
+    typeof request.body.security_scan_passed === 'boolean'
+  ) {
+    requiredBodyIdentifier(request.body, 'version');
+    return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
+  }
+  if (
+    segments.length === 7 && segments[4] === 'packages' &&
+    segments[6] === 'approve' && request.method === 'POST' &&
+    request.mutation === undefined && noQuery(target) &&
+    exactBodyKeys(request.body, PLUGIN_MARKETPLACE_APPROVE_BODY_KEYS) &&
+    marketplaceStringList(request.body.approved_permissions)
+  ) {
+    requiredIdentifier(segments[5]);
+    requiredBodyIdentifier(request.body, 'version');
+    return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
+  }
+  if (
+    segments.length === 7 && segments[4] === 'packages' &&
+    segments[6] === 'revoke' && request.method === 'POST' &&
+    request.mutation === undefined && noQuery(target) &&
+    request.body !== undefined &&
+    Object.keys(request.body).length >= 1 &&
+    Object.keys(request.body).every((key) => PLUGIN_MARKETPLACE_REVOKE_BODY_KEYS.has(key)) &&
+    typeof request.body.reason === 'string' &&
+    request.body.reason.trim().length > 0 &&
+    (request.body.version === undefined || typeof request.body.version === 'string')
+  ) {
+    requiredIdentifier(segments[5]);
+    return endpoint('tenant-admin', null, null, null);
+  }
+  if (
+    segments.length === 7 && segments[4] === 'packages' &&
+    segments[6] === 'uninstall' && request.method === 'POST' &&
+    request.mutation === undefined && noQuery(target) &&
+    exactBodyKeys(request.body, new Set(['tenant_id', 'version'])) &&
+    typeof request.body.tenant_id === 'string' &&
+    typeof request.body.version === 'string'
+  ) {
+    requiredIdentifier(segments[5]);
+    requiredIdentifier(request.body.version);
+    return endpoint('tenant-admin', requiredIdentifier(request.body.tenant_id), null, null);
+  }
+  return null;
+}
+
+const HOST_TENANT_BUSINESS_RESOURCES = new Set([
+  'analytics',
+  'billing',
+  'gene-policies',
+  'invoices',
+  'stats',
+  'upgrade',
+]);
+
+/**
+ * Full-desktop host chrome: identity, device approval, project directory,
+ * tenant shell, providers, MCP, and the plugin center. Signed business
+ * calls use contribution endpoints, not this list.
+ */
+export function authorizeFullDesktopHostEndpoint(
+  request: EndpointRequest,
+  target: URL,
+): CloudProductEndpoint | null {
+  const segments = target.pathname.split('/');
+  if (segments[1] !== 'api' || segments[2] !== 'v1') return null;
+  if (request.form !== undefined) return null;
+  if (request.response !== undefined) return authorizeHostAuditExport(request, target, segments);
+  if (
+    request.mutation !== undefined &&
+    request.mutation !== null &&
+    typeof request.mutation === 'object' &&
+    'kind' in request.mutation &&
+    request.mutation.kind === 'memory-command'
+  ) {
+    return null;
+  }
+  const identity = authorizeIdentityCatalog(request, target, segments);
+  if (identity) return identity;
+  const settingsResource = authorizeCloudSettingsResourceEndpoint(request, target);
+  if (settingsResource) return settingsResource;
+  const pluginSettings = authorizeCloudPluginSettingsEndpoint(request, target);
+  if (pluginSettings) return pluginSettings;
+  const marketplace = authorizePluginMarketplace(request, target, segments);
+  if (marketplace) return marketplace;
+  const desktopIdentity = authorizeDesktopIdentityMutation(request, target, segments);
+  if (desktopIdentity) return desktopIdentity;
+  const projects = authorizeTenantProjectCohort(request, target, segments);
+  if (projects) return projects;
+  const membership = authorizeHostProjectMembership(request, target);
+  if (membership) return membership;
+  const resource = segments[5];
+  if (resource !== undefined && HOST_TENANT_BUSINESS_RESOURCES.has(resource)) return null;
+  return authorizeTenantResource(request, target, segments);
+}
+
+function authorizeHostAuditExport(
+  request: EndpointRequest,
+  target: URL,
+  segments: readonly string[],
+): CloudProductEndpoint | null {
+  if (request.response?.kind !== 'binary' || request.body !== undefined || request.form !== undefined) {
+    return null;
+  }
+  if (
+    segments.length === 7 &&
+    segments[3] === 'tenants' &&
+    segments[5] === 'audit-logs' &&
+    segments[6] === 'export' &&
+    request.method === 'GET' &&
+    allowedQueryKeys(target.searchParams, TENANT_AUDIT_EXPORT_QUERY, ['format']) &&
+    ['csv', 'json'].includes(target.searchParams.get('format') ?? '')
+  ) {
+    return endpoint('tenant-admin', requiredIdentifier(segments[4]), null, null);
+  }
+  return null;
+}
+
 export function authorizeCloudProductEndpoint(
   request: EndpointRequest,
   target: URL,
@@ -218,75 +367,7 @@ export function authorizeCloudProductEndpoint(
   const pluginSettings = authorizeCloudPluginSettingsEndpoint(request, target);
   if (pluginSettings) return pluginSettings;
 
-  if (segments[3] === 'plugin-marketplace') {
-    if (
-      target.pathname === '/api/v1/plugin-marketplace/packages' &&
-      request.method === 'GET' && request.body === undefined &&
-      request.mutation === undefined &&
-      [...target.searchParams].length === 1 &&
-      target.searchParams.get('include_revoked') === 'true'
-    ) {
-      return endpoint('identity-catalog', null, null, null);
-    }
-    if (
-      segments.length === 7 && segments[4] === 'packages' &&
-      segments[6] === 'install' && request.method === 'POST' &&
-      request.mutation === undefined && noQuery(target) &&
-      exactBodyKeys(request.body, PLUGIN_MARKETPLACE_INSTALL_BODY_KEYS) &&
-      typeof request.body.plugin_id === 'string' &&
-      requiredIdentifier(segments[5]) === request.body.plugin_id &&
-      typeof request.body.publisher === 'string' &&
-      typeof request.body.artifact_sha256 === 'string' &&
-      marketplaceBodyRecord(request.body.artifact) &&
-      marketplaceBodyRecord(request.body.manifest) &&
-      marketplaceBodyRecord(request.body.signature) &&
-      marketplaceBodyRecord(request.body.provenance) &&
-      marketplaceStringList(request.body.approved_permissions) &&
-      typeof request.body.tenant_admin_approved === 'boolean' &&
-      typeof request.body.security_scan_passed === 'boolean'
-    ) {
-      requiredBodyIdentifier(request.body, 'version');
-      return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
-    }
-    if (
-      segments.length === 7 && segments[4] === 'packages' &&
-      segments[6] === 'approve' && request.method === 'POST' &&
-      request.mutation === undefined && noQuery(target) &&
-      exactBodyKeys(request.body, PLUGIN_MARKETPLACE_APPROVE_BODY_KEYS) &&
-      marketplaceStringList(request.body.approved_permissions)
-    ) {
-      requiredIdentifier(segments[5]);
-      requiredBodyIdentifier(request.body, 'version');
-      return endpoint('tenant-admin', requiredBodyIdentifier(request.body, 'tenant_id'), null, null);
-    }
-    if (
-      segments.length === 7 && segments[4] === 'packages' &&
-      segments[6] === 'revoke' && request.method === 'POST' &&
-      request.mutation === undefined && noQuery(target) &&
-      request.body !== undefined &&
-      Object.keys(request.body).length >= 1 &&
-      Object.keys(request.body).every((key) => PLUGIN_MARKETPLACE_REVOKE_BODY_KEYS.has(key)) &&
-      typeof request.body.reason === 'string' &&
-      request.body.reason.trim().length > 0 &&
-      (request.body.version === undefined || typeof request.body.version === 'string')
-    ) {
-      requiredIdentifier(segments[5]);
-      return endpoint('tenant-admin', null, null, null);
-    }
-    if (
-      segments.length === 7 && segments[4] === 'packages' &&
-      segments[6] === 'uninstall' && request.method === 'POST' &&
-      request.mutation === undefined && noQuery(target) &&
-      exactBodyKeys(request.body, new Set(['tenant_id', 'version'])) &&
-      typeof request.body.tenant_id === 'string' &&
-      typeof request.body.version === 'string'
-    ) {
-      requiredIdentifier(segments[5]);
-      requiredIdentifier(request.body.version);
-      return endpoint('tenant-admin', requiredIdentifier(request.body.tenant_id), null, null);
-    }
-    return null;
-  }
+  if (segments[3] === 'plugin-marketplace') return authorizePluginMarketplace(request, target, segments);
 
   const desktopCloudClient = authorizeDesktopCloudClientCohort(request, target, segments);
   if (desktopCloudClient) return desktopCloudClient;
@@ -1766,6 +1847,8 @@ function authorizePrivilegedTransfer(
     return null;
   }
   if (request.response?.kind !== 'binary' || request.body !== undefined) return null;
+  const auditExport = authorizeHostAuditExport(request, target, segments);
+  if (auditExport) return auditExport;
   if (
     segments.length === 7 &&
     segments[3] === 'artifacts' &&
@@ -1788,17 +1871,6 @@ function authorizePrivilegedTransfer(
     target.searchParams.get('max_bytes') === String(request.response.max_bytes)
   ) {
     return endpoint('project', null, requiredIdentifier(segments[4]), null);
-  }
-  if (
-    segments.length === 7 &&
-    segments[3] === 'tenants' &&
-    segments[5] === 'audit-logs' &&
-    segments[6] === 'export' &&
-    request.method === 'GET' &&
-    allowedQueryKeys(target.searchParams, TENANT_AUDIT_EXPORT_QUERY, ['format']) &&
-    ['csv', 'json'].includes(target.searchParams.get('format') ?? '')
-  ) {
-    return endpoint('tenant-admin', requiredIdentifier(segments[4]), null, null);
   }
   return null;
 }

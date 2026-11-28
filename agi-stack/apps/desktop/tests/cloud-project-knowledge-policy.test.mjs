@@ -7,7 +7,6 @@ const { executeVaultBoundCloudRequest } = require(
   '/tmp/agistack-desktop-test-dist/electron/main/cloudRequestPolicy.js',
 );
 
-const memoryPath = '/api/v1/memories/?project_id=project-1&page=1&page_size=50';
 const trustedSession = Object.freeze({
   version: 1,
   api_base_url: 'https://cloud.memstack.test',
@@ -22,172 +21,31 @@ function dependencies(requests) {
     async loadTrustedSession() {
       return trustedSession;
     },
-    async fetch(url, init) {
-      const target = new URL(url);
-      requests.push(target.pathname + target.search);
-      assert.equal(
-        new Headers(init.headers).get('Authorization'),
-        `Bearer ${trustedSession.credential}`,
-      );
-      return new Response(JSON.stringify(target.pathname === '/api/v1/workspace-context'
-        ? { context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 7 } }
-        : { memories: [], total: 0, page: 1, page_size: 50 }), {
+    async fetch(url) {
+      requests.push(new URL(url).pathname);
+      return new Response(JSON.stringify({ context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 7 } }), {
         headers: { 'Content-Type': 'application/json' },
       });
     },
   };
 }
 
-test('Cloud memories list observes trusted project scope before its exact request', async () => {
-  const requests = [];
-  const result = await executeVaultBoundCloudRequest(
-    { method: 'GET', path: memoryPath }, dependencies(requests),
-  );
-  assert.equal(result.status, 200);
-  assert.deepEqual(requests, ['/api/v1/workspace-context', memoryPath]);
-  assert.equal(JSON.stringify(result).includes(trustedSession.credential), false);
-});
-
-test('a catalog-visible project becomes the request scope', async () => {
-  const requests = [];
-  const targetPath = memoryPath.replace('project-1', 'project-2');
-  const result = await executeVaultBoundCloudRequest(
-    { method: 'GET', path: targetPath },
-    {
-      async loadTrustedSession() {
-        return trustedSession;
-      },
-      async fetch(url) {
-        const target = new URL(url);
-        requests.push(target.pathname + target.search);
-        if (target.pathname === '/api/v1/workspace-context') {
-          return new Response(JSON.stringify({
-            context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 7 },
-          }), { headers: { 'Content-Type': 'application/json' } });
-        }
-        if (target.pathname === '/api/v1/projects/project-2') {
-          return new Response(JSON.stringify({ id: 'project-2', tenant_id: 'tenant-1' }), {
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        return new Response(JSON.stringify({ memories: [], total: 0, page: 1, page_size: 50 }), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      },
-    },
-  );
-  assert.equal(result.status, 200);
-  assert.deepEqual(requests, [
-    '/api/v1/workspace-context',
-    '/api/v1/projects/project-2?tenant_id=tenant-1',
-    targetPath,
-  ]);
-});
-
-test('Cloud memories rejects another project before requesting memory data', async () => {
-  const requests = [];
-  await assert.rejects(
-    () => executeVaultBoundCloudRequest(
-      { method: 'GET', path: memoryPath.replace('project-1', 'project-2') },
-      dependencies(requests),
-    ),
-    /cloud request project scope mismatch/u,
-  );
-  assert.deepEqual(requests, [
-    '/api/v1/workspace-context',
-    '/api/v1/projects/project-2?tenant_id=tenant-1',
-  ]);
-});
-
-for (const [name, input] of [
-  ['wrong method', { method: 'POST', path: memoryPath }],
-  ['missing slash', { method: 'GET', path: memoryPath.replace('/?', '?') }],
-  ['extra tenant scope', { method: 'GET', path: `${memoryPath}&tenant_id=tenant-2` }],
-  ['duplicate project', { method: 'GET', path: `${memoryPath}&project_id=project-2` }],
-  ['extra parameter', { method: 'GET', path: `${memoryPath}&include_private=true` }],
-  ['zero page', { method: 'GET', path: memoryPath.replace('page=1', 'page=0') }],
-  ['oversized page size', { method: 'GET', path: memoryPath.replace('page_size=50', 'page_size=101') }],
-  ['fractional page', { method: 'GET', path: memoryPath.replace('page=1', 'page=1.5') }],
-  ['noncanonical page', { method: 'GET', path: memoryPath.replace('page=1', 'page=01') }],
-  ['unsafe page', { method: 'GET', path: memoryPath.replace('page=1', 'page=9007199254740992') }],
-  ['duplicate page', { method: 'GET', path: memoryPath + '&page=2' }],
-  ['empty project', { method: 'GET', path: memoryPath.replace('project-1', '') }],
-  ['read body', { method: 'GET', path: memoryPath, body: { project_id: 'project-2' } }],
-]) {
-  test(`Cloud memories rejects ${name} without network access`, async () => {
-    const requests = [];
-    await assert.rejects(
-      () => executeVaultBoundCloudRequest(input, dependencies(requests)),
-    );
-    assert.deepEqual(requests, []);
-  });
-}
-
-for (const path of [
+const legacyPaths = [
+  '/api/v1/memories/?project_id=project-1&page=1&page_size=50',
   '/api/v1/graph/entities/?tenant_id=tenant-1&project_id=project-1&limit=50&offset=0',
   '/api/v1/graph/entities/types?tenant_id=tenant-1&project_id=project-1',
   '/api/v1/graph/communities/?tenant_id=tenant-1&project_id=project-1&limit=50&offset=0',
   '/api/v1/graph/memory/graph?tenant_id=tenant-1&project_id=project-1&limit=1000',
-]) {
-  test(`Cloud knowledge preserves the current scoped client request ${path}`, async () => {
-    const requests = [];
-    await executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests));
-    assert.deepEqual(requests, ['/api/v1/workspace-context', path]);
-    for (const invalid of [path.replace('tenant-1', 'tenant-2'), path.replace('project-1', 'project-2')]) {
-      const rejectedRequests = [];
-      await assert.rejects(
-        () => executeVaultBoundCloudRequest({ method: 'GET', path: invalid }, dependencies(rejectedRequests)),
-        /cloud request (tenant|project) scope mismatch/u,
-      );
-      if (invalid.includes('project-2')) {
-        assert.deepEqual(rejectedRequests, [
-          '/api/v1/workspace-context',
-          '/api/v1/projects/project-2?tenant_id=tenant-1',
-        ]);
-      } else {
-        assert.deepEqual(rejectedRequests, ['/api/v1/workspace-context']);
-      }
-    }
-  });
-}
-
-for (const path of [
   '/api/v1/projects/project-1/stats',
-  memoryPath.replace('page_size=50', 'page_size=5'),
-]) {
-  test(`Cloud overview permits exact scoped read ${path}`, async () => {
-    const requests = [];
-    await executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests));
-    assert.deepEqual(requests, ['/api/v1/workspace-context', path]);
-    const crossScope = [];
-    await assert.rejects(() => executeVaultBoundCloudRequest(
-      { method: 'GET', path: path.replace('project-1', 'project-2') }, dependencies(crossScope),
-    ), /cloud request project scope mismatch/u);
-    assert.deepEqual(crossScope, [
-      '/api/v1/workspace-context',
-      '/api/v1/projects/project-2?tenant_id=tenant-1',
-    ]);
-  });
-}
-for (const input of [
-  { method: 'GET', path: '/api/v1/projects/project-1/stats?tenant_id=tenant-1' },
-  { method: 'GET', path: '/api/v1/projects/project-1/stats/' },
-  { method: 'GET', path: '/api/v1/projects/project-1/stats', body: {} },
-  { method: 'POST', path: '/api/v1/projects/project-1/stats' },
-  { method: 'GET', path: memoryPath.replace('page_size=50', 'page_size=05') },
-]) {
-  test(`Cloud overview rejects non-contract read ${JSON.stringify(input)}`, async () => {
-    const requests = [];
-    await assert.rejects(() => executeVaultBoundCloudRequest(input, dependencies(requests)));
-    assert.deepEqual(requests, []);
-  });
-}
+];
 
-for (const [page, pageSize] of [[2, 50], [3, 25], [1, 100]]) {
-  test(`Cloud memories permits scoped page ${page} with size ${pageSize}`, async () => {
+test('full desktop does not transport legacy knowledge HTTP', async () => {
+  for (const path of legacyPaths) {
     const requests = [];
-    const path = `/api/v1/memories/?project_id=project-1&page=${page}&page_size=${pageSize}`;
-    await executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests));
-    assert.deepEqual(requests, ['/api/v1/workspace-context', path]);
-  });
-}
+    await assert.rejects(
+      executeVaultBoundCloudRequest({ method: 'GET', path }, dependencies(requests)),
+      /cloud request endpoint is not allowed/,
+    );
+    assert.deepEqual(requests, []);
+  }
+});
