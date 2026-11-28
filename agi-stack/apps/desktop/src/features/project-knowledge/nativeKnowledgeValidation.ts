@@ -1,4 +1,4 @@
-import { projectKnowledgeError, type ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError, type ProjectKnowledgeScope } from './packageContract/projectKnowledgeClient';
 import type {
   NativeKnowledgeCommand,
   NativeKnowledgeOperation,

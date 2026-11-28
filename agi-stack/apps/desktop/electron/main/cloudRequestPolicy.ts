@@ -8,8 +8,7 @@ import {
 import { parseLocalRunRequest } from './localRunRequest';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import type { CloudSessionRefreshOutcome } from './cloudAuthenticationAuthority';
-import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
-import { authorizeCloudMemoryEndpoint } from './cloudMemoryEndpointPolicy';
+import { authorizeFullDesktopHostEndpoint } from './cloudProductEndpointPolicy';
 import {
   assertCloudMemoryActor, assertCloudMemoryContext, requireCloudMemoryRequestScope,
   type CloudMemoryRequestScope,
@@ -128,8 +127,6 @@ type AuthorizedEndpoint = Readonly<{
     | 'tenant-admin'
     | 'workspace-context'
     | 'workspace-context-switch'
-    | 'backend-stores'
-    | 'project-playbooks'
     | 'project'
     | 'workspace';
   tenantId: string | null;
@@ -161,7 +158,6 @@ const MAX_FORM_TEXT_BYTES = 64 * 1024;
 const IDENTITY_CATALOG_PAGE_SIZE = 100;
 const IDENTITY_CATALOG_MAX_PAGES = 100;
 const CATALOG_PAGE_KEYS = new Set(['total', 'page', 'page_size']);
-const BACKEND_ROOTS = new Set(['graph-stores', 'retrieval-stores']);
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const REQUEST_ID = /^[A-Za-z0-9_-]{16,128}$/u;
 const FORM_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
@@ -997,7 +993,6 @@ function parseMutation(
 
 function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndpoint {
   const target = new URL(request.path, 'https://desktop.invalid');
-  const segments = target.pathname.split('/');
   if (
     target.origin !== 'https://desktop.invalid' ||
     target.username ||
@@ -1006,18 +1001,14 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
   ) {
     throw new Error('cloud request endpoint is not allowed');
   }
-  if (fullDesktop) {
-    if (request.memory_scope !== undefined ||
-        (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command')) {
-      const memory = authorizeCloudMemoryEndpoint(request, target);
-      if (memory) return memory;
-      throw new Error('cloud request memory endpoint is not allowed');
-    }
-    if (request.form !== undefined || request.response !== undefined) {
-      const specializedEndpoint = authorizeCloudProductEndpoint(request, target);
-      if (specializedEndpoint) return specializedEndpoint;
-      throw new Error('cloud request endpoint is not allowed');
-    }
+  // Memory commands belong to the signed knowledge package. fullDesktop is host
+  // chrome, not a bypass back onto the old memory HTTP surface.
+  if (
+    fullDesktop &&
+    (request.memory_scope !== undefined ||
+      (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command'))
+  ) {
+    throw new Error('cloud request memory endpoint is not allowed');
   }
   if (
     target.pathname === '/api/v1/workspace-context' &&
@@ -1075,9 +1066,14 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
       projectId: null,
     });
   }
-  if (!fullDesktop) {
+  // Installed signed packages use this command and page surface. The release
+  // on the server checks the command. fullDesktop does not add the old
+  // business HTTP allowlist.
+  if (request.form === undefined && request.response === undefined) {
     const release = authorizePackageEndpoint(request, target);
     if (release) return release;
+  }
+  if (!fullDesktop) {
     // P5 permits the current project's history list for native retirement and replay.
     const query = target.searchParams;
     if (request.method === 'GET' && target.pathname === '/api/v1/agent/conversations' &&
@@ -1086,63 +1082,9 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
     }
     throw new Error('cloud request endpoint is not allowed');
   }
-  if (segments[1] === 'api' && segments[2] === 'v1' && BACKEND_ROOTS.has(segments[3] ?? '')) {
-    return authorizeBackendEndpoint(request, target, segments);
-  }
-  if (
-    segments.length === 6 &&
-    segments[1] === 'api' &&
-    segments[2] === 'v1' &&
-    segments[3] === 'projects' &&
-    (segments[5] === 'playbooks' || segments[5] === 'reflection-verdicts') &&
-    request.method === 'GET' &&
-    exactQuery(target.searchParams, [['limit', '200']])
-  ) {
-    return Object.freeze({
-      kind: 'project-playbooks',
-      tenantId: null,
-      projectId: identifier(segments[4], 'cloud request project scope is invalid'),
-    });
-  }
-  const productEndpoint = authorizeCloudProductEndpoint(request, target);
-  if (productEndpoint) return productEndpoint;
+  const hostEndpoint = authorizeFullDesktopHostEndpoint(request, target);
+  if (hostEndpoint) return hostEndpoint;
   throw new Error('cloud request endpoint is not allowed');
-}
-
-function authorizeBackendEndpoint(
-  request: VaultBoundCloudRequestInput,
-  target: URL,
-  segments: readonly string[],
-): AuthorizedEndpoint {
-  if (
-    segments.length === 5 &&
-    segments[4] === 'types' &&
-    request.method === 'GET' &&
-    [...target.searchParams].length === 0
-  ) {
-    return Object.freeze({
-      kind: 'backend-stores',
-      tenantId: null,
-      projectId: null,
-    });
-  }
-  const tenantId = exactTenantQuery(target.searchParams);
-  const baseCollection =
-    segments.length === 4 && (request.method === 'GET' || request.method === 'POST');
-  const rawTest = segments.length === 5 && segments[4] === 'test' && request.method === 'POST';
-  const storedResource =
-    segments.length === 5 &&
-    identifierOrNull(segments[4]) !== null &&
-    (request.method === 'PUT' || request.method === 'DELETE');
-  const storedTest =
-    segments.length === 6 &&
-    identifierOrNull(segments[4]) !== null &&
-    segments[5] === 'test' &&
-    request.method === 'POST';
-  if (!baseCollection && !rawTest && !storedResource && !storedTest) {
-    throw new Error('cloud request endpoint is not allowed');
-  }
-  return Object.freeze({ kind: 'backend-stores', tenantId, projectId: null });
 }
 
 const ACCESS_REFRESH_WINDOW_MS = 60_000;
@@ -1714,27 +1656,6 @@ function assertEndpointScope(
   if (endpoint.workspaceId != null && endpoint.workspaceId !== context.workspaceId) {
     throw new Error('cloud request workspace scope mismatch');
   }
-}
-
-function exactTenantQuery(query: URLSearchParams): string {
-  const values = query.getAll('tenant_id');
-  if (values.length !== 1 || [...query].length !== 1) {
-    throw new Error('cloud request tenant scope is invalid');
-  }
-  return identifier(values[0], 'cloud request tenant scope is invalid');
-}
-
-function exactQuery(
-  query: URLSearchParams,
-  expected: readonly (readonly [string, string])[],
-): boolean {
-  const entries = [...query.entries()];
-  return (
-    entries.length === expected.length &&
-    entries.every(
-      ([key, value], index) => key === expected[index]?.[0] && value === expected[index]?.[1],
-    )
-  );
 }
 
 function identifier(value: unknown, reason: string): string {

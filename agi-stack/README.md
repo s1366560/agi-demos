@@ -10,7 +10,7 @@
 
 在仓库根目录执行 `AGISTACK_DESKTOP_PROFILE=full make -C agi-stack run-desktop` 启动签名插件工作台。登录、原生窗口、侧栏、功能目录、项目选择和账号设置由宿主提供。已安装页面、设备调用和版本切换使用当前项目或租户的签名发布。
 
-`AGISTACK_DESKTOP_PROFILE=compat make -C agi-stack run-desktop` 可打开保留全部旧功能的兼容客户端，包括尚待迁移的租户治理、运行池及模板管理和旧本地会话工具。构建命令 `corepack pnpm --dir agi-stack/apps/desktop run build:electron:full` 输出到 `out/`，`build:electron:compat` 输出到 `out-compat/`。设置 `AGISTACK_DESKTOP_FIXED_BUILD=1` 后，同一 Make 入口运行选定版本的现有产物。
+`full` 只表示完整宿主壳（Mission Control）。已安装签名包走命令和页面接口，由签名发布校验具体命令；`fullDesktop` 不再因为完整客户端就放行旧业务 HTTP。`compat` 与未设置都留在 package-host，不再切回旧业务壳。构建命令 `corepack pnpm --dir agi-stack/apps/desktop run build:electron:full` 输出到 `out/`，`build:electron:compat` 输出到 `out-compat/`。设置 `AGISTACK_DESKTOP_FIXED_BUILD=1` 后，同一 Make 入口运行选定版本的现有产物。
 
 ## 这是什么
 

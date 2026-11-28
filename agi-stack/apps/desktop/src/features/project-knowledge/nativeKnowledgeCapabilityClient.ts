@@ -5,13 +5,13 @@ import { requireNativeKnowledgeScope } from './nativeKnowledgeValidation';
 import { definitions } from './nativeKnowledgeProcessingSchemaGenerated';
 import { sameJson } from './nativeKnowledgeRelationships';
 import * as s from './nativeKnowledgeSchema';
-import { PROJECT_MEMORIES_LOCAL_REASON } from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
+import { PROJECT_MEMORIES_LOCAL_REASON } from './packageContract/projectMemoriesClient';
 import type { NativeKnowledgeCapabilitiesResponse } from './nativeKnowledgeContracts';
 import {
   requestProjectKnowledgeJson,
   type ProjectKnowledgeScope,
   projectKnowledgeError,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+} from './packageContract/projectKnowledgeClient';
 
 /** Only an authenticated, stable sidecar observation becomes an observed entry. */
 export async function loadNativeKnowledgeCapability(

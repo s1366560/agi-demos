@@ -1,7 +1,7 @@
-import type { CloudMemoryCommand, CloudMemoryResponse } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
-import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
-import { isRecord, projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
-import { parseMemoryV2 } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryProjection';
+import type { CloudMemoryCommand, CloudMemoryResponse } from './packageContract/cloudMemoryClient';
+import type { ProjectKnowledgeScope } from './packageContract/projectKnowledgeClient';
+import { isRecord, projectKnowledgeError } from './packageContract/projectKnowledgeClient';
+import { parseMemoryV2 } from './packageContract/cloudMemoryProjection';
 
 export function requireCloudMemoryResponse<C extends CloudMemoryCommand>(
   value: unknown,

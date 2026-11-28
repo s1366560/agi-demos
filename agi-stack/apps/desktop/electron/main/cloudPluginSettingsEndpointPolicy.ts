@@ -126,7 +126,7 @@ function queryScope(target: URL) {
     return scoped(Object.fromEntries(entries));
 }
 
-/** Settings contributed by the compatible full client. */
+/** Plugin center settings. Business pages use the signed contribution surface. */
 export function authorizeCloudPluginSettingsEndpoint(request: Request, target: URL): CloudProductEndpoint | null {
   const release = authorizePackageEndpoint(request, target);
   if (release || request.mutation !== undefined) return release;

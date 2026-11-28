@@ -2,7 +2,7 @@ import {
   projectKnowledgeError,
   requestProjectKnowledgeJson,
   type ProjectKnowledgeScope,
-} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+} from '../features/project-knowledge/packageContract/projectKnowledgeClient';
 import type {
   NativeKnowledgeCommand,
   NativeKnowledgeResponse,
