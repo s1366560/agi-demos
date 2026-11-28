@@ -48,16 +48,6 @@ test('full desktop rejects legacy business HTTP that signed contributions do not
       method: 'GET',
     },
     { path: '/api/v1/projects/project-1/playbooks?limit=200', method: 'GET' },
-    {
-      path: '/api/v1/platform-plugins/v2/optional-business/memstack-billing/commands',
-      method: 'POST',
-      body: {
-        tenant_id: 'tenant-1',
-        project_id: 'project-1',
-        command_id: 'get-account',
-        expected_digest: digest,
-      },
-    },
   ];
   for (const request of legacy) {
     await assert.rejects(
@@ -89,29 +79,27 @@ test('full desktop still admits contribution commands and host chrome', async ()
   );
 });
 
-test('contribution scope stays on the declared installation and assertEndpointScope', async () => {
+test('installed packages outside the six business ids stay callable', async () => {
   const dependencies = harness();
-  await assert.rejects(
-    executeVaultBoundCloudRequest(
-      command('/api/v1/tenant-packages/memstack-agent/commands', {
-        tenant_id: 'tenant-1',
-        command_id: 'chat-composer-read',
-      }),
-      dependencies,
-    ),
-    /cloud request endpoint is not allowed/,
-  );
-  await assert.rejects(
-    executeVaultBoundCloudRequest(
-      command('/api/v1/platform-plugins/v2/optional-business/memstack-agent/commands', {
-        tenant_id: 'tenant-1',
-        project_id: 'project-1',
-        command_id: 'dashboard-read',
-      }),
-      dependencies,
-    ),
-    /cloud request endpoint is not allowed/,
-  );
+  const ui = '/api/v1/platform-plugins/v2/optional-business/sample.notes/ui?' + new URLSearchParams({
+    tenant_id: 'tenant-1',
+    project_id: 'project-1',
+    target: 'desktop-renderer',
+    expected_digest: digest,
+  });
+  assert.equal((await executeVaultBoundCloudRequest({ path: ui, method: 'GET' }, dependencies)).status, 200);
+  assert.equal((await executeVaultBoundCloudRequest(command(
+    '/api/v1/platform-plugins/v2/optional-business/sample.notes/commands',
+    { tenant_id: 'tenant-1', project_id: 'project-1', command_id: 'ping' },
+  ), dependencies)).status, 200);
+  assert.equal((await executeVaultBoundCloudRequest(command(
+    '/api/v1/tenant-packages/sample.notes/commands',
+    { tenant_id: 'tenant-1', command_id: 'ping' },
+  ), dependencies)).status, 200);
+});
+
+test('package calls keep tenant and project scope from assertEndpointScope', async () => {
+  const dependencies = harness();
   await assert.rejects(
     executeVaultBoundCloudRequest(
       command('/api/v1/tenant-packages/memstack-agent/commands', {

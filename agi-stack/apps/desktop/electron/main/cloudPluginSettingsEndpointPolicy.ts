@@ -1,6 +1,5 @@
 import { isExactNpmVersion, isNpmPackageName, isNpmPackageReference } from '../../../../packages/plugin-marketplace-ui/src/npmPackageReference';
 import type { CloudProductEndpoint, CloudProductRequestMethod } from './cloudProductEndpointPolicy';
-import { signedCommandAdmits, signedPageAdmits } from './signedContributionSurface';
 
 type Request = Readonly<{
   method?: CloudProductRequestMethod;
@@ -97,8 +96,7 @@ export function authorizePackageEndpoint(
         (data.page_id !== undefined && !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(data.page_id)) ||
         !validPackageScope(data, tenantOnly) ||
         data.target !== 'desktop-renderer' ||
-        !releaseDigest(data.expected_digest) ||
-        !signedPageAdmits(business[1] ?? '', data.page_id, tenantOnly)
+        !releaseDigest(data.expected_digest)
       )
         return null;
       return scoped(data);
@@ -111,7 +109,6 @@ export function authorizePackageEndpoint(
       (body.payload === undefined || record(body.payload)) &&
       validPackageScope(body, tenantOnly) &&
       identifier(body.command_id) &&
-      signedCommandAdmits(business[1] ?? '', body.command_id, tenantOnly) &&
       releaseDigest(body.expected_digest)
       ? scoped(body)
       : null;

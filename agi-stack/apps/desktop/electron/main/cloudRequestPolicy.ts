@@ -1066,8 +1066,9 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
       projectId: null,
     });
   }
-  // Business calls are the signed contribution surface (package commands and
-  // pages). fullDesktop does not open the old business HTTP allowlist.
+  // Installed signed packages use this command and page surface. The release
+  // on the server checks the command. fullDesktop does not add the old
+  // business HTTP allowlist.
   if (request.form === undefined && request.response === undefined) {
     const release = authorizePackageEndpoint(request, target);
     if (release) return release;
