@@ -165,6 +165,7 @@ def _verify_package(
         worker=worker,
         services=services,
         contribution=contribution,
+        release_tools=contribution.tools,
         ui_files=files,
         approved_permissions=granted,
         quotas=_quotas(plugin.quotas, entry.quotas, worker=worker is not None),

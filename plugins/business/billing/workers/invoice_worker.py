@@ -22,6 +22,28 @@ if type(TERMS_DAYS) is not int or not 0 <= TERMS_DAYS <= 365:
     raise ValueError("invoice terms must be between zero and 365 days")
 
 
+def _release_tools() -> list[dict[str, Any]]:
+    """Worker operations plus the host tools declared beside this package."""
+    worker_tools = contribution(PLANS)["tools"]
+    names = {tool["name"] for tool in worker_tools}
+    for candidate in (ROOT / "contributions.json", ROOT.parent / "contributions.json"):
+        if candidate.is_file():
+            document = json.loads(candidate.read_bytes())
+            return [
+                *worker_tools,
+                *(tool for tool in document["tools"] if tool["name"] not in names),
+            ]
+    return worker_tools
+
+
+def _wire_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": tool["name"],
+        "inputSchema": tool["input_schema"],
+        "outputSchema": tool["output_schema"],
+    }
+
+
 def send(message: dict[str, Any]) -> None:
     print(
         json.dumps({"jsonrpc": "2.0", **message}, separators=(",", ":"), allow_nan=False),
@@ -116,16 +138,7 @@ def main() -> None:
                 "serverInfo": {"name": "memstack-billing", "version": "1"},
             }
         elif method == "tools/list":
-            result = {
-                "tools": [
-                    {
-                        "name": tool["name"],
-                        "inputSchema": tool["input_schema"],
-                        "outputSchema": tool["output_schema"],
-                    }
-                    for tool in contribution(PLANS)["tools"]
-                ]
-            }
+            result = {"tools": [_wire_tool(tool) for tool in _release_tools()]}
         elif method == "tools/call":
             progress = params.get("_meta", {}).get("progressToken")
             if (

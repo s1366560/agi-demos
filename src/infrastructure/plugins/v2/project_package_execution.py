@@ -45,7 +45,13 @@ async def _open_worker(
         wall_time_ms=package.quotas["wall_time_ms"],
         max_output_bytes=package.quotas["max_output_bytes"],
     ) as worker:
-        await worker.prepare(package.contribution.tools)
+        # Project admission hides tenant-only tools from invocation, but the
+        # worker still advertises every tool in the signed release.
+        await worker.prepare(
+            package.release_tools
+            if package.release_tools is not None
+            else package.contribution.tools
+        )
         yield worker
 
 

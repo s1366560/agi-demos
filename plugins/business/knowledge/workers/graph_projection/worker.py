@@ -30,7 +30,8 @@ def project(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    tool = json.loads(Path(__file__).with_name("contributions.json").read_bytes())["tools"][0]
+    tools = json.loads(Path(__file__).with_name("contributions.json").read_bytes())["tools"]
+    tool = tools[0]
     for line in sys.stdin:
         message = json.loads(line)
         if "id" not in message:
@@ -47,10 +48,11 @@ def main() -> None:
             result = {
                 "tools": [
                     {
-                        "name": tool["name"],
-                        "inputSchema": tool["input_schema"],
-                        "outputSchema": tool["output_schema"],
+                        "name": item["name"],
+                        "inputSchema": item["input_schema"],
+                        "outputSchema": item["output_schema"],
                     }
+                    for item in tools
                 ]
             }
         elif method == "tools/call" and params["name"] == tool["name"]:
