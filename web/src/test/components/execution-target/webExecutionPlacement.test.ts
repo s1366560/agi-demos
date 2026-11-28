@@ -57,7 +57,10 @@ describe('web composer execution placement', () => {
     const placement = webComposerPlacement(inherited);
     expect(placement.readOnly).toBe(true);
     expect(placement.offersLocal).toBe(false);
-    const source = readFileSync(resolve(process.cwd(), 'src/services/agentService.ts'), 'utf8');
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/components/execution-target/webExecutionPlacement.ts'),
+      'utf8',
+    );
     expect(source.includes("execution_target: 'cloud'")).toBe(true);
     expect(source.includes('/local-runs')).toBe(false);
   });

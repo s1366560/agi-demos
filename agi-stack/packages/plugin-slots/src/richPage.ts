@@ -225,9 +225,18 @@ export function routeRank(
   for (const [index, part] of template.entries()) {
     const value = actual[index];
     if (part.startsWith(":")) {
-      const required = scopeParam(part.slice(1), scope);
-      // A tenant page has no project binding. Its declared project route may name one.
-      if (required != null && required !== value) return null;
+      const name = part.slice(1);
+      const required = scopeParam(name, scope);
+      const scopeBound =
+        name === "tenantId" ||
+        name === "tenant_id" ||
+        name === "projectId" ||
+        name === "project_id";
+      // A tenant page has no project binding, so a project route cannot match it.
+      const unbound = scopeBound
+        ? required == null || required !== value
+        : required != null && required !== value;
+      if (unbound) return null;
       rank += "0";
     } else if (part === value) rank += "1";
     else return null;
