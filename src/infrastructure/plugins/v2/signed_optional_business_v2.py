@@ -82,6 +82,8 @@ class SignedPackageBytesV2:
     ui_files: dict[str, bytes]
     approved_permissions: frozenset[str]
     quotas: dict[str, int] = field(default_factory=dict)
+    # Tools from the signed release before project admission drops tenant-only tools.
+    release_tools: tuple[ToolContribution, ...] | None = None
     entrypoint: str | None = None
     worker: OciWorkerSpec | None = None
     storage_limit: int = 16 * 1024 * 1024

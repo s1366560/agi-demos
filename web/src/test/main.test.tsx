@@ -9,13 +9,10 @@ const createRootSpy = vi.fn(() => ({
 }));
 
 vi.mock('react-dom/client', () => ({
+  createRoot: createRootSpy,
   default: {
     createRoot: createRootSpy,
   },
-}));
-
-vi.mock('../App', () => ({
-  default: () => null,
 }));
 
 vi.mock('../components/common/AppInitializer', () => ({
@@ -58,7 +55,7 @@ describe('main entrypoint', () => {
   });
 
   it('wraps the application with the shared QueryClientProvider', async () => {
-    await import('../main');
+    await import('../fullHost/main');
     const { queryClient } = await import('../services/client/queryClient');
 
     expect(createRootSpy).toHaveBeenCalledWith(document.getElementById('root'));

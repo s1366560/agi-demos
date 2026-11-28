@@ -74,6 +74,90 @@
         "workspace": "Workspace"
       },
       "workspaceTaskTitleFallback": "Workspace task"
+    },
+    "activity": {
+      "usage": "Usage"
+    },
+    "agentMessageIndicator": {
+      "from": "From",
+      "message": "Message",
+      "to": "To"
+    },
+    "canonicalStory": {
+      "acceptanceCount": "Acceptance Count",
+      "invalidIssueCount": "Invalid Issue Count",
+      "investIssueCount": "Invest Issue Count"
+    },
+    "contextDetail": {
+      "beforeCompression": "Before Compression {{percent}} {{pipeline}}",
+      "cachedSummaryThrough": "Cached Summary Through {{count}} {{date}}",
+      "compressionHistory": "Compression History",
+      "compressionSummary": "Compression Summary",
+      "contextUsage": "Context Usage",
+      "empty": {
+        "noCompressionEvents": "No Compression Events",
+        "noData": "No Data",
+        "noTokenData": "No Token Data"
+      },
+      "segments": {
+        "assistant": "Assistant",
+        "summary": "Summary",
+        "system": "System",
+        "tool": "Tool",
+        "user": "User"
+      },
+      "summary": {
+        "avgRatio": "Avg Ratio",
+        "avgSavings": "Avg Savings",
+        "compressions": "Compressions",
+        "tokensSaved": "Tokens Saved"
+      },
+      "timeline": {
+        "messages": "Messages {{after}} {{before}}",
+        "tokensSaved": "Tokens Saved {{percent}} {{tokens}}"
+      },
+      "title": "Title",
+      "tokenDistribution": "Token Distribution"
+    },
+    "multiAgent": {
+      "toggleChildren": "Toggle Children {{name}}",
+      "traceChain": {
+        "descendantsOf": "Descendants Of {{id}} {{of}}",
+        "runCount": "Run Count {{count}}",
+        "tokens": "Tokens {{count}}",
+        "traceLabel": "Trace Label {{Trace}} {{id}}"
+      },
+      "traceTimeline": {
+        "activeCount": "Active Count {{count}}",
+        "doneCount": "Done Count {{count}}",
+        "failedCount": "Failed Count {{count}}",
+        "runCount": "Run Count {{count}}",
+        "tokens": "Tokens {{count}}"
+      }
+    },
+    "projectContext": {
+      "tellMeAboutEntity": "Tell Me About Entity"
+    },
+    "queuedPrompt": {
+      "count": "Count"
+    },
+    "runReview": {
+      "changeCount": "Change Count",
+      "checkCount": "Check Count",
+      "tokens": "Tokens"
+    },
+    "taskLanePanel": {
+      "doneSummary": "Done Summary",
+      "nextLaneRequires": "Next Lane Requires {{requires}}",
+      "priorityTitle": "Priority Title"
+    },
+    "taskList": {
+      "activeSummary": "Active Summary",
+      "completedSummary": "Completed Summary",
+      "priorityTitle": "Priority Title"
+    },
+    "templates": {
+      "variableRequired": "Variable Required {{name}}"
     }
   },
   "fullHost": {
@@ -1187,7 +1271,28 @@
         "selectProjectFirst": "Select a project first"
       },
       "error": "Error",
-      "errorMessage": "An error occurred. Please try again."
+      "errorMessage": "An error occurred. Please try again.",
+      "optionalBusiness": {
+        "absent": "Absent",
+        "actionFailed": "Action Failed",
+        "approval": "Approval {{digest}} {{permissions}} {{plugin}} {{version}}",
+        "disable": "Disable",
+        "enable": "Enable",
+        "exactVersion": "Exact Version",
+        "install": "Install",
+        "loadFailed": "Load Failed",
+        "npmName": "Npm Name",
+        "packageFile": "Package File",
+        "packageInvalid": "Package Invalid",
+        "pluginId": "Plugin Id",
+        "previewNpm": "Preview Npm",
+        "providesService": "Provides Service",
+        "requiresService": "Requires Service",
+        "rollback": "Rollback",
+        "title": "Title",
+        "uninstall": "Uninstall",
+        "versions": "Versions {{installed}} {{running}}"
+      }
     },
     "selector": {
       "workspacesTitle": "Workspaces",
@@ -1407,7 +1512,158 @@
       "autoRefresh": "Auto-refresh 15s",
       "empty": "No runtime instances"
     },
-    "welcome": "Welcome"
+    "welcome": "Welcome",
+    "decisionRecords": {
+      "actions": {
+        "details": "Details",
+        "resolve": "Resolve"
+      },
+      "columns": {
+        "agentInstance": "Agent Instance",
+        "context": "Context",
+        "createdAt": "Created At",
+        "decisionType": "Decision Type",
+        "outcome": "Outcome"
+      },
+      "drawer": {
+        "agentInstanceId": "Agent Instance Id",
+        "contextSummary": "Context Summary",
+        "createdAt": "Created At",
+        "decisionType": "Decision Type",
+        "outcome": "Outcome",
+        "proposalDetails": "Proposal Details",
+        "recordId": "Record Id",
+        "resolvedAt": "Resolved At",
+        "reviewComment": "Review Comment",
+        "reviewerId": "Reviewer Id",
+        "title": "Title",
+        "workspaceId": "Workspace Id"
+      },
+      "empty": "Empty",
+      "filters": {
+        "agentId": "Agent Id",
+        "decisionType": "Decision Type",
+        "workspaceId": "Workspace Id"
+      },
+      "loadError": "Load Error",
+      "messages": {
+        "resolved": "Resolved"
+      },
+      "noWorkspace": "No Workspace",
+      "refresh": "Refresh",
+      "resolve": {
+        "actions": {
+          "allow_always": "Allow always",
+          "allow_once": "Allow once",
+          "deny": "Deny"
+        },
+        "decision": "Decision",
+        "descriptionPrefix": "Description Prefix",
+        "descriptionSuffix": "Description Suffix",
+        "ok": "Ok",
+        "title": "Title"
+      },
+      "subtitle": "Subtitle",
+      "title": "Title",
+      "types": {
+        "action": "Action",
+        "permission": "Permission"
+      },
+      "workspaceNotFound": "Workspace Not Found"
+    },
+    "providers": {
+      "connectionTest": {
+        "apiKeyRequired": "Api Key Required",
+        "failed": "Failed",
+        "passed": "Passed",
+        "returned": "Returned {{status}}"
+      }
+    },
+    "skillEvolution": {
+      "jobs": {
+        "apply": "Apply",
+        "applyConfirm": "Apply Confirm",
+        "reject": "Reject",
+        "rejectConfirm": "Reject Confirm"
+      },
+      "units": {
+        "sessions": "Sessions {{count}}"
+      }
+    },
+    "skills": {
+      "versions": {
+        "createdBy": "Created By {{author}} {{date}}",
+        "current": "Current",
+        "rollback": "Rollback",
+        "rollbackConfirm": "Rollback Confirm"
+      }
+    },
+    "subagents": {
+      "card": {
+        "openActions": "Open Actions {{name}}",
+        "toggle": "Toggle {{name}}"
+      }
+    },
+    "trustPolicies": {
+      "actions": {
+        "createPolicy": "Create Policy",
+        "viewDetails": "View Details"
+      },
+      "columns": {
+        "actionType": "Action Type",
+        "agentInstance": "Agent Instance",
+        "createdAt": "Created At",
+        "grantType": "Grant Type",
+        "grantedBy": "Granted By"
+      },
+      "create": {
+        "actionType": "Action Type",
+        "actionTypePlaceholder": "Action Type Placeholder",
+        "actionTypeRequired": "Action Type Required",
+        "actionTypeTooltip": "Action Type Tooltip",
+        "agentInstanceId": "Agent Instance Id",
+        "agentInstanceIdPlaceholder": "Agent Instance Id Placeholder",
+        "agentInstanceIdRequired": "Agent Instance Id Required",
+        "alwaysConfirmContent": "Always Confirm Content",
+        "grantType": "Grant Type",
+        "grantTypeRequired": "Grant Type Required",
+        "title": "Title",
+        "workspaceId": "Workspace Id",
+        "workspaceIdPlaceholder": "Workspace Id Placeholder",
+        "workspaceIdRequired": "Workspace Id Required"
+      },
+      "details": {
+        "actionType": "Action Type",
+        "agentInstanceId": "Agent Instance Id",
+        "createdAt": "Created At",
+        "deletedAt": "Deleted At",
+        "grantType": "Grant Type",
+        "grantedBy": "Granted By",
+        "policyId": "Policy Id",
+        "title": "Title",
+        "workspaceId": "Workspace Id"
+      },
+      "empty": "Empty",
+      "filters": {
+        "agentInstanceId": "Agent Instance Id",
+        "defaultWorkspaceHint": "Default Workspace Hint {{workspace}}",
+        "workspaceId": "Workspace Id"
+      },
+      "grantTypes": {
+        "always": "Always",
+        "once": "Once"
+      },
+      "loadError": "Load Error",
+      "messages": {
+        "created": "Created"
+      },
+      "noWorkspace": "No Workspace",
+      "refresh": "Refresh",
+      "revokeConfirm": "Revoke Confirm",
+      "subtitle": "Subtitle",
+      "title": "Title",
+      "workspaceNotFound": "Workspace Not Found"
+    }
   },
   "project": {
     "edit": {
@@ -1731,6 +1987,13 @@
       "cancel": "Cancel",
       "creating": "Creating…",
       "submit": "Create Project"
+    },
+    "maintenance": {
+      "ops": {
+        "confirm": {
+          "title": "Title {{operation}}"
+        }
+      }
     }
   },
   "dashboard": {
@@ -2512,6 +2775,81 @@
     },
     "a2uiViewer": {
       "noContent": "No content to display"
+    },
+    "messageErrorBoundary": {
+      "retryAttempts": "Retry Attempts {{count}}",
+      "title": "Title",
+      "tryAgain": "Try Again"
+    },
+    "provider": {
+      "assign": {
+        "assignFailed": "Assign Failed",
+        "descriptionPrefix": "Description Prefix",
+        "descriptionSuffix": "Description Suffix",
+        "operationType": "Operation Type",
+        "operationTypeHelp": "Operation Type Help",
+        "priority": "Priority",
+        "priorityHelp": "Priority Help",
+        "submit": "Submit",
+        "title": "Title"
+      },
+      "assignment": {
+        "configuredCount": "Configured Count {{count}}",
+        "description": "Description",
+        "editTitle": "Edit Title",
+        "emptyDescription": "Empty Description",
+        "heading": "Heading",
+        "loadFailed": "Load Failed",
+        "noneAssigned": "None Assigned",
+        "removeConfirm": "Remove Confirm",
+        "removeTitle": "Remove Title",
+        "selectorTitle": "Selector Title {{operation}}",
+        "unassignFailed": "Unassign Failed"
+      },
+      "card": {
+        "failureCount": "Failure Count {{count}}"
+      },
+      "config": {
+        "envCredentialReferenceDetected": "Env Credential Reference Detected",
+        "flags": {
+          "audio": "Audio",
+          "reasoning": "Reasoning",
+          "tools": "Tools",
+          "vision": "Vision"
+        },
+        "limitUnknown": "Limit Unknown"
+      },
+      "health": {
+        "activeCount": "Active Count {{count}}",
+        "downCount": "Down Count {{count}}",
+        "percentHealthy": "Percent Healthy {{percent}}"
+      },
+      "operationTypes": {
+        "embedding": "Embedding",
+        "llm": "Llm",
+        "rerank": "Rerank"
+      },
+      "selector": {
+        "empty": "Empty",
+        "searchAria": "Search Aria",
+        "searchPlaceholder": "Search Placeholder",
+        "title": "Title"
+      },
+      "usage": {
+        "avgResponse": "Avg Response",
+        "details": "Details",
+        "empty": "Empty",
+        "firstRequest": "First Request",
+        "lastRequest": "Last Request",
+        "loadError": "Load Error",
+        "notAvailable": "Not Available",
+        "providerId": "Provider Id",
+        "title": "Title",
+        "tokenBreakdown": "Token Breakdown {{inCount}} {{outCount}}",
+        "totalCost": "Total Cost",
+        "totalRequests": "Total Requests",
+        "totalTokens": "Total Tokens"
+      }
     }
   },
   "theme": {
@@ -2549,5 +2887,152 @@
       "select": "select"
     },
     "triggerNonMac": "Command palette (Ctrl K)"
+  },
+  "common": {
+    "actions": {
+      "label": "Label"
+    },
+    "add": "Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "error": "Error",
+    "forms": {
+      "description": "Description",
+      "name": "Name",
+      "role": "Role"
+    },
+    "goHome": "Go Home",
+    "hidePassword": "Hide Password",
+    "loading": "Loading",
+    "logout": "Logout",
+    "next": "Next",
+    "noTenant": "No Tenant",
+    "pageContent": "Page Content",
+    "pagination": {
+      "page_info": "Page info"
+    },
+    "previous": "Previous",
+    "project": "Project",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "save": "Save",
+    "showPassword": "Show Password",
+    "stats": {
+      "lastActive": "Last Active",
+      "members": "Members",
+      "memories": "Memories",
+      "nodes": "Nodes",
+      "pendingInvites": "Pending Invites",
+      "resources": "Resources",
+      "total": "Total",
+      "usage": "Usage"
+    },
+    "status": {
+      "active": "Active",
+      "degraded": "Degraded",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "inactive": "Inactive"
+    },
+    "time": {
+      "ago": "Ago {{time}}",
+      "days": "Days",
+      "hours": "Hours",
+      "justNow": "Just Now",
+      "minutes": "Minutes",
+      "never": "Never"
+    }
+  },
+  "executionDag": {
+    "graphStats": "Graph Stats"
+  },
+  "forceChangePassword": {
+    "confirmPassword": "Confirm Password",
+    "confirmPasswordPlaceholder": "Confirm Password Placeholder",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Current Password Placeholder",
+    "failed": "Failed",
+    "loading": "Loading",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "New Password Placeholder",
+    "passwordMinLength": "Password Min Length",
+    "passwordMismatch": "Password Mismatch",
+    "passwordRequired": "Password Required",
+    "signOut": "Sign Out",
+    "submit": "Submit",
+    "subtitle": "Subtitle",
+    "success": "Success",
+    "title": "Title"
+  },
+  "login": {
+    "demo": {
+      "admin": "Admin",
+      "adminAria": "Admin Aria",
+      "title": "Title",
+      "user": "User",
+      "userAria": "User Aria"
+    },
+    "email": "Email",
+    "errors": {
+      "invalidCredentials": "Invalid Credentials"
+    },
+    "footer": {
+      "rights": "Rights {{year}}"
+    },
+    "form": {
+      "email_placeholder": "Email placeholder",
+      "forgot_password": "Forgot password",
+      "forgot_unavailable": "Forgot unavailable",
+      "hide_password": "Hide password",
+      "or": "Or",
+      "password_placeholder": "Password placeholder",
+      "register_unavailable": "Register unavailable",
+      "show_password": "Show password"
+    },
+    "hero": {
+      "features": {
+        "graph": {
+          "desc": "Desc",
+          "title": "Title"
+        },
+        "memory": {
+          "desc": "Desc",
+          "title": "Title"
+        }
+      },
+      "subtitle": "Subtitle",
+      "title": "Title"
+    },
+    "loading": "Loading",
+    "mobile": {
+      "subtitle": "Subtitle",
+      "title": "Title"
+    },
+    "oauth": {
+      "authenticatingWith": "Authenticating With {{provider}}",
+      "continueWith": "Continue With {{provider}}",
+      "errors": {
+        "exchangeFailed": "Exchange Failed",
+        "noState": "No State",
+        "startFailed": "Start Failed"
+      },
+      "redirectingToProvider": "Redirecting To Provider {{provider}}"
+    },
+    "password": "Password",
+    "submit": "Submit",
+    "subtitle": "Subtitle",
+    "title": "Title"
+  },
+  "projectPackages": {
+    "manage": "Manage",
+    "noAccess": "No Access",
+    "project": "Project",
+    "select": "Select",
+    "selectTenant": "Select Tenant",
+    "title": "Title"
   }
 }

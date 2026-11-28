@@ -7,7 +7,10 @@ import hashlib
 import json
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -65,6 +68,18 @@ def compile_guest(plans: dict[str, int]) -> bytes:
         .format(data="\n".join(data), cases="\n".join(cases), unknown=unknown)
     )
     return bytes(wat2wasm(source))
+
+
+def _apply_worker_tools(
+    contribution: dict[str, Any],
+    plans: dict[str, int],
+    worker_contribution: Callable[[dict[str, int]], dict[str, Any]],
+) -> None:
+    worker_release = worker_contribution(plans)
+    worker_names = {tool["name"] for tool in worker_release["tools"]}
+    host_tools = [tool for tool in contribution["tools"] if tool["name"] not in worker_names]
+    contribution["tools"] = [*worker_release["tools"], *host_tools]
+    contribution["storage"] = worker_release["storage"]
 
 
 def build_release(
@@ -137,8 +152,10 @@ def build_release(
             actions.append({"id": "list-invoices", "label": "View project invoices"})
         contribution = json.loads((ROOT / spec["contribution"]).read_bytes())
         stage_contribution(ROOT, root, spec["contribution"])
+        # Quote commands are regenerated from the plan catalog. Commands that
+        # name another tool stay declared so tenant and account pages can call them.
         contribution["commands"] = commands + [
-            command for command in contribution["commands"] if "host_operation" in command
+            command for command in contribution["commands"] if command.get("tool") != "quote"
         ]
         for package_page in (p for p in contribution["pages"] if p["id"] == "account"):
             package_page["commands"] = [command["id"] for command in contribution["commands"]]
@@ -155,7 +172,7 @@ def build_release(
             else:
                 from workers.invoice_contract import contribution as worker_contribution
 
-            contribution.update(worker_contribution(plans))
+            _apply_worker_tools(contribution, plans, worker_contribution)
         services = {}
         plugin_id = PLUGIN
         if plan_service:

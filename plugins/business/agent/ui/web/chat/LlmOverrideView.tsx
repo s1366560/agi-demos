@@ -1,0 +1,334 @@
+import { memo, useState } from 'react';
+
+import { useTranslation } from 'react-i18next';
+
+import { InputNumber, Popover, Slider } from 'antd';
+import { ChevronRight, Settings2 } from 'lucide-react';
+
+import type { ActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
+
+import { Button as LazyButton, Tooltip as LazyTooltip } from 'antd';
+
+import type { LLMConfigOverrides } from '@/types/memory';
+
+import type { TFunction } from 'i18next';
+
+export interface LlmOverrideViewProps {
+  readOverrides: () => LLMConfigOverrides | undefined;
+  onChange: (value: LLMConfigOverrides) => void;
+  disabled?: boolean;
+  capabilities?: ActiveModelCapabilities;
+  /** 'icon' renders the standalone square trigger; 'row' renders a full-width menu row. */
+  variant?: 'icon' | 'row' | undefined;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+export const LlmOverrideView = memo<LlmOverrideViewProps>(
+  ({ readOverrides, onChange, disabled, capabilities, variant = 'icon' }) => {
+    const { t } = useTranslation();
+    const [open, setOpen] = useState(false);
+    const [localOverrides, setLocalOverrides] = useState<LLMConfigOverrides>({});
+
+    const handleOpenChange = (visible: boolean) => {
+      if (visible) setLocalOverrides(readOverrides() ?? {});
+      setOpen(visible);
+    };
+    const change = (next: LLMConfigOverrides) => {
+      setLocalOverrides(next);
+      onChange(next);
+    };
+    const handleParamChange = (
+      key: keyof Omit<LLMConfigOverrides, 'stop' | 'response_format' | 'reasoning_effort'>,
+      value: number | null
+    ) => {
+      const next = { ...localOverrides };
+      if (value === null) delete next[key];
+      else next[key] = value;
+      change(next);
+    };
+    const handleReset = () => change({});
+    const isActive = Object.keys(localOverrides).length > 0;
+
+    // Resolve capability flags (default to permissive when capabilities not provided)
+    const supportsTemperature = capabilities?.supportsTemperature ?? true;
+    const supportsTopP = capabilities?.supportsTopP ?? true;
+    const supportsFrequencyPenalty = capabilities?.supportsFrequencyPenalty ?? true;
+    const supportsPresencePenalty = capabilities?.supportsPresencePenalty ?? true;
+    const temperatureRange = capabilities?.temperatureRange ?? [0, 2];
+    const topPRange = capabilities?.topPRange ?? [0, 1];
+    const maxOutputTokens = capabilities?.maxOutputTokens ?? 128000;
+    const modelName = capabilities?.model?.name;
+
+    const hasAnyControl =
+      supportsTemperature || supportsTopP || supportsFrequencyPenalty || supportsPresencePenalty;
+
+    const content = (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-800 dark:text-slate-100">
+              {tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+            </span>
+            {modelName && (
+              <span className="text-2xs text-content-tertiary truncate max-w-50">{modelName}</span>
+            )}
+          </div>
+          {isActive && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+            >
+              {tFallback(t, 'agent.llmOverride.reset', 'Reset')}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {/* Temperature */}
+          {supportsTemperature && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                {tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
+              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Slider
+                    min={temperatureRange[0]}
+                    max={temperatureRange[1]}
+                    step={0.01}
+                    value={localOverrides.temperature ?? 1}
+                    onChange={(val) => {
+                      handleParamChange('temperature', val);
+                    }}
+                    aria-label={tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
+                  />
+                </div>
+                <InputNumber<number>
+                  min={temperatureRange[0]}
+                  max={temperatureRange[1]}
+                  step={0.01}
+                  size="small"
+                  className="w-20"
+                  value={localOverrides.temperature ?? null}
+                  onChange={(val) => {
+                    handleParamChange('temperature', val);
+                  }}
+                  aria-label={tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Top P */}
+          {supportsTopP && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                {tFallback(t, 'agent.llmOverride.topP', 'Top P')}
+              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Slider
+                    min={topPRange[0]}
+                    max={topPRange[1]}
+                    step={0.01}
+                    value={localOverrides.top_p ?? 1}
+                    onChange={(val) => {
+                      handleParamChange('top_p', val);
+                    }}
+                    aria-label={tFallback(t, 'agent.llmOverride.topP', 'Top P')}
+                  />
+                </div>
+                <InputNumber<number>
+                  min={topPRange[0]}
+                  max={topPRange[1]}
+                  step={0.01}
+                  size="small"
+                  className="w-20"
+                  value={localOverrides.top_p ?? null}
+                  onChange={(val) => {
+                    handleParamChange('top_p', val);
+                  }}
+                  aria-label={tFallback(t, 'agent.llmOverride.topP', 'Top P')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Max Tokens (always shown -- every model has output token limits) */}
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              {tFallback(t, 'agent.llmOverride.maxTokens', 'Max Tokens')}
+            </span>
+            <InputNumber<number>
+              min={1}
+              max={maxOutputTokens}
+              size="small"
+              className="w-full"
+              placeholder={t('agent.llmOverride.maxTokensPlaceholder', {
+                defaultValue: 'e.g. 4096 (max {{max}})',
+                max: maxOutputTokens,
+              })}
+              value={localOverrides.max_tokens ?? null}
+              onChange={(val) => {
+                handleParamChange('max_tokens', val);
+              }}
+              aria-label={tFallback(t, 'agent.llmOverride.maxTokens', 'Max Tokens')}
+            />
+          </div>
+
+          {/* Frequency Penalty */}
+          {supportsFrequencyPenalty && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                {tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
+              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Slider
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={localOverrides.frequency_penalty ?? 0}
+                    onChange={(val) => {
+                      handleParamChange('frequency_penalty', val);
+                    }}
+                    aria-label={tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
+                  />
+                </div>
+                <InputNumber<number>
+                  min={-2}
+                  max={2}
+                  step={0.1}
+                  size="small"
+                  className="w-20"
+                  value={localOverrides.frequency_penalty ?? null}
+                  onChange={(val) => {
+                    handleParamChange('frequency_penalty', val);
+                  }}
+                  aria-label={tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Presence Penalty */}
+          {supportsPresencePenalty && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                {tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
+              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Slider
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={localOverrides.presence_penalty ?? 0}
+                    onChange={(val) => {
+                      handleParamChange('presence_penalty', val);
+                    }}
+                    aria-label={tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
+                  />
+                </div>
+                <InputNumber<number>
+                  min={-2}
+                  max={2}
+                  step={0.1}
+                  size="small"
+                  className="w-20"
+                  value={localOverrides.presence_penalty ?? null}
+                  onChange={(val) => {
+                    handleParamChange('presence_penalty', val);
+                  }}
+                  aria-label={tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* No controls available message */}
+          {!hasAnyControl && (
+            <div className="text-xs text-content-tertiary text-center py-2">
+              {tFallback(
+                t,
+                'agent.llmOverride.noTunableParameters',
+                'No tunable parameters for this model'
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+    return (
+      <Popover
+        content={content}
+        getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
+        trigger="click"
+        open={open}
+        onOpenChange={handleOpenChange}
+        placement={variant === 'row' ? 'rightTop' : 'top'}
+        styles={{ root: { width: 320 } }}
+        arrow={false}
+        destroyOnHidden
+      >
+        {variant === 'row' ? (
+          <button
+            type="button"
+            disabled={!!disabled}
+            aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+            className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 rounded-md text-xs transition-colors duration-150 cursor-pointer ${
+              isActive
+                ? 'text-blue-700 dark:text-blue-300'
+                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+            } ${disabled ? 'cursor-not-allowed opacity-40' : ''}`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Settings2 size={16} className="shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="font-medium truncate">
+                  {tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+                </span>
+                <span className="text-2xs text-slate-400 dark:text-slate-500 truncate">
+                  {tFallback(t, 'agent.plusMenu.llmParamsDesc', 'Temperature, max tokens…')}
+                </span>
+              </div>
+            </div>
+            {isActive ? (
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shrink-0">
+                {tFallback(t, 'agent.plusMenu.customized', 'Custom')}
+              </span>
+            ) : (
+              <ChevronRight size={16} className="text-slate-400 shrink-0" />
+            )}
+          </button>
+        ) : (
+          <div>
+            <LazyTooltip title={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}>
+              <LazyButton
+                type="text"
+                size="small"
+                icon={<Settings2 size={18} />}
+                disabled={!!disabled}
+                aria-label={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+                className={`
+                text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
+                hover:bg-slate-100 dark:hover:bg-slate-700/50
+                rounded-lg h-8 w-8 flex items-center justify-center
+                ${isActive ? 'text-primary bg-primary/5' : ''}
+              `}
+              />
+            </LazyTooltip>
+          </div>
+        )}
+      </Popover>
+    );
+  }
+);
+
+LlmOverrideView.displayName = 'LlmOverridePopover';

@@ -1,0 +1,483 @@
+import React, {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Badge, IconButton, Spinner, Tooltip } from '@radix-ui/themes';
+import { Cross2Icon, CubeIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
+import type { AppRendererProps, SandboxConfig } from '@mcp-ui/client';
+
+import { useI18n } from '../../i18n';
+import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
+import {
+  callMCPAppTool,
+  listMCPAppResources,
+  mcpAppMessageText,
+  readMCPAppResource,
+  safeMCPAppExternalUrl,
+} from './mcpAppHostBridge';
+import type { MCPAppCanvasState, MCPAppCanvasTab } from './mcpAppCanvasEventModel';
+import { createMcpAppHostClient } from './mcpAppsClient';
+import { invokeMcpApp, useMcpAppAutomation } from './mcpAppAutomation';
+import { hasMcpAppNativeGuest, useMcpAppNativeGuest, type McpAppGuestHandlers } from './useMcpAppNativeGuest';
+import type { McpAppGuestConfig } from './mcpAppGuestProtocol';
+import './DesktopMCPAppCanvas.css';
+
+const LazyAppRenderer = React.lazy(async () => {
+  const module = await import('@mcp-ui/client');
+  return { default: module.AppRenderer };
+});
+
+// Resource prefetch can call host handlers without an SDK request signal.
+type MCPAppRequestContext = Readonly<{ signal?: AbortSignal }>;
+
+type DesktopMCPAppCanvasProps = {
+  state: MCPAppCanvasState;
+  api: DesktopProjectMcpAppsClientV2;
+  projectId: string;
+  sandboxProxyUrl: string;
+  onSendMessage: (message: string) => void | Promise<void>;
+  onSelect: (tabId: string) => void;
+  onClose: (tabId: string) => void;
+};
+
+type RendererBoundaryProps = {
+  children: ReactNode;
+  fallback: ReactNode;
+  resetKey: string;
+};
+
+type RendererBoundaryState = { failed: boolean };
+
+type IsolatedRendererProps = {
+  renderer: ReactNode;
+};
+
+class MCPAppRendererBoundary extends Component<RendererBoundaryProps, RendererBoundaryState> {
+  state: RendererBoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): RendererBoundaryState {
+    return { failed: true };
+  }
+
+  componentDidUpdate(previous: RendererBoundaryProps) {
+    if (this.state.failed && previous.resetKey !== this.props.resetKey) {
+      this.setState({ failed: false });
+    }
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function IsolatedMCPAppRenderer({ renderer }: IsolatedRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<Root | null>(null);
+  const rendererRef = useRef(renderer);
+  rendererRef.current = renderer;
+
+  useEffect(() => {
+    let disposed = false;
+    const timerId = window.setTimeout(() => {
+      if (disposed || !containerRef.current) return;
+      const root = createRoot(containerRef.current);
+      rootRef.current = root;
+      root.render(rendererRef.current);
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(timerId);
+      const root = rootRef.current;
+      rootRef.current = null;
+      if (root) queueMicrotask(() => root.unmount());
+    };
+  }, []);
+
+  useEffect(() => {
+    rootRef.current?.render(renderer);
+  }, [renderer]);
+
+  return <div className="desktop-mcp-app-isolated-root" ref={containerRef} />;
+}
+
+export function DesktopMCPAppCanvas({
+  state,
+  api,
+  projectId,
+  sandboxProxyUrl,
+  onSendMessage,
+  onSelect,
+  onClose,
+}: DesktopMCPAppCanvasProps) {
+  const { t } = useI18n();
+  const mcpAppsClient = useMemo(() => createMcpAppHostClient(api), [api]);
+  const active =
+    state.tabs.find((candidate) => candidate.id === state.activeTabId) ??
+    state.tabs[state.tabs.length - 1];
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [frameHeight, setFrameHeight] = useState(420);
+  const automationContainer = useRef<HTMLElement>(null);
+  const nativeGuest = hasMcpAppNativeGuest();
+  const nativeHandlers = useRef<McpAppGuestHandlers | null>(null);
+  const legacyMount = useMcpAppAutomation(nativeGuest ? undefined : active?.automationTabId, automationContainer);
+  const sandboxConfig = useMemo(
+    () => buildSandboxConfig(sandboxProxyUrl, active?.uiMetadata),
+    [active?.uiMetadata, sandboxProxyUrl],
+  );
+  const guestConfig = useMemo<McpAppGuestConfig | null>(() => active ? {
+    toolName: active.toolName || active.appId || 'mcp-app',
+    sandbox: { ...sandboxConfig, url: sandboxConfig.url.toString(),
+      csp: sandboxConfig.csp as McpAppGuestConfig['sandbox']['csp'] },
+    ...(active.resourceHtml ? { html: active.resourceHtml } : {}),
+    ...(active.resourceUri ? { toolResourceUri: active.resourceUri } : {}),
+    ...(active.toolInput ? { toolInput: active.toolInput } : {}),
+    ...(active.toolResult !== undefined ? { toolResult: toCallToolResult(active.toolResult) } : {}),
+  } : null, [active, sandboxConfig]);
+  const nativeAuthority = useMemo(() => ({ api, projectId }), [api, projectId]);
+  const nativeMount = useMcpAppNativeGuest({
+    enabled: nativeGuest && !renderError,
+    key: active?.id,
+    tabId: active?.automationTabId,
+    keys: state.tabs.map(tab => tab.id),
+    config: guestConfig,
+    container: automationContainer,
+    handlers: nativeHandlers,
+    authority: nativeAuthority,
+    onError: setRenderError,
+  });
+  const automationMount = nativeGuest ? nativeMount : legacyMount;
+  const hostContext = useMemo(
+    () => ({
+      projectId,
+      appId: active?.appId ?? null,
+      serverName: active?.serverName ?? null,
+      originalToolName: active?.toolName ?? '',
+      automationTabId: active?.automationTabId,
+      automationMount,
+    }),
+    [active?.appId, active?.serverName, active?.toolName, active?.automationTabId, automationMount, projectId],
+  );
+  const requestLifetime = useMemo(
+    () => ({ controller: new AbortController() }),
+    [mcpAppsClient, hostContext, active?.id],
+  );
+  const lifetimeRef = useRef(requestLifetime);
+  lifetimeRef.current = requestLifetime;
+  useEffect(() => {
+    // StrictMode may replay effect setup after cleanup for the same render.
+    if (requestLifetime.controller.signal.aborted) {
+      requestLifetime.controller = new AbortController();
+    }
+    return () => requestLifetime.controller.abort();
+  }, [requestLifetime]);
+  const requireCurrentLifetime = useCallback((requestSignal?: AbortSignal) => {
+    if (lifetimeRef.current !== requestLifetime || requestLifetime.controller.signal.aborted || requestSignal?.aborted) {
+      throw new DOMException('MCP App request cancelled', 'AbortError');
+    }
+    return requestSignal
+      ? AbortSignal.any([requestLifetime.controller.signal, requestSignal])
+      : requestLifetime.controller.signal;
+  }, [requestLifetime]);
+  const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
+    async (params, extra: MCPAppRequestContext) => {
+      const signal = requireCurrentLifetime(extra?.signal);
+      const result = await callMCPAppTool(mcpAppsClient, hostContext, params, undefined, signal);
+      requireCurrentLifetime();
+      return result;
+    },
+    [hostContext, mcpAppsClient, requireCurrentLifetime],
+  );
+  const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
+    async ({ uri }, extra: MCPAppRequestContext) => {
+      const signal = requireCurrentLifetime(extra?.signal);
+      const result = await readMCPAppResource(mcpAppsClient, hostContext, uri, signal);
+      requireCurrentLifetime();
+      return result;
+    },
+    [hostContext, mcpAppsClient, requireCurrentLifetime],
+  );
+  const handleListResources = useCallback<
+    NonNullable<AppRendererProps['onListResources']>
+  >(async (_params, extra: MCPAppRequestContext) => {
+    const signal = requireCurrentLifetime(extra?.signal);
+    const result = await listMCPAppResources(mcpAppsClient, hostContext, signal);
+    requireCurrentLifetime();
+    return result;
+  }, [hostContext, mcpAppsClient, requireCurrentLifetime]);
+  const handleMessage = useCallback<NonNullable<AppRendererProps['onMessage']>>(
+    async (params) => {
+      requireCurrentLifetime();
+      const message = mcpAppMessageText(params);
+      if (message) await onSendMessage(message);
+      requireCurrentLifetime();
+      return {};
+    },
+    [onSendMessage, requireCurrentLifetime],
+  );
+  const handleOpenLink = useCallback<NonNullable<AppRendererProps['onOpenLink']>>(
+    async ({ url }) => {
+      requireCurrentLifetime();
+      const safeUrl = safeMCPAppExternalUrl(url);
+      if (!safeUrl) throw new Error('MCP App requested an unsafe external URL');
+      const opened = window.open(safeUrl, '_blank', 'noopener,noreferrer');
+      if (opened) opened.opener = null;
+      return {};
+    },
+    [requireCurrentLifetime],
+  );
+
+  useEffect(() => {
+    setRenderError(null);
+    setFrameHeight(420);
+  }, [active?.id]);
+
+  nativeHandlers.current = {
+    callTool: (params, extra) => handleCallTool(
+      params as Parameters<typeof handleCallTool>[0], extra as Parameters<typeof handleCallTool>[1]),
+    readResource: (params, extra) => handleReadResource(
+      params as Parameters<typeof handleReadResource>[0], extra as Parameters<typeof handleReadResource>[1]),
+    listResources: (params, extra) => handleListResources(
+      params as Parameters<typeof handleListResources>[0], extra as Parameters<typeof handleListResources>[1]),
+    message: (params, extra) => handleMessage(
+      params as Parameters<typeof handleMessage>[0], extra as Parameters<typeof handleMessage>[1]),
+    openLink: (params, extra) => handleOpenLink(
+      params as Parameters<typeof handleOpenLink>[0], extra as Parameters<typeof handleOpenLink>[1]),
+    listResourceTemplates: async (_params, extra) => {
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'resources/templates/list', {}, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    listPrompts: async (_params, extra) => {
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'prompts/list', {}, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    fallbackRequest: async (params, extra) => {
+      const request = recordValue(params);
+      if (request?.method !== 'prompts/get') throw new Error('mcp_app_method_unsupported');
+      const signal = requireCurrentLifetime(extra.signal);
+      const result = await invokeMcpApp(automationMount, 'prompts/get', request.params, signal);
+      requireCurrentLifetime(signal);
+      return result;
+    },
+    sizeChanged: params => {
+      requireCurrentLifetime();
+      const height = recordValue(params)?.height;
+      if (typeof height === 'number' && Number.isFinite(height)) setFrameHeight(Math.min(900, Math.max(240, height)));
+      return {};
+    },
+    error: params => {
+      requireCurrentLifetime();
+      const message = recordValue(params)?.message;
+      if (typeof message === 'string') setRenderError(message);
+      return {};
+    },
+  };
+
+  if (!active) return null;
+  const title = active.title || active.toolName || t('mcpApp.untitled');
+  const errorFallback = (
+    <div className="desktop-mcp-app-error" role="alert">
+      <ExclamationTriangleIcon aria-hidden="true" />
+      <span>
+        <strong>{t('mcpApp.rendererError')}</strong>
+        <small>{renderError ?? t('mcpApp.rendererErrorDescription')}</small>
+      </span>
+    </div>
+  );
+  const renderer = (
+    <MCPAppRendererBoundary fallback={errorFallback} resetKey={active.id}>
+      <Suspense
+        fallback={
+          <div className="desktop-mcp-app-loading" role="status">
+            <Spinner /> {t('mcpApp.loading')}
+          </div>
+        }
+      >
+        <LazyAppRenderer
+          toolName={active.toolName || active.appId || 'mcp-app'}
+          sandbox={sandboxConfig}
+          {...(active.resourceHtml ? { html: active.resourceHtml } : {})}
+          {...(active.resourceUri ? { toolResourceUri: active.resourceUri } : {})}
+          {...(active.toolInput ? { toolInput: active.toolInput } : {})}
+          {...(active.toolResult !== undefined
+            ? { toolResult: toCallToolResult(active.toolResult) }
+            : {})}
+          onCallTool={handleCallTool}
+          onReadResource={handleReadResource}
+          onListResources={handleListResources}
+          {...(active.automationTabId ? {
+            onListResourceTemplates: async (_params: unknown, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              const result = await invokeMcpApp(automationMount, 'resources/templates/list', {}, signal);
+              requireCurrentLifetime();
+              return result as { resourceTemplates: [] };
+            },
+            onListPrompts: async (_params: unknown, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              const result = await invokeMcpApp(automationMount, 'prompts/list', {}, signal);
+              requireCurrentLifetime();
+              return result as { prompts: [] };
+            },
+            onFallbackRequest: async (request: { method: string; params?: unknown }, extra: MCPAppRequestContext) => {
+              const signal = requireCurrentLifetime(extra?.signal);
+              if (request.method !== 'prompts/get') throw new Error('mcp_app_method_unsupported');
+              const result = await invokeMcpApp(automationMount, 'prompts/get', request.params, signal);
+              requireCurrentLifetime();
+              return result as Record<string, unknown>;
+            },
+          } : {})}
+          onMessage={handleMessage}
+          onOpenLink={handleOpenLink}
+          onSizeChanged={({ height }) => {
+            if (
+              lifetimeRef.current !== requestLifetime ||
+              requestLifetime.controller.signal.aborted
+            )
+              return;
+            if (typeof height !== 'number' || !Number.isFinite(height)) return;
+            setFrameHeight(Math.min(900, Math.max(240, height)));
+          }}
+          onError={(error) => {
+            if (
+              lifetimeRef.current !== requestLifetime ||
+              requestLifetime.controller.signal.aborted
+            )
+              return;
+            setRenderError(error.message);
+          }}
+        />
+      </Suspense>
+    </MCPAppRendererBoundary>
+  );
+
+  return (
+    <section className="desktop-mcp-app-canvas" aria-label={t('mcpApp.canvas')}>
+      <header>
+        <span>
+          <CubeIcon aria-hidden="true" />
+          <span>
+            <strong>{title}</strong>
+            <small>{t('mcpApp.canvasDescription')}</small>
+          </span>
+        </span>
+        <Badge color="violet" variant="soft">
+          {active.serverName || active.toolName || t('mcpApp.plugin')}
+        </Badge>
+      </header>
+      <nav role="tablist" aria-label={t('mcpApp.tabs')}>
+        {state.tabs.map((tab) => {
+          const selected = tab.id === active.id;
+          const tabTitle = tab.title || tab.toolName || t('mcpApp.untitled');
+          return (
+            <span className={selected ? 'selected' : ''} key={tab.id}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => onSelect(tab.id)}
+              >
+                {tabTitle}
+              </button>
+              <Tooltip content={t('mcpApp.closeTab', { title: tabTitle })}>
+                <IconButton
+                  type="button"
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={t('mcpApp.closeTab', { title: tabTitle })}
+                  onClick={() => onClose(tab.id)}
+                >
+                  <Cross2Icon />
+                </IconButton>
+              </Tooltip>
+            </span>
+          );
+        })}
+      </nav>
+      <article
+        ref={automationContainer}
+        className="desktop-mcp-app-frame"
+        aria-label={t('mcpApp.content', { title })}
+        style={{ minHeight: frameHeight }}
+      >
+        {renderError ? errorFallback : nativeGuest ? (
+          <div className="desktop-mcp-app-native-slot" />
+        ) : <IsolatedMCPAppRenderer renderer={renderer} />}
+      </article>
+    </section>
+  );
+}
+
+function buildSandboxConfig(
+  proxyUrl: string,
+  uiMetadata: MCPAppCanvasTab['uiMetadata'] | undefined,
+): SandboxConfig {
+  let url: URL;
+  try {
+    url = new URL(proxyUrl);
+  } catch {
+    url = new URL(window.location.href);
+  }
+  const config: SandboxConfig = {
+    url,
+    permissions: 'allow-scripts allow-same-origin allow-forms',
+  };
+  const csp = recordValue(uiMetadata?.csp);
+  if (!csp) return config;
+  const connectDomains = stringArray(csp.connectDomains);
+  const resourceDomains = stringArray(csp.resourceDomains);
+  const frameDomains = stringArray(csp.frameDomains);
+  const baseUriDomains = stringArray(csp.baseUriDomains);
+  return {
+    ...config,
+    csp: {
+      ...(connectDomains ? { connectDomains } : {}),
+      ...(resourceDomains ? { resourceDomains } : {}),
+      ...(frameDomains ? { frameDomains } : {}),
+      ...(baseUriDomains ? { baseUriDomains } : {}),
+    },
+  };
+}
+
+function toCallToolResult(value: unknown): NonNullable<AppRendererProps['toolResult']> {
+  const record = recordValue(value);
+  if (record && Array.isArray(record.content)) {
+    return value as NonNullable<AppRendererProps['toolResult']>;
+  }
+  let text: string;
+  if (typeof value === 'string') {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value, null, 2) ?? '';
+    } catch {
+      text = String(value);
+    }
+  }
+  const structuredContent = recordValue(record?.structuredContent);
+  return {
+    content: [{ type: 'text', text }],
+    ...(structuredContent ? { structuredContent } : {}),
+  };
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringArray(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : null;
+}

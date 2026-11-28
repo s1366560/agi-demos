@@ -1,1 +1,99 @@
-../../../../../../plugins/business/agent/ui/desktop/chat/ComposerExecutionPlacement.css
+.composer-execution-placement {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.composer-execution-capsule {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  min-height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--desktop-border);
+  border-radius: 999px;
+  background: var(--desktop-panel);
+}
+
+.composer-execution-capsule button,
+.composer-execution-static {
+  min-height: 28px;
+  max-width: 240px;
+  overflow: hidden;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--desktop-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 28px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-execution-capsule button {
+  cursor: pointer;
+}
+
+.composer-execution-capsule button[aria-pressed='true'] {
+  background: var(--desktop-panel-raised);
+  color: var(--desktop-text);
+}
+
+.composer-execution-capsule button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.composer-execution-environment-menu {
+  position: relative;
+}
+
+.composer-execution-environment-menu > summary {
+  min-height: 28px;
+  padding: 0 10px;
+  color: var(--desktop-muted);
+  font-size: 12px;
+  line-height: 28px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.composer-execution-environment-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.composer-execution-environment-menu > div {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 220px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 10px;
+  background: var(--desktop-panel-raised);
+}
+
+.composer-execution-environment-menu button {
+  max-width: none;
+  text-align: left;
+}
+
+.composer-execution-environment-menu p {
+  margin: 0;
+  color: var(--desktop-muted);
+  font-size: 11px;
+}
+
+.composer-execution-notice {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--desktop-red-soft);
+  font-size: 12px;
+}

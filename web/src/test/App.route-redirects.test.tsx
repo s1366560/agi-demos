@@ -247,21 +247,16 @@ describe('App route redirects', () => {
   });
 
   it('declares tenant static pages before the legacy conversation catch-all route', () => {
-    const compositionSource = readFileSync(
-      'src/routes/v2/webDefaultBusinessRouteElementsV2.tsx',
-      'utf8'
-    );
-    const tenantSource = readFileSync('src/routes/v2/webTenantScopedRouteElementsV2.tsx', 'utf8');
-    const projectSource = readFileSync('src/routes/v2/webProjectRouteElementsV2.tsx', 'utf8');
-    const tenantMountIndex = compositionSource.indexOf('createTenantScopedRouteElementsV2()');
-    const projectMountIndex = compositionSource.indexOf('createProjectRouteElementsV2()');
+    const shellSource = readFileSync('src/fullHost/FullWorkbench.tsx', 'utf8');
+    const projectsIndex = shellSource.indexOf('path="/tenant/:tenantId/projects"');
+    const settingsIndex = shellSource.indexOf('path="/tenant/:tenantId/settings"');
+    const catchAllIndex = shellSource.indexOf('path="/tenant/:tenantId/*"');
 
-    expect(tenantSource).toContain('path=":tenantId/subagents"');
-    expect(tenantSource).toContain('path=":tenantId/agent-definitions"');
-    expect(tenantSource).toContain('path=":tenantId/dead-letter-queue"');
-    expect(projectSource).toContain('path=":tenantId/:conversation"');
-    expect(tenantMountIndex).toBeGreaterThan(-1);
-    expect(projectMountIndex).toBeGreaterThan(tenantMountIndex);
+    expect(projectsIndex).toBeGreaterThan(-1);
+    expect(settingsIndex).toBeGreaterThan(projectsIndex);
+    expect(catchAllIndex).toBeGreaterThan(settingsIndex);
+    expect(shellSource).toContain('path="/tenant/:tenantId/plugins"');
+    expect(shellSource).not.toContain('<ProjectAgentDashboard />');
   });
 
   it('registers all canonical project Agent destinations as production routes', () => {
@@ -283,11 +278,11 @@ describe('App route redirects', () => {
   });
 
   it('keeps the App shell free of business route definitions', () => {
-    const appSource = readFileSync('src/App.tsx', 'utf8');
+    const appSource = readFileSync('src/fullHost/FullWorkbench.tsx', 'utf8');
 
-    expect(appSource).toContain('composeWebRouteArtifactsV2(routeArtifacts)');
+    expect(appSource).toContain('<ProjectBusinessRoute');
     expect(appSource).not.toContain('path="/tenants/new"');
-    expect(appSource).not.toContain('path="/tenant"');
     expect(appSource).not.toContain('path="/project/:projectId/*"');
+    expect(appSource).not.toContain('composeWebRouteArtifactsV2');
   });
 });
