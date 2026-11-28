@@ -1,0 +1,4346 @@
+{
+  "projectAgent": {
+    "eyebrow": "Project Agent",
+    "dashboard": {
+      "title": "Agent dashboard",
+      "description": "Monitor delegated runs using the current project's trace authority.",
+      "activeRuns": "Active runs",
+      "recentRuns": "Recent runs",
+      "viewAll": "View all logs"
+    },
+    "logs": {
+      "title": "Agent logs",
+      "description": "Project-scoped, permission-filtered execution history.",
+      "statusFilter": "Status",
+      "allStatuses": "All statuses",
+      "empty": "No project Agent runs match this view."
+    },
+    "patterns": {
+      "title": "Agent patterns",
+      "empty": "No tenant-shared Agent patterns are available to this project.",
+      "degradedBadge": "Tenant-shared authority",
+      "sharedBadge": "Shared across this tenant",
+      "sharedDescription": "Read-only workflow patterns available to this project through its tenant membership. These patterns remain tenant-owned and are shared across projects.",
+      "unavailableTitle": "Shared patterns are unavailable",
+      "unavailableDescription": "The project membership or tenant-shared patterns authority could not be verified. No tenant data is shown without that authority."
+    },
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "timed_out": "Timed out"
+    },
+    "errors": {
+      "project_agent_trace_forbidden": {
+        "title": "Project Agent access denied",
+        "description": "Your current project membership does not allow access to these runs."
+      },
+      "project_agent_trace_unavailable": {
+        "title": "Project Agent data is unavailable",
+        "description": "The project trace authority could not be reached. Retry when the service is available."
+      },
+      "project_agent_trace_scope_conflict": {
+        "title": "Project Agent scope conflict",
+        "description": "The trace authority returned data for a different project, so no run data is shown."
+      },
+      "project_agent_trace_contract_invalid": {
+        "title": "Project Agent contract invalid",
+        "description": "The trace authority returned an invalid or unredacted response, so no run data is shown."
+      }
+    }
+  },
+  "agent": {
+    "workspace": {
+      "title": "Agent Workspace",
+      "selectProject": "Select Project",
+      "selectProjectToStart": "Please select a project to start chatting",
+      "noProjects": "You haven't created any projects yet",
+      "createProject": "Create Project",
+      "changeProject": "Switch Project",
+      "currentProject": "Current Project",
+      "loading": "Initializing Agent workspace…",
+      "projectsLoadFailed": "Failed to load projects",
+      "mode": {
+        "single": "Single",
+        "shared": "Shared",
+        "isolated": "Isolated",
+        "autonomous": "Autonomous",
+        "updated": "Mode updated",
+        "updateFailed": "Failed to update mode",
+        "label": "Mode",
+        "summaryLabel": "Actor model",
+        "participantsLabel": "Participants",
+        "coordinatorLabel": "Coordinator",
+        "focusedLabel": "Focused agent",
+        "derivedRoleAutonomous": "Leader/worker runtime role is derived from attempt context and the linked workspace task.",
+        "derivedRoleIsolated": "In isolated mode, routing prefers the focused agent before coordinator fallback.",
+        "derivedRoleShared": "Conversation roles stay conversation-scoped; runtime authority is still derived at execution time."
+      },
+      "task": {
+        "updated": "Linked task updated",
+        "updateFailed": "Failed to update linked task",
+        "label": "Linked workspace task",
+        "placeholder": "Pick a workspace task…",
+        "hint": "Goal, budget and termination are driven by the linked task.",
+        "summaryLabel": "Linked task"
+      }
+    },
+    "runInput": {
+      "dispatchFailed": "Delivery failed: {{reason}}"
+    },
+    "activity": {
+      "usage": "{{tokens}} tokens · {{cost}} {{currency}}"
+    },
+    "runReview": {
+      "tokens": "{{count}} tokens",
+      "changeCount": "{{count}} files changed",
+      "checkCount": "{{passed}} passed · {{failed}} failed"
+    },
+    "taskList": {
+      "empty": "No tasks yet. The agent will create tasks when working on complex requests.",
+      "completedSummary": "{{completed}}/{{total}} completed",
+      "activeSummary": "{{count}} task in progress",
+      "activeSummary_one": "{{count}} task in progress",
+      "activeSummary_other": "{{count}} tasks in progress",
+      "priorityTitle": "{{priority}} priority",
+      "status": {
+        "pending": "Pending",
+        "inProgress": "In progress",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "progressAria": "Task completion progress"
+    },
+    "taskLanePanel": {
+      "empty": "No tasks yet. The agent will create lanes when working on complex requests.",
+      "doneSummary": "{{completed}}/{{total}} done",
+      "priorityTitle": "{{priority}} priority",
+      "advancesWith": "advances with",
+      "nextLaneRequires": "Next lane requires: {{artifact}}",
+      "emptyLane": "Empty.",
+      "lanes": {
+        "inProgress": "In progress",
+        "backlog": "Backlog",
+        "done": "Done",
+        "blocked": "Blocked",
+        "other": "Other"
+      },
+      "progressAria": "Task completion progress"
+    },
+    "groupChat": {
+      "title": "Workspace Chat",
+      "subtitle": "Collaborate with team members and agents"
+    },
+    "selectAgent": "Select Agent",
+    "availableAgents": "Available Agents",
+    "noAgentsAvailable": "No agents available",
+    "enabled": "Enabled",
+    "graph": {
+      "title": "Agent Graph",
+      "clear": "Clear",
+      "noActiveRun": "No active graph run",
+      "noNodes": "Waiting for nodes to start…",
+      "outputKeys": "Output keys: {{keys}}",
+      "pattern": "Pattern"
+    },
+    "tableView": {
+      "defaultTitle": "Data Table",
+      "rowCount": "{{count}} rows",
+      "rowCount_one": "{{count}} row",
+      "rowCount_other": "{{count}} rows",
+      "searchAria": "Search table rows",
+      "exportCsv": "Export CSV"
+    },
+    "evidence": {
+      "bundleTitle": "Evidence bundle",
+      "emptyBucket": "No evidence in this bucket yet.",
+      "tabs": {
+        "testRuns": "Test runs",
+        "diffs": "Diffs",
+        "screenshots": "Screenshots",
+        "logs": "Logs"
+      }
+    },
+    "multiAgent": {
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "stopped": "Stopped",
+        "cancelled": "Cancelled",
+        "unknown": "Unknown"
+      },
+      "empty": {
+        "title": "No agents spawned yet",
+        "description": "Multi-agent activity will appear here when agents are spawned during a conversation."
+      },
+      "toggleChildren": "Toggle child agents of {{name}}",
+      "traceChain": {
+        "emptyTitle": "No chain data",
+        "emptyDescription": "Select a trace to view its execution chain.",
+        "loading": "Loading trace chain…",
+        "runDetails": "Run details",
+        "untracedRuns": "Untraced runs",
+        "traceLabel": "Trace: {{id}}",
+        "descendantsOf": "Descendants of: {{id}}",
+        "executionChain": "Execution Chain",
+        "runCount": "{{count}} runs",
+        "runCount_one": "{{count}} run",
+        "runCount_other": "{{count}} runs",
+        "tokens": "{{count}} tokens"
+      },
+      "traceTimeline": {
+        "emptyTitle": "No execution traces",
+        "emptyDescription": "SubAgent execution traces will appear here when agents run tasks.",
+        "untracedRuns": "Untraced Runs",
+        "runCount": "{{count}} runs",
+        "runCount_one": "{{count}} run",
+        "runCount_other": "{{count}} runs",
+        "activeCount": "{{count}} active",
+        "activeCount_one": "{{count}} active",
+        "activeCount_other": "{{count}} active",
+        "doneCount": "{{count}} done",
+        "doneCount_one": "{{count}} done",
+        "doneCount_other": "{{count}} done",
+        "failedCount": "{{count}} failed",
+        "failedCount_one": "{{count}} failed",
+        "failedCount_other": "{{count}} failed",
+        "tokens": "{{count}} tokens"
+      }
+    },
+    "toolCard": {
+      "status": {
+        "running": "RUNNING",
+        "success": "SUCCESS",
+        "failed": "FAILED"
+      },
+      "startTime": "Start: {{time}}",
+      "endTime": "End: {{time}}",
+      "input": "Input",
+      "result": "Result"
+    },
+    "stepAdjustment": {
+      "title": "Step Adjustments Review",
+      "pendingCount": "{{count}} pending",
+      "pendingCount_one": "{{count}} pending",
+      "pendingCount_other": "{{count}} pending",
+      "approveTitle": "Approve adjustment",
+      "rejectTitle": "Reject adjustment",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approveAll": "Approve All",
+      "rejectAll": "Reject All",
+      "newToolInput": "New Tool Input",
+      "empty": "No adjustments to review",
+      "listLabel": "Step adjustments"
+    },
+    "activityTimeline": {
+      "title": "Activity Timeline",
+      "processing": "Processing…",
+      "timeNow": "now",
+      "timeSecondsAgo_one": "{{count}}s ago",
+      "timeSecondsAgo_other": "{{count}}s ago",
+      "timeSecondsAgo": "{{count}}s ago",
+      "timeMinutesAgo_one": "{{count}}m ago",
+      "timeMinutesAgo_other": "{{count}}m ago",
+      "timeMinutesAgo": "{{count}}m ago",
+      "activityCount": "{{count}} activities",
+      "activityCount_one": "{{count}} activity",
+      "activityCount_other": "{{count}} activities",
+      "showEarlier": "Show {{count}} earlier activities",
+      "showEarlier_one": "Show {{count}} earlier activity",
+      "showEarlier_other": "Show {{count}} earlier activities",
+      "waiting": "Waiting for next activity…",
+      "thought": "Thought",
+      "tool": "Tool",
+      "executionTime": "Execution time",
+      "viewDetails": "View details",
+      "input": "Input",
+      "result": "Result",
+      "error": "Error",
+      "unknownTool": "unknown",
+      "status": {
+        "running": "RUNNING",
+        "success": "SUCCESS",
+        "failed": "FAILED"
+      }
+    },
+    "executionTimelineChart": {
+      "title": "Execution Timeline",
+      "description": "Execution activity grouped by hour",
+      "empty": "No timeline data available",
+      "barTitle": "{{time}}\nTotal: {{total}}\nCompleted: {{completed}}\nFailed: {{failed}}",
+      "completed": "Completed",
+      "failed": "Failed",
+      "other": "Other"
+    },
+    "toolCallVisualization": {
+      "empty": "No tool executions",
+      "duration": "Duration: {{duration}}",
+      "statusLine": "Status: {{status}}",
+      "status": {
+        "running": "RUNNING",
+        "success": "SUCCESS",
+        "failed": "FAILED"
+      },
+      "labels": {
+        "status": "Status",
+        "duration": "Duration",
+        "startTime": "Start Time",
+        "endTime": "End Time",
+        "input": "INPUT",
+        "output": "OUTPUT",
+        "error": "ERROR"
+      },
+      "modes": {
+        "grid": "Grid",
+        "timeline": "Timeline",
+        "flow": "Flow"
+      }
+    },
+    "agentToolCards": {
+      "status": {
+        "running": "Running",
+        "error": "Error",
+        "done": "Done"
+      },
+      "sessionStatus": {
+        "running": "running",
+        "completed": "completed",
+        "unknown": "unknown"
+      },
+      "agentFallback": "Agent",
+      "spawnAgent": "Spawn Agent",
+      "stopAgent": "Stop Agent",
+      "sendMessage": "Send Message",
+      "availableAgents": "Available Agents",
+      "activeSessions": "Active Sessions",
+      "sessionHistory": "Session History",
+      "agent": "Agent",
+      "session": "Session",
+      "sessionShort": "Sess",
+      "task": "Task",
+      "to": "To",
+      "messageShort": "Msg",
+      "cascade": "cascade",
+      "stopped": "Stopped",
+      "sessionCount": "{{count}} session",
+      "sessionCount_one": "{{count}} session",
+      "sessionCount_other": "{{count}} sessions",
+      "messageCount": "{{count}} msg",
+      "messageCount_one": "{{count}} msg",
+      "messageCount_other": "{{count}} msgs",
+      "showLess": "Show less",
+      "showMore": "Show {{count}} more…",
+      "spawnable": "spawnable",
+      "unknown": "Unknown",
+      "viewSession": "View agent session"
+    },
+    "contextDetail": {
+      "beforeCompression": "Context usage before compression ({{pipeline}}): {{percent}}%",
+      "cachedSummaryThrough": "Cached summary covers {{count}} messages through {{date}}.",
+      "title": "Context Monitor",
+      "contextUsage": "Context Usage",
+      "tokenDistribution": "Token Distribution",
+      "compressionSummary": "Compression Summary",
+      "compressionHistory": "Compression History",
+      "levels": {
+        "none": "No compression active. Context usage is within normal range.",
+        "l1Prune": "Old tool outputs are being pruned to reclaim space.",
+        "l2Summarize": "Historical messages are being incrementally summarized.",
+        "l3DeepCompress": "Full context distillation active. Maximum compression."
+      },
+      "segments": {
+        "system": "System",
+        "user": "User",
+        "assistant": "Assistant",
+        "tool": "Tool",
+        "summary": "Summary"
+      },
+      "empty": {
+        "noTokenData": "No token data",
+        "noData": "No data",
+        "noCompressionEvents": "No compression events yet"
+      },
+      "timeline": {
+        "tokensSaved": "Saved {{tokens}} tokens ({{percent}}%)",
+        "messages": "Messages: {{before}} -> {{after}}"
+      },
+      "summary": {
+        "tokensSaved": "Tokens Saved",
+        "compressions": "Compressions",
+        "avgRatio": "Avg Ratio",
+        "avgSavings": "Avg Savings"
+      }
+    },
+    "graphView": {
+      "emptyTitle": "No Active Graph",
+      "emptyDescription": "Start a multi-agent orchestration to see the graph.",
+      "ariaLabel": "Agent Graph Run Visualization",
+      "handoff": "Handoff",
+      "status": {
+        "pending": "pending",
+        "running": "running",
+        "completed": "completed",
+        "failed": "failed",
+        "skipped": "skipped",
+        "cancelled": "cancelled"
+      },
+      "fallbackDefinition": "Using live handoffs because the graph definition is unavailable.",
+      "loadingDefinition": "Loading graph definition",
+      "loadingWorkspaceGraph": "Loading workspace graph",
+      "refreshingWorkspaceGraph": "Refreshing workspace graph",
+      "title": "Execution Graph",
+      "unassigned": "Unassigned",
+      "workspaceFallback": "Showing the latest available workspace graph.",
+      "workspaceReadyDescription": "Execution topology will appear here when the workspace starts dispatching graph or handoff events.",
+      "workspaceReadyTitle": "Workspace graph is ready",
+      "workspaceTitle": "Workspace Execution Graph"
+    },
+    "patternList": {
+      "status": {
+        "preferred": "Preferred",
+        "active": "Active",
+        "deprecated": "Deprecated",
+        "unclassified": "Unclassified"
+      },
+      "columns": {
+        "status": "Status",
+        "patternName": "Pattern Name",
+        "usage": "Usage",
+        "successRate": "Success Rate"
+      },
+      "deletePattern": "Delete pattern",
+      "deleteAria": "Delete {{name}}",
+      "empty": "No patterns found",
+      "tableLabel": "Pattern table"
+    },
+    "chatHistory": {
+      "newConversationAria": "New conversation",
+      "newChat": "New Chat",
+      "searchPlaceholder": "Search history…",
+      "searchAria": "Search conversation history",
+      "recentSessions": "Recent Sessions",
+      "older": "Older",
+      "emptySearch": "No conversations found",
+      "status": {
+        "done": "Done",
+        "running": "Running",
+        "failed": "Failed"
+      }
+    },
+    "agentMessageIndicator": {
+      "from": "From",
+      "to": "To",
+      "message": "Message",
+      "directionSent": "Sent",
+      "directionReceived": "Received"
+    },
+    "planReviewGate": {
+      "title": "Review gate",
+      "description": "Approve to continue, or request changes",
+      "stepCount": "{{count}} step",
+      "stepCount_one": "{{count}} step",
+      "stepCount_other": "{{count}} steps",
+      "changePlaceholder": "What should change about the plan?",
+      "queueRevision": "Queue revision request",
+      "abort": "Abort",
+      "requestChanges": "Request changes",
+      "approve": "Approve",
+      "verdict": {
+        "approved": "Approved",
+        "changesRequested": "Changes requested",
+        "aborted": "Aborted"
+      }
+    },
+    "resizer": {
+      "label": "Resize panel"
+    },
+    "rightPanel": {
+      "taskCount": "{{count}} item",
+      "taskCount_one": "{{count}} item",
+      "taskCount_other": "{{count}} items",
+      "switchToList": "Switch to list view",
+      "switchToLane": "Switch to lane view",
+      "list": "List",
+      "lanes": "Lanes",
+      "close": "Close panel",
+      "tabs": {
+        "tasks": "Tasks",
+        "agent": "Session",
+        "insights": "Insights",
+        "agents": "Agents",
+        "graph": "Graph",
+        "ariaLabel": "Panel views"
+      },
+      "agentSession": {
+        "retry": "Retry"
+      },
+      "workspacePlan": {
+        "planSummary": "{{done}}/{{total}} plan nodes done",
+        "partial": "Partial",
+        "loading": "Loading…",
+        "untitledPlan": "Workspace plan",
+        "sourceTask": "Task",
+        "sourceVerify": "Verify",
+        "sourcePlan": "Plan",
+        "current": "Current",
+        "empty": "No workspace tasks or plan yet. They will appear here when the workspace starts execution.",
+        "emptyLane": "Empty.",
+        "iterationTitle": "Iteration {{index}}",
+        "unassignedIteration": "No iteration",
+        "status": {
+          "todo": "Todo",
+          "in_progress": "In progress",
+          "blocked": "Blocked",
+          "done": "Done"
+        },
+        "completionLabel": "Plan completion",
+        "rowProgressLabel": "Task progress"
+      },
+      "insights": {
+        "empty": "Execution diagnostics will appear after the agent makes routing and tool-selection decisions.",
+        "title": "Execution Insights",
+        "routing": "Routing",
+        "path": "Path",
+        "confidence": "Confidence",
+        "selection": "Selection",
+        "selectionSummary": "{{final}}/{{initial}} tools kept · removed {{removed}}",
+        "stageSummary": "{{count}} stage(s) executed",
+        "policy": "Policy",
+        "policySummary": "Filtered {{removed}} tool(s) across {{stages}} stage(s)",
+        "toolset": "Toolset",
+        "narrative": "Execution Narrative"
+      }
+    },
+    "streamingThought": {
+      "reasoning": "Reasoning",
+      "thinking": "Thinking…"
+    },
+    "simpleExecution": {
+      "title": "Tool Executions",
+      "toolsUsed": "{{count}} tool used",
+      "toolsUsed_one": "{{count}} tool used",
+      "toolsUsed_other": "{{count}} tools used",
+      "completed": "{{count}} completed",
+      "running": "{{count}} running",
+      "failed": "{{count}} failed",
+      "processing": "Processing…"
+    },
+    "results": {
+      "multiSource": {
+        "title": "Aggregated sources",
+        "from": "from",
+        "call": "call",
+        "calls": "calls",
+        "group": "group",
+        "groups": "groups"
+      }
+    },
+    "canonicalStory": {
+      "story": "Story",
+      "dependsOnOthers": "depends on others",
+      "untitled": "(untitled story)",
+      "acceptanceCount": "{{count}} AC",
+      "acceptanceCount_one": "{{count}} AC",
+      "acceptanceCount_other": "{{count}} ACs",
+      "investIssueCount": "{{count}} INVEST issue",
+      "investIssueCount_one": "{{count}} INVEST issue",
+      "investIssueCount_other": "{{count}} INVEST issues",
+      "none": "none",
+      "testable": "testable",
+      "untestable": "untestable",
+      "independentStoryCheck": "Independent story check",
+      "dependsOn": "Depends on",
+      "unblockWhen": "Unblock when",
+      "invalidIssueCount": "Canonical story has {{count}} issue",
+      "invalidIssueCount_one": "Canonical story has {{count}} issue",
+      "invalidIssueCount_other": "Canonical story has {{count}} issues",
+      "sections": {
+        "problem": "Problem",
+        "userValue": "User value",
+        "acceptanceCriteria": "Acceptance criteria",
+        "constraints": "Constraints / affected areas",
+        "dependencies": "Dependencies",
+        "outOfScope": "Out of scope"
+      }
+    },
+    "tokenUsage": {
+      "title": "Token Usage",
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning",
+      "tooltip": "{{label}}: {{count}} tokens",
+      "usedPercent": "{{percent}}% used",
+      "tokenCount": "{{count}} tokens",
+      "costBreakdown": "Cost Breakdown",
+      "inputCost": "Input cost",
+      "outputCost": "Output cost",
+      "reasoningCost": "Reasoning cost",
+      "warning": "Token usage is above {{threshold}}% of the limit."
+    },
+    "queuedPrompt": {
+      "count": "Queued · {{count}}",
+      "remove": "Remove queued prompt"
+    },
+    "focusDesktop": {
+      "exitFocusMode": "Exit focus mode (ESC)",
+      "openChat": "Open chat",
+      "chat": "Chat",
+      "streaming": "Streaming",
+      "closeChat": "Close chat",
+      "placeholder": "Send a message…",
+      "sendMessage": "Send message"
+    },
+    "executionStats": {
+      "title": "Execution Statistics",
+      "tool": "Tool",
+      "usageCount": "Usage Count",
+      "percentage": "Percentage",
+      "totalExecutions": "Total Executions",
+      "completed": "Completed",
+      "failed": "Failed",
+      "avgDuration": "Avg Duration",
+      "successRate": "Success Rate",
+      "toolUsageDistribution": "Tool Usage Distribution"
+    },
+    "llmOverride": {
+      "title": "LLM Parameters",
+      "reset": "Reset",
+      "temperature": "Temperature",
+      "topP": "Top P",
+      "maxTokens": "Max Tokens",
+      "maxTokensPlaceholder": "e.g. 4096 (max {{max}})",
+      "frequencyPenalty": "Freq. Penalty",
+      "presencePenalty": "Pres. Penalty",
+      "noTunableParameters": "No tunable parameters for this model"
+    },
+    "modelSwitch": {
+      "title": "Model",
+      "reset": "Reset",
+      "switchModel": "Switch Model",
+      "defaultModel": "Default: {{model}}",
+      "defaultOption": "Default",
+      "selectModel": "Select a model",
+      "autoRouter": "Auto (Router)",
+      "autoRouterDescription": "Let the platform pick the best model per turn",
+      "loadingModels": "Loading models…",
+      "noModels": "No models available",
+      "updateFailed": "Failed to update model override",
+      "resetFailed": "Failed to reset model override"
+    },
+    "finalReport": {
+      "title": "Final Response",
+      "generated": "Generated {{time}}"
+    },
+    "subAgentDelegation": {
+      "trigger": "Trigger",
+      "task": "Task",
+      "status": "Status",
+      "keywordMatch": "Keyword Match",
+      "semanticMatch": "Semantic Match",
+      "delegated": "Delegated",
+      "statusStarted": "Started",
+      "statusCompleted": "Completed",
+      "statusFailed": "Failed"
+    },
+    "thoughtBubble": {
+      "ariaLabel": "Agent thinking process",
+      "workLevel": "Work-level Thinking",
+      "taskLevel": "Task-level Thinking",
+      "thinking": "Thinking…",
+      "processing": "Processing…",
+      "step": "Step {{step}}",
+      "expandThought": "Expand thought",
+      "collapseThought": "Collapse thought"
+    },
+    "voiceCall": {
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "turnOffCamera": "Turn off camera",
+      "turnOnCamera": "Turn on camera",
+      "switchToVideo": "Switch to video",
+      "switchToAudio": "Switch to audio",
+      "deviceSettings": "Device settings",
+      "endCall": "End call",
+      "noDevices": "No devices found",
+      "closeDeviceSettings": "Close device settings",
+      "microphone": "Microphone",
+      "speaker": "Speaker",
+      "camera": "Camera",
+      "expandPanel": "Expand voice call panel",
+      "connecting": "Connecting…",
+      "error": "Error",
+      "minimizePanel": "Minimize voice call panel",
+      "aiSpeaking": "AI is speaking",
+      "connected": "Connected"
+    },
+    "layout": {
+      "resizePanels": "Resize panels",
+      "searchCurrentConversation": "Search current conversation",
+      "searchCurrentConversationPlaceholder": "Search current conversation…",
+      "online": "Agent Online",
+      "viewExecutionHistory": "View execution history",
+      "viewWorkflowPatterns": "View workflow patterns",
+      "modeTooltip": "{{label}} Mode",
+      "modeAriaLabel": "{{label}} mode",
+      "modes": {
+        "chat": "Chat",
+        "task": "Task",
+        "code": "Code",
+        "canvas": "Canvas",
+        "collab": "Collab",
+        "chatDescription": "Full chat view with optional plan panel",
+        "taskDescription": "Split view: chat + task panel (50/50)",
+        "codeDescription": "Split view: chat + terminal (50/50)",
+        "canvasDescription": "Split view: chat + artifact canvas (35/65)",
+        "collabDescription": "Split view: chat + workspace group chat (55/45)"
+      }
+    },
+    "collab": {
+      "noWorkspace": "No workspace selected"
+    },
+    "lifecycle": {
+      "states": {
+        "uninitialized": "Not Started",
+        "initializing": "Initializing",
+        "ready": "Ready",
+        "executing": "Executing",
+        "paused": "Paused",
+        "error": "Error",
+        "shutting_down": "Shutting Down"
+      },
+      "descriptions": {
+        "uninitialized": "Agent not initialized, will auto-start on first request",
+        "initializing": "Loading tools, skills and configuration",
+        "ready": "Agent is ready to receive requests",
+        "executing": "Processing chat request",
+        "paused": "Agent is paused, not accepting new requests",
+        "error": "Agent encountered an error",
+        "shutting_down": "Agent is shutting down"
+      },
+      "resources": {
+        "tools": "Tools",
+        "skills": "Skills",
+        "subagents": "SubAgents",
+        "uptime": "Uptime",
+        "lastActivity": "Last Activity",
+        "chats": "Chats"
+      },
+      "status": {
+        "connected": "Connected",
+        "connecting": "Connecting",
+        "loading": "Loading",
+        "streaming": "Streaming",
+        "error": "Error",
+        "sandbox": "Sandbox",
+        "planMode": "Plan Mode"
+      },
+      "pool": {
+        "title": "Agent Pool Management",
+        "tier": "Tier",
+        "status": "Status",
+        "health": "Health",
+        "activeRequests": "Active Requests",
+        "totalRequests": "Total Requests",
+        "memory": "Memory",
+        "noInstance": "No instance created yet - auto-assigned on first request",
+        "pending": "Pending",
+        "tiers": {
+          "hot": "High-frequency project - dedicated resource pool, priority response",
+          "warm": "Medium-frequency project - shared resource pool, LRU cache",
+          "cold": "Low-frequency project - created on demand, resource-efficient"
+        }
+      },
+      "stats": {
+        "toolStats": "Tool Statistics",
+        "totalTools": "Total Tools",
+        "builtinTools": "Built-in Tools",
+        "mcpTools": "MCP Tools",
+        "skillStats": "Skill Statistics",
+        "totalSkills": "Total Skills",
+        "loaded": "Loaded",
+        "messageCount": "Message Count",
+        "taskProgress": "Task Progress",
+        "completed": "Completed",
+        "inProgress": "In Progress",
+        "pending": "Pending"
+      },
+      "insights": {
+        "label": "Insights",
+        "executionInsights": "Execution Insights",
+        "path": "Path",
+        "lane": "lane {{lane}}",
+        "selection": "Selection",
+        "selectionSummary": "{{final}}/{{initial}} tools kept across {{stages}} stages",
+        "policy": "Policy",
+        "policySummary": "filtered {{count}} tools"
+      },
+      "controls": {
+        "pause": "Pause Agent (stop accepting new requests)",
+        "resume": "Resume Agent",
+        "stop": "Stop",
+        "stopAgent": "Stop Agent",
+        "terminateInstance": "Terminate Instance",
+        "restart": "Restart",
+        "restartAgent": "Restart Agent (refresh tools and configuration)",
+        "confirmTerminate": "Are you sure you want to terminate the Agent instance? The instance will be released.",
+        "confirmStop": "Are you sure you want to stop the Agent? In-progress tasks will be interrupted.",
+        "confirmRestart": "Restart will refresh tools and configuration. Are you sure you want to restart?",
+        "cancel": "Cancel"
+      },
+      "messages": {
+        "terminating": "Terminating Agent instance…",
+        "stopping": "Stopping Agent…",
+        "stopFailed": "Failed to stop Agent",
+        "restarting": "Restarting Agent instance…",
+        "restartingAgent": "Restarting Agent…",
+        "restartFailed": "Failed to restart Agent",
+        "pausing": "Pausing Agent instance…",
+        "pauseFailed": "Failed to pause Agent",
+        "resuming": "Resuming Agent instance…",
+        "resumeFailed": "Failed to resume Agent"
+      },
+      "error": {
+        "label": "Error",
+        "prefix": "Error",
+        "description": "Agent encountered an error"
+      },
+      "planMode": {
+        "tooltip": "{{mode}} Mode - Agent is creating a detailed plan",
+        "label": "Plan"
+      },
+      "notStarted": {
+        "label": "Not started",
+        "description": "Agent has not been initialised; it will start on the first request."
+      },
+      "initializing": {
+        "label": "Initializing",
+        "description": "Loading tools, skills, and configuration"
+      },
+      "ready": {
+        "label": "Ready",
+        "description": "Agent is ready, {{count}} tools loaded"
+      },
+      "running": {
+        "label": "Running",
+        "description": "Processing chat requests"
+      },
+      "paused": {
+        "label": "Paused",
+        "description": "Agent is paused and not accepting new requests"
+      },
+      "shuttingDown": {
+        "label": "Shutting down",
+        "description": "Agent is shutting down"
+      },
+      "unknown": {
+        "label": "Unknown",
+        "description": "Agent state is unknown"
+      }
+    },
+    "chat": {
+      "empty": {
+        "title": "Start a Conversation",
+        "subtitle": "Send a message to start chatting with the AI Agent",
+        "suggestions": {
+          "trends": "Analyze project trends",
+          "reports": "Synthesize quarterly reports",
+          "audit": "Audit memory logs",
+          "compare": "Cross-project comparison"
+        }
+      },
+      "input": {
+        "placeholder": "Type a message…",
+        "send": "Send",
+        "stop": "Stop",
+        "thinking": "Thinking…",
+        "planMode": "Plan Mode"
+      },
+      "header": {
+        "createdAt": "Created {{date}}"
+      },
+      "messagesAria": "Chat messages",
+      "errors": {
+        "title": "Agent Error",
+        "connection": "Connection Error",
+        "session": "Session initialization failed",
+        "shuttingDown": "Agent is shutting down",
+        "maxConcurrent": "Maximum concurrent chats reached",
+        "unknown": "An unknown error occurred",
+        "switchPlanModeFailed": "Failed to switch plan mode"
+      },
+      "decision": {
+        "title": "Agent Requests Decision",
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "approve": "Approve",
+        "reject": "Reject"
+      },
+      "doomLoop": {
+        "title": "Doom Loop Detected",
+        "description": "Tool {{tool}} has been called {{count}} times repeatedly"
+      },
+      "planMode": {
+        "enter": "Enter Plan Mode",
+        "exit": "Exit Plan Mode",
+        "executing": "Executing Plan",
+        "title": "Plan",
+        "steps": "Steps"
+      },
+      "sandbox": {
+        "connected": "Sandbox Connected",
+        "disconnected": "Sandbox Disconnected",
+        "ensureFailed": "Failed to ensure sandbox is running"
+      },
+      "panel": {
+        "show": "Show Panel",
+        "hide": "Hide Panel",
+        "right": "Right Panel"
+      },
+      "externalAcpTextOnly": "External ACP agents support text prompts only."
+    },
+    "notifications": {
+      "planModeExitFailed": {
+        "title": "Failed to exit Plan Mode",
+        "description": "Please try again"
+      }
+    },
+    "actions": {
+      "copy": "Copy",
+      "copied": "Copied!",
+      "copyCode": "Copy code",
+      "retry": "Retry",
+      "edit": "Edit",
+      "bookmark": "Bookmark",
+      "share": "Share",
+      "export": "Export",
+      "exportMarkdown": "Export as Markdown",
+      "exportPdf": "Export as PDF",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "jumpToMessage": "Jump to message",
+      "expandTurn": "Expand turn",
+      "collapseTurn": "Collapse turn",
+      "expandTurnWithCount": "Expand ({{count}})",
+      "reply": "Reply",
+      "deleteMessageBodyEmpty": "Remove this message from this conversation view.",
+      "deleteMessageTitle": "Delete this message?",
+      "retryNoUserMessage": "No earlier user message to retry",
+      "deleteMessageBody": "Remove \"{{excerpt}}\" from this conversation view."
+    },
+    "branch": {
+      "fork": "Fork from here",
+      "forkedFrom": "Forked from",
+      "navigateToParent": "Go to original"
+    },
+    "version": {
+      "edited": "edited",
+      "original": "View original",
+      "history": "Version history"
+    },
+    "thread": {
+      "reply": "Reply",
+      "replies": "{{count}} replies",
+      "replyPlaceholder": "Write a reply…",
+      "sendReply": "Send reply"
+    },
+    "thinking": {
+      "title": "Thinking",
+      "analyzing": "Analyzing your request…",
+      "duration": "{{seconds}}s",
+      "collapse": "Collapse thinking",
+      "expand": "Expand thinking",
+      "progress": "Thinking progress"
+    },
+    "suggestions": {
+      "label": "Suggested follow-ups"
+    },
+    "emptyState": {
+      "greeting": "How can I help you today?",
+      "subtitle": "Your intelligent AI assistant is ready to help with analysis, coding, writing, and more.",
+      "newConversation": "Start New Conversation",
+      "naturalLanguage": "Natural language conversations",
+      "forCommands": "for commands",
+      "cards": {
+        "analyzeTrends": "Analyze project trends",
+        "analyzeTrendsDesc": "Identify key patterns and insights across your data streams",
+        "synthesizeReports": "Synthesize reports",
+        "synthesizeReportsDesc": "Transform complex findings into executive summaries",
+        "generateCode": "Generate code",
+        "generateCodeDesc": "Write, review, and optimize code with AI assistance",
+        "quickAutomation": "Quick automation",
+        "quickAutomationDesc": "Build workflows and automate repetitive tasks",
+        "analyzeTrendsPrompt": "Analyze the trends and patterns in my project data. Identify key insights and anomalies.",
+        "synthesizeReportsPrompt": "Help me synthesize a report from my recent findings. Create a clear executive summary.",
+        "generateCodePrompt": "Help me write code. What programming language and task do you need help with?",
+        "quickAutomationPrompt": "Help me automate a repetitive task. Describe the workflow you want to streamline."
+      },
+      "cmdKey": "Cmd",
+      "layoutModes": "layout modes",
+      "continueTitle": "Continue where you left off",
+      "continueAction": "Resume"
+    },
+    "projectContext": {
+      "conversations": "Conversations",
+      "memories": "Memories",
+      "entities": "Entities",
+      "members": "Members",
+      "trending": "Trending",
+      "statsLoadFailed": "Failed to load project stats",
+      "trendingLoadFailed": "Failed to load trending entities",
+      "tellMeAboutEntity": "Tell me about {{entityName}}",
+      "recentSkills": "Recently Used",
+      "recentSkillsLoadFailed": "Failed to load recent skills"
+    },
+    "statusBar": {
+      "connection": {
+        "loading": "Loading…",
+        "websocketConnected": "WebSocket Connected",
+        "ready": "Ready",
+        "activeToolCalls": "Active tool calls: {{count}}",
+        "activeCount": "{{count}} active",
+        "online": "Online"
+      },
+      "slots": {
+        "task": "Task",
+        "taskProgress": "Task progress",
+        "streaming": "streaming",
+        "doomLoop": "doom-loop",
+        "suggestions_one": "{{count}} suggestion",
+        "suggestions_other": "{{count}} suggestions",
+        "suggestions": "{{count}} suggestion(s)",
+        "evidence": "Evidence",
+        "artifacts_one": "{{count}} artifact",
+        "artifacts_other": "{{count}} artifacts",
+        "artifacts": "{{count}} artifact(s)",
+        "evidenceHint": "Open the Evidence drawer to inspect screenshots, diffs, test runs and logs"
+      }
+    },
+    "projectSelector": {
+      "aria": "Select project for agent conversation",
+      "loading": "Loading…",
+      "loadingConversations": "Loading conversations…",
+      "noProjectsAvailable": "No projects available",
+      "selectProject": "Select a project",
+      "noProjectsFound": "No projects found",
+      "currentTenant": "Current",
+      "otherTenant": "Other",
+      "tenantSuffix": "tenant",
+      "switchTitle": "Switch Project?",
+      "switchAction": "Switch Project",
+      "cancel": "Cancel",
+      "activeConversationPrefix": "You have an active conversation in",
+      "currentProjectFallback": "the current project",
+      "switchWarning": "Switching projects will clear this conversation from your view.",
+      "switchPreserve": "The conversation will be preserved and can be accessed again by switching back to this project.",
+      "loadConversationsFailed": "Failed to load conversations"
+    },
+    "executionTarget": {
+      "all": "All",
+      "local": "This computer",
+      "cloud": "Cloud",
+      "filterLabel": "Execution location",
+      "defaultEnvironment": "Default environment",
+      "localDirectory": "Local directory"
+    },
+    "executionPlacement": {
+      "reviewDevice": "Device settings",
+      "deviceApproval": "Choose a directory and approve this release in device settings.",
+      "targetLabel": "Execution location",
+      "directoryUnavailable": "This directory is unavailable on this computer.",
+      "webLocalReadonly": "This session ran on a computer. The web composer can only view it."
+    },
+    "sidebar": {
+      "title": "Agent Chat",
+      "workspaceTitle": "Agent Workspace",
+      "newChat": "New Chat",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteTitle": "Delete Conversation",
+      "deleteConfirm": "Are you sure? This action cannot be undone.",
+      "deleteDescription": "This conversation and its messages will be permanently removed.",
+      "deletedToast": "Conversation deleted",
+      "deleteFailed": "Failed to delete conversation",
+      "renameFailed": "Failed to rename conversation",
+      "undo": "Undo",
+      "untitled": "Untitled",
+      "needsInput": "Needs input",
+      "processing": "Processing",
+      "active": "Active",
+      "online": "Online",
+      "aiAssistant": "AI Assistant",
+      "noConversations": "No conversations yet",
+      "tasks": "Tasks",
+      "conversationCount": "{{count}} conversations",
+      "startNewChat": "Start a new chat to begin",
+      "selectProject": "Select a project",
+      "selectProjectTitle": "Select Project",
+      "unknownProject": "Unknown Project",
+      "projectSwitcher": "Project switcher",
+      "searchProjects": "Search projects",
+      "searchProjectsPlaceholder": "Search all authorized projects",
+      "searchingProjects": "Searching projects…",
+      "projectSearchResults": "Authorized project search results",
+      "selectedProjectBadge": "Selected",
+      "projectSearchCount": "Showing {{count}} of {{total}} projects",
+      "loadMoreProjects": "Load more",
+      "loadingMoreProjects": "Loading…",
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "conversations": "conversations",
+      "renameTitle": "Rename Conversation",
+      "renamePlaceholder": "Enter conversation title",
+      "renameLabel": "Conversation Title",
+      "addLabel": "Add label",
+      "newLabel": "New label",
+      "labels": "Labels",
+      "removeLabel": "Remove",
+      "menu": "Menu",
+      "selectLabelColor": "Select {{color}} label color",
+      "openConversation": "Open {{title}}",
+      "expandProjectSidebar": "Expand project sidebar for {{project}}",
+      "cancelNewLabel": "Cancel new label",
+      "conversationsLoadFailed": "Failed to load conversations",
+      "deleteConversation": "Delete conversation",
+      "filterConversations": "Filter conversations by title",
+      "newChatOpenWorkspace": "Open the agent workspace to start a new chat",
+      "newChatSelectProject": "Select a project to start a new chat",
+      "noMatchingConversations": "No conversations match your filter",
+      "noProjectsAvailable": "No projects available in this tenant",
+      "noProjectsFound": "No projects found",
+      "projectSearchFailed": "Project search failed",
+      "projectSwitcherNoTenant": "No tenant selected",
+      "projectsLoadFailed": "Failed to load projects",
+      "searchProjectsToSelect": "Search to select a project",
+      "selectProjectToViewConversations": "Select a project to view conversations",
+      "unknownWorkspace": "Unknown workspace",
+      "workspaceRole": {
+        "architect": "Architect",
+        "builder": "Builder",
+        "chat": "Chat",
+        "supervisor": "Supervisor",
+        "verifier": "Verifier",
+        "worker": "Worker",
+        "workspace": "Workspace"
+      },
+      "workspaceTaskTitleFallback": "Workspace task"
+    },
+    "summary": {
+      "title": "Conversation Summary",
+      "showSummary": "Show summary",
+      "collapse": "Collapse summary",
+      "regenerate": "Regenerate summary",
+      "generating": "Generating summary…",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "regenerateError": "Failed to regenerate summary. Please try again."
+    },
+    "messageBubble": {
+      "reasoning": "Reasoning",
+      "thinking": "Thinking…",
+      "running": "Running",
+      "success": "Success",
+      "failed": "Failed",
+      "input": "Input",
+      "output": "Output",
+      "noOutput": "No output",
+      "workPlan": "Work Plan",
+      "steps": "{{count}} steps",
+      "noDescription": "No description",
+      "fileGenerated": "File Generated",
+      "imageLoadFailed": "Failed to load image",
+      "download": "Download",
+      "refreshing": "Refreshing…",
+      "refreshLink": "Refresh",
+      "uploading": "Uploading…",
+      "uploadFailed": "Upload failed",
+      "openInCanvas": "Canvas",
+      "openSandboxFileInCanvas": "Open {{path}} in Canvas",
+      "subAgentIcon": "SubAgent Icon",
+      "unknownTool": "Unknown Tool",
+      "granted": "Granted",
+      "denied": "Denied",
+      "pill": {
+        "steps": "Steps",
+        "tasks": "Tasks",
+        "remaining": "Remaining",
+        "artifacts": "Artifacts",
+        "llmCalls": "LLM calls",
+        "tokens": "Tokens",
+        "cost": "Cost"
+      }
+    },
+    "inputBar": {
+      "placeholder": "Ask me anything, or type '/' for commands…",
+      "voiceCallNeedsContext": "Open a conversation in a project to start a voice call.",
+      "planPlaceholder": "Describe what you want to plan in detail…",
+      "planModeActive": "Plan Mode Active",
+      "attachFiles": "Attach files (or drag & drop)",
+      "attachNotSupported": "Current model does not support file attachments",
+      "enterPlanMode": "Enter Plan Mode",
+      "exitPlanMode": "Exit Plan Mode",
+      "planModeLabel": "Plan Mode",
+      "planModeHint": "Read-only analysis. Agent will plan without making changes.",
+      "plan": "Plan",
+      "stop": "Stop",
+      "send": "Send",
+      "dropToUpload": "Drop files to upload",
+      "templates": "Prompt templates",
+      "startVoice": "Voice input",
+      "stopVoice": "Stop voice input",
+      "startVoiceCall": "Start voice call",
+      "modeToggle": "Toggle input mode",
+      "chatMode": "Chat",
+      "commandMode": "Command",
+      "commandPlaceholder": "Enter a command…",
+      "removeSelectedSkill": "Remove /{{name}} skill",
+      "removeSelectedSubAgent": "Remove @{{name}} subagent",
+      "retryAttachmentUpload": "Retry upload for {{filename}}",
+      "removeAttachment": "Remove {{filename}} attachment",
+      "runInputAttachmentContextRequired": "Open a project conversation before attaching run input files.",
+      "runInputAttachmentUploadUnknown": "Unknown upload error",
+      "runInputAttachmentUploadFailed": "Could not attach files to the run input: {{detail}}",
+      "advancedSettings": "Advanced settings",
+      "charLimitHint": "Messages over {{count}} characters may be truncated by the model"
+    },
+    "permissionMode": {
+      "saveFailed": "Could not save permission mode. Please try again.",
+      "label": "Permission mode",
+      "title": "Permission mode",
+      "ask": "Confirm before changes",
+      "askDesc": "Ask me before changing files",
+      "autoEdit": "Auto edit",
+      "autoEditDesc": "Automatically edit files",
+      "fullAccess": "Full access",
+      "fullAccessDesc": "Reduce confirmations"
+    },
+    "thinkingLevel": {
+      "label": "Thinking level",
+      "title": "Thinking level",
+      "default": "Thinking: auto",
+      "defaultDesc": "Follow the model default",
+      "low": "Thinking: low",
+      "lowDesc": "Fast, brief reasoning",
+      "medium": "Thinking: medium",
+      "mediumDesc": "Balanced reasoning depth",
+      "high": "Thinking: high",
+      "highDesc": "Deepest reasoning, slower"
+    },
+    "plusMenu": {
+      "label": "Add",
+      "title": "Add",
+      "searchPlaceholder": "Search plugins, agents, commands…",
+      "groupActions": "Actions",
+      "groupPlugins": "Plugins",
+      "groupAgents": "Agents",
+      "groupCommands": "Commands",
+      "noPlugins": "No plugins available",
+      "agentFromDatabase": "Custom agent",
+      "agentBuiltin": "Built-in agent",
+      "llmParamsDesc": "Temperature, max tokens…",
+      "customized": "Custom",
+      "loading": "Loading…"
+    },
+    "mention": {
+      "label": "Mention an agent"
+    },
+    "mobileSidebar": {
+      "title": "Conversation history"
+    },
+    "turnPlaceholder": {
+      "itemsHidden": "{{count}} items hidden",
+      "itemsHidden_one": "{{count}} item hidden",
+      "itemsHidden_other": "{{count}} items hidden",
+      "expandTurn": "Expand turn ({{count}} hidden)",
+      "expandTurn_one": "Expand turn ({{count}} hidden)",
+      "expandTurn_other": "Expand turn ({{count}} hidden)"
+    },
+    "mentions": {
+      "title": "Mention entities or memories",
+      "noResults": "No results found",
+      "typeToSearch": "Type to search…",
+      "coordinator": "Coordinator",
+      "loadSubAgentsFailed": "Failed to load sub-agents",
+      "searchFailed": "Failed to search mentions"
+    },
+    "slashCommand": {
+      "title": "Skills",
+      "loading": "Loading skills…",
+      "matching": "Skills matching \"{{query}}\"",
+      "noMatch": "No skills matching \"{{query}}\"",
+      "noSkills": "No active skills available",
+      "noItems": "No commands or skills available",
+      "groupCommands": "Commands",
+      "groupSkills": "Skills",
+      "hintNavigate": "navigate",
+      "hintSelect": "select",
+      "hintDismiss": "dismiss"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "layout": "Layout",
+      "chat": "Chat",
+      "general": "General",
+      "chatMode": "Chat mode",
+      "codeMode": "Code mode (split)",
+      "desktopMode": "Desktop mode (split)",
+      "focusMode": "Focus mode",
+      "sendMessage": "Send message",
+      "newLine": "New line in message",
+      "cancelCommand": "Cancel / close",
+      "showShortcuts": "Show this overlay",
+      "pasteFiles": "Paste files from clipboard",
+      "footer": "Press {{key}} to toggle this overlay",
+      "canvasMode": "Canvas mode (split)",
+      "searchChat": "Search in conversation",
+      "focusInput": "Focus input / Slash commands",
+      "navMessages": "Navigate messages",
+      "close": "Close keyboard shortcuts",
+      "collabMode": "Collab mode (split)",
+      "copyMessage": "Copy focused message",
+      "planMode": "Toggle Plan Mode",
+      "taskMode": "Task mode (split)"
+    },
+    "canvas": {
+      "emptyTitle": "Canvas",
+      "emptyDescription": "Code, documents, and previews from the agent will appear here. Ask the agent to generate or edit content.",
+      "copy": "Copy",
+      "download": "Download",
+      "backToChat": "Back to chat",
+      "loadingContent": "Loading content…",
+      "selectionExplain": "Explain",
+      "selectionSimplify": "Simplify",
+      "selectionExpand": "Expand",
+      "selectionAsk": "Ask about",
+      "askRefinePrompt": "I've edited the content below. Please review and improve it:\n\n{{content}}",
+      "undo": "Undo (Ctrl+Z)",
+      "redo": "Redo (Ctrl+Shift+Z)",
+      "save": "Save (Ctrl+S)",
+      "editMode": "Edit mode",
+      "viewMode": "View mode",
+      "invalidPdfPreviewUrl": "Invalid PDF preview URL",
+      "invalidUrl": "Invalid URL",
+      "invalidMediaUrl": "Invalid media URL",
+      "invalidFileUrl": "Invalid file URL",
+      "downloadFile": "Download File",
+      "saveArtifactFailed": "Failed to save artifact",
+      "renderDocumentFailed": "Failed to render document",
+      "renderSpreadsheetFailed": "Failed to render spreadsheet",
+      "emptySheet": "Empty sheet",
+      "presentationDownloadMessage": "Download this presentation to open it in PowerPoint, Keynote, or compatible office software.",
+      "legacyOfficeMessage": "Legacy Office format (.doc/.xls/.ppt) preview is not supported. Please convert to .docx/.xlsx/.pptx for preview.",
+      "askRefine": "Ask Agent to Refine",
+      "editorLabel": "Editor for {{title}}",
+      "discardChangesTitle": "Discard unsaved changes?",
+      "discardChangesContent": "\"{{title}}\" has unsaved changes that will be lost.",
+      "discardChangesConfirm": "Discard",
+      "newTab": "New tab",
+      "newCode": "New Code",
+      "newMarkdown": "New Markdown",
+      "newNote": "New Note",
+      "pinTab": "Pin {{title}}",
+      "unpinTab": "Unpin {{title}}",
+      "closeTab": "Close {{title}}",
+      "selectOption": "Select an option",
+      "readOnlyFormPreview": "Read-only form preview",
+      "fileExplorer": {
+        "title": "Files",
+        "sandbox": "Sandbox",
+        "artifacts": "Artifacts",
+        "refresh": "Refresh files",
+        "collapse": "Collapse file browser",
+        "expand": "Expand file browser",
+        "loading": "Loading files…",
+        "empty": "No files found",
+        "noProject": "Select a project to browse files.",
+        "loadFailed": "Failed to load files",
+        "openFailed": "Failed to open file",
+        "openFailedWithMessage": "Failed to open file: {{message}}",
+        "noPreview": "No preview is available for this file."
+      },
+      "actions": {
+        "explain": "Explain",
+        "optimize": "Optimize",
+        "addTests": "Add Tests",
+        "addComments": "Add Comments",
+        "improve": "Improve",
+        "shorten": "Shorten",
+        "translate": "Translate",
+        "summarize": "Summarize"
+      },
+      "resolvingMedia": "Loading…",
+      "image": {
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "resetZoom": "Reset",
+        "fit": "Fit to screen",
+        "rotateLeft": "Rotate left",
+        "rotateRight": "Rotate right",
+        "fullscreen": "Fullscreen"
+      }
+    },
+    "artifact": {
+      "fileGenerated": "File generated",
+      "download": "Download",
+      "uploading": "Uploading…",
+      "openInCanvas": "Open in Canvas",
+      "openInCanvasFailed": "Failed to open in Canvas"
+    },
+    "timeline": {
+      "input": "Input",
+      "output": "Output",
+      "running": "Running {{count}} tools…",
+      "runningWithTools": "Execute {{count}} tools: {{tools}}",
+      "completed": "{{completed}}/{{total}} steps completed",
+      "completedWithTools": "Finish {{total}} tools: {{tools}}",
+      "completedWithFailures": "Finish {{completed}}/{{total}} tools, mark {{failed}} failed: {{tools}}",
+      "moreToolsSuffix": ", include {{count}} more",
+      "progress": "{{completed}}/{{total}} done",
+      "cancelled": "Cancelled",
+      "failed": "Failed",
+      "toolTitle": "Tool: {{tool}}",
+      "parametersPreview": "Parameters: {{preview}}",
+      "purposeLabel": "Purpose: {{purpose}}",
+      "purpose": {
+        "read": "Read files",
+        "write": "Change files",
+        "command": "Run command",
+        "search": "Search files",
+        "open": "Open link",
+        "tool": "Call tool"
+      },
+      "moreActions": "More {{count}} actions",
+      "actionSummary": "{{count}} actions",
+      "actionSummaryRunning": "{{count}} actions running",
+      "action": {
+        "ranCommand": "Ran {{command}}",
+        "readFile": "Read {{file}}",
+        "changedFile": "Changed {{file}}",
+        "searched": "Searched {{query}}",
+        "openedUrl": "Opened {{url}}",
+        "calledTool": "Called {{tool}}"
+      },
+      "actionGroup": {
+        "moreItems": " and {{count}} more",
+        "readSingle": "Read {{names}}",
+        "readMany": "Read {{count}} files: {{names}}",
+        "writeSingle": "Changed {{names}}",
+        "writeMany": "Changed {{count}} files: {{names}}",
+        "commandSingle": "Ran {{names}}",
+        "commandMany": "Ran {{count}} commands: {{names}}",
+        "searchSingle": "Searched {{names}}",
+        "searchMany": "Searched {{count}} times: {{names}}",
+        "openSingle": "Opened {{names}}",
+        "openMany": "Opened {{count}} links: {{names}}",
+        "toolSingle": "Called {{names}}",
+        "toolMany": "Called {{count}} tools: {{names}}",
+        "todoMany": "{{count}} todo updates: {{names}}",
+        "todoSingle": "{{names}}"
+      },
+      "preview": {
+        "read": "Read: {{detail}}",
+        "write": "Changed: {{detail}}",
+        "command": "Command: {{detail}}",
+        "search": "Search: {{detail}}",
+        "open": "Open: {{detail}}",
+        "report": "Report: {{detail}}",
+        "tool": "Call: {{detail}}",
+        "toolWithDetail": "Content: {{detail}}"
+      },
+      "todo": {
+        "read": "Read todos",
+        "readMany": "Read {{count}} todos: {{summary}}",
+        "write": "{{verb}} todos",
+        "writeOne": "{{verb}} todo {{id}}",
+        "writeMany": "{{verb}} {{count}} todos: {{summary}}",
+        "addVerb": "Add",
+        "updateVerb": "Update",
+        "replaceVerb": "Replace",
+        "writeVerb": "Update"
+      },
+      "todoStatus": {
+        "pending": "pending",
+        "inProgress": "in progress",
+        "completed": "completed",
+        "blocked": "blocked",
+        "cancelled": "cancelled",
+        "count": "{{count}} {{status}}"
+      },
+      "status": {
+        "running": "Running",
+        "success": "Success",
+        "error": "Failed"
+      },
+      "openApp": "Open App",
+      "taskProgress": "Task {{current}}/{{total}}",
+      "taskStatus": "Task {{current}}/{{total}} {{status}}",
+      "taskCompleted": "completed",
+      "showStepDetails": "Show details for {{tool}}",
+      "hideStepDetails": "Hide details for {{tool}}",
+      "stepDetailsRegion": "Details for {{tool}}",
+      "showTimeline": "Show execution steps",
+      "hideTimeline": "Hide execution steps"
+    },
+    "subagent": {
+      "single": "SubAgent: {{name}}",
+      "parallel": "Parallel SubAgents",
+      "chain": "Chain: {{name}}",
+      "background": "Background: {{name}}",
+      "queued": "Queued: {{name}}",
+      "killed": "Killed: {{name}}",
+      "depth_limited": "Depth Limited: {{name}}",
+      "parallel_tasks": "Parallel execution: {{count}} tasks",
+      "chain_steps": "Chain: {{name}} ({{count}} steps)",
+      "executing": "Executing…",
+      "parallel_subtaskRunning": "Running…",
+      "parallel_subtaskPending": "Pending",
+      "parallel_subtaskDone": "Done",
+      "parallel_subtaskFailed": "Failed",
+      "chain_stepOf": "Step {{current}} of {{total}}",
+      "live_preview": "Live",
+      "action_stop": "Stop",
+      "action_redirect": "Redirect",
+      "redirect_placeholder": "Enter new instructions…",
+      "send_redirect": "Send redirect",
+      "cancel_redirect": "Cancel redirect",
+      "stopRejected": "Stop request was rejected: {{reason}}",
+      "steerRejected": "Redirect was rejected: {{reason}}",
+      "parallel_badge": "Parallel",
+      "parallel_completed": "completed",
+      "chain_completed": "steps completed",
+      "unnamed": "Unnamed Agent",
+      "unknownError": "Unknown error",
+      "sessionSpawned": "Session spawned",
+      "viewDetails": "Show details",
+      "hideDetails": "Hide details",
+      "progress": {
+        "initializing": "Initializing…",
+        "routed": "Routed",
+        "started": "Started",
+        "executing": "Executing",
+        "parallelTasks": "Tasks: {{completed}}/{{total}}"
+      },
+      "detail": {
+        "close": "Close",
+        "error_title": "Execution Error",
+        "summary_title": "Execution Summary",
+        "timeline_title": "Lifecycle Events"
+      },
+      "steerFailed": "Failed to send redirect",
+      "stopConfirmDescription": "The running sub-agent will be terminated.",
+      "stopConfirmTitle": "Stop this sub-agent?",
+      "stopFailed": "Failed to stop sub-agent"
+    },
+    "background": {
+      "title": "Background Tasks",
+      "empty": "No background tasks",
+      "clear": "Clear",
+      "clearAll": "Clear all",
+      "clearAllConfirmTitle": "Clear all execution records?",
+      "kill": "Stop execution",
+      "cancelPending": "Cancellation requested; waiting for execution to stop.",
+      "cancelFailed": "Cancellation failed. Please retry or refresh the execution status.",
+      "killConfirmTitle": "Stop this execution?",
+      "killConfirmDescription": "The running task will be terminated.",
+      "cancel": "Cancel",
+      "hideDetails": "Hide details",
+      "showDetails": "Show details"
+    },
+    "undo": {
+      "title": "Undo Action",
+      "description": "This will ask the agent to undo the action. The agent will attempt to revert any changes made.",
+      "confirm": "Undo",
+      "requested": "Undo requested",
+      "button": "Undo this action"
+    },
+    "templates": {
+      "title": "Prompt Templates",
+      "search": "Search templates…",
+      "noResults": "No templates found",
+      "closeLibrary": "Close template library",
+      "deleteConfirmTitle": "Delete this template?",
+      "deleteConfirmContent": "This action cannot be undone.",
+      "deleteFailed": "Failed to delete template",
+      "deleted": "Template deleted",
+      "saved": "Template saved",
+      "saveFailed": "Failed to save template",
+      "all": "All",
+      "analysis": "Analysis",
+      "code": "Code",
+      "coding": "Coding",
+      "writing": "Writing",
+      "general": "General",
+      "analyzeCodebase": "Analyze Codebase",
+      "analyzeCodebasePrompt": "Analyze the codebase structure and provide a high-level overview including architecture patterns, key dependencies, and areas for improvement.",
+      "findBugs": "Find Bugs",
+      "findBugsPrompt": "Search for potential bugs, security vulnerabilities, and code quality issues in the project. Focus on critical issues first.",
+      "performanceAudit": "Performance Audit",
+      "performanceAuditPrompt": "Analyze the application for performance bottlenecks including database queries, API response times, memory usage, and frontend rendering.",
+      "writeTests": "Write Tests",
+      "writeTestsPrompt": "Write comprehensive unit tests for the most critical modules. Aim for 80%+ coverage with meaningful test cases.",
+      "refactorCode": "Refactor Code",
+      "refactorCodePrompt": "Identify and refactor code that violates DRY, SOLID principles, or has high complexity. Propose cleaner alternatives.",
+      "addFeature": "Add Feature",
+      "addFeaturePrompt": "I want to add a new feature: [describe feature]. Plan the implementation, identify files to modify, and implement it step by step.",
+      "fixError": "Fix Error",
+      "fixErrorPrompt": "I'm getting this error: [paste error]. Diagnose the root cause and fix it.",
+      "writeDocs": "Write Documentation",
+      "writeDocsPrompt": "Generate comprehensive documentation for the project including API reference, setup guide, and architecture overview.",
+      "writeReadme": "Write README",
+      "writeReadmePrompt": "Create or improve the project README with sections for: overview, quick start, installation, configuration, usage examples, and contributing.",
+      "explainCode": "Explain Code",
+      "explainCodePrompt": "Explain how the core system works, walking through the main execution flow from entry point to key outputs.",
+      "brainstorm": "Brainstorm Ideas",
+      "brainstormPrompt": "Help me brainstorm ideas for improving this project. Consider UX improvements, new features, technical debt reduction, and scalability.",
+      "saveTitle": "Save as Template",
+      "titlePlaceholder": "Template name",
+      "fillVariables": "Fill in the template variables",
+      "useTemplate": "Use Template",
+      "myTemplates": "My Templates",
+      "builtIn": "Built-in",
+      "noDescription": "No description",
+      "noCustom": "No custom templates yet",
+      "saveSuccess": "Template saved",
+      "marketplace": "Template Marketplace",
+      "marketplaceDesc": "Browse and install SubAgent templates to extend your agent capabilities.",
+      "seedBuiltin": "Seed Built-in",
+      "seeding": "Seeding…",
+      "categoryFilter": "Category filter",
+      "install": "Install",
+      "installed": "Installed SubAgent: {{name}}",
+      "installError": "Failed to install template",
+      "loadError": "Failed to load templates",
+      "seeded": "Seeded {{count}} templates",
+      "seedError": "Failed to seed templates",
+      "category": "Category",
+      "detailFields": {
+        "allowedTools": "Allowed Tools",
+        "author": "Author",
+        "category": "Category",
+        "description": "Description",
+        "installCount": "Installs",
+        "model": "Model",
+        "systemPrompt": "System Prompt",
+        "tags": "Tags",
+        "templateId": "Template ID",
+        "triggerDescription": "Trigger Description",
+        "triggerKeywords": "Trigger Keywords",
+        "version": "Version"
+      },
+      "detailTitle": "Template Details",
+      "installing": "Installing…",
+      "viewDetails": "View details of {{name}}",
+      "variableRequired": "{{name}} is required"
+    },
+    "search": {
+      "placeholder": "Search in conversation…",
+      "noResults": "0 results",
+      "previousResult": "Previous result",
+      "nextResult": "Next result",
+      "closeSearch": "Close search"
+    },
+    "state": {
+      "thinking": "Thinking",
+      "preparing": "Preparing",
+      "acting": "Executing",
+      "observing": "Analyzing",
+      "awaitingInput": "Waiting for input",
+      "retrying": "Retrying",
+      "idle": "Ready"
+    },
+    "plan": {
+      "step": "Step",
+      "inProgress": "In progress",
+      "completed": "Complete",
+      "failed": "Failed",
+      "planning": "Planning"
+    },
+    "pinnedMessages": "Pinned",
+    "onboarding": {
+      "welcome": "Welcome to MemStack",
+      "welcomeDesc": "Your AI-powered workspace for analysis, coding, and automation.",
+      "inputTip": "Chat with your AI assistant",
+      "inputDesc": "Type messages naturally, or use / to access commands and tools.",
+      "layoutTip": "Multiple layout modes",
+      "layoutDesc": "Switch between Chat, Code, Desktop, Focus, and Canvas modes with Cmd+1-5.",
+      "templateTip": "Quick-start templates",
+      "templateDesc": "Browse pre-built prompts for common tasks.",
+      "searchTip": "Search within a conversation",
+      "searchDesc": "Open a conversation, then use the header search control or Cmd+F.",
+      "ariaLabel": "Onboarding tour",
+      "next": "Next",
+      "skip": "Skip tour",
+      "done": "Get started",
+      "stepOf": "of",
+      "layoutDescV2": "Switch between Chat, Task, Code, Canvas, and Collab modes with Cmd+1-5."
+    },
+    "theme": {
+      "highContrast": "High Contrast",
+      "highContrastDescription": "Enhanced visibility with stronger colors and borders"
+    },
+    "hitl": {
+      "center": {
+        "aria": "Pending HITL requests",
+        "title": "HITL Center",
+        "filterAria": "Filter by HITL type",
+        "loading": "Loading…",
+        "error": "Failed to load HITL requests",
+        "empty": "No pending requests.",
+        "accept": "Accept",
+        "reject": "Reject",
+        "open": "Open",
+        "acceptOption": "Accept: {{option}}",
+        "rejectOption": "Reject: {{option}}",
+        "filter": {
+          "all": "All",
+          "clarification": "Clarification",
+          "decision": "Decision",
+          "envVar": "Env var"
+        },
+        "dismissError": "Dismiss error"
+      },
+      "title": {
+        "clarification": "Needs clarification",
+        "decision": "Needs decision",
+        "env_var": "Needs configuration",
+        "permission": "Needs permission",
+        "input_required": "User input required"
+      },
+      "time": {
+        "just_now": "just now",
+        "minutes_ago": "{{count}} minutes ago",
+        "hours_ago": "{{count}} hours ago",
+        "days_ago": "{{count}} days ago"
+      },
+      "tag": {
+        "recommended": "Recommended",
+        "selected": "Selected",
+        "has_risks": "Has risks"
+      },
+      "option": {
+        "custom_answer": "Custom answer",
+        "custom_decision": "Custom decision",
+        "remember_choice": "Remember this choice"
+      },
+      "placeholder": {
+        "enter_answer": "Enter your answer…",
+        "enter_decision": "Enter your decision…",
+        "env_vars_fallback": "Environment variables"
+      },
+      "none": {
+        "no_preset_answer": "No preset options - enter your answer below",
+        "no_options": "No options available",
+        "no_preset_decision": "No preset options - enter your decision below",
+        "no_env_vars": "No environment variables required"
+      },
+      "button": {
+        "confirm": "Confirm",
+        "confirm_choice": "Confirm choice",
+        "confirm_decision": "Confirm decision",
+        "submit": "Submit"
+      },
+      "multiselect": {
+        "limit": "You may select up to {{max}} items",
+        "limitReached": "You can only select up to {{max}} items"
+      },
+      "errors": {
+        "submitFailed": "Failed to submit response. Please try again."
+      },
+      "action": {
+        "view_details": "View details",
+        "hide_details": "Hide details",
+        "allowed": "Allow",
+        "denied": "Deny"
+      },
+      "section": {
+        "risk_warning_title": "Risk notice"
+      },
+      "label": {
+        "tool": "Tool: {{toolName}}"
+      },
+      "validation": {
+        "enter_field": "Please enter {{field}}"
+      },
+      "status": {
+        "configured": "Configured",
+        "completed": "Completed",
+        "submitted": "Submitted",
+        "permission_granted": "Permission granted",
+        "permission_denied": "Permission denied",
+        "decision_recorded": "Decision recorded"
+      },
+      "save_for_later": "Save configuration for next time",
+      "permission": {
+        "granted": "Granted",
+        "denied": "Denied",
+        "awaiting": "Awaiting your decision"
+      },
+      "risk": {
+        "label": "Risk",
+        "level": {
+          "low": "low",
+          "medium": "medium",
+          "high": "high"
+        },
+        "message": {
+          "low": "Low risk operation",
+          "medium": "Medium risk operation",
+          "high": "High risk operation"
+        }
+      },
+      "cost": {
+        "label": "Cost"
+      }
+    },
+    "sandbox": {
+      "status": {
+        "not_started": "Not started",
+        "waiting": "Waiting",
+        "pending_desc": "Sandbox is queued for startup",
+        "creating": "Creating",
+        "creating_desc": "Creating sandbox container",
+        "running": "Running",
+        "running_desc": "Sandbox is running normally",
+        "unhealthy": "Unhealthy",
+        "unhealthy_desc": "Sandbox health checks are failing",
+        "stopped": "Stopped",
+        "stopped_desc": "Sandbox stopped, click to restart",
+        "terminated": "Terminated",
+        "terminated_desc": "Sandbox has been terminated",
+        "error": "Error",
+        "error_desc": "Sandbox encountered an error",
+        "starting": "Starting…"
+      },
+      "label": "Sandbox environment",
+      "click_to_start": "Click to start sandbox",
+      "toast": {
+        "started": "Sandbox started",
+        "start_failed": "Failed to start sandbox",
+        "unknown_error": "Unknown error",
+        "restarted": "Sandbox restarted",
+        "restart_failed": "Failed to restart sandbox",
+        "stopped": "Sandbox stopped",
+        "stop_failed": "Failed to stop sandbox"
+      },
+      "action": {
+        "refresh": "Refresh",
+        "restart": "Restart",
+        "stop": "Stop",
+        "stopConfirmDesc": "This destroys the sandbox container. Unsaved work inside it will be lost.",
+        "stopConfirmOk": "Stop container",
+        "stopConfirmTitle": "Stop sandbox container?"
+      },
+      "metrics": {
+        "cpu": "CPU",
+        "memory": "Memory",
+        "network": "Network",
+        "processes": "Processes",
+        "uptime": "Uptime"
+      },
+      "loading": "Loading…",
+      "duration": {
+        "seconds": "s",
+        "minutes": "m",
+        "hours": "h"
+      }
+    },
+    "executionTimeline": {
+      "title": "Execution plan",
+      "stepsCompleted": "{{completed}}/{{total}} steps completed",
+      "matchedPattern": "Matched pattern ({{percent}}%)",
+      "statusCompleted": "Completed",
+      "statusRunning": "Running",
+      "statusWaiting": "Waiting",
+      "toolsLabel": "{{count}} tools",
+      "runningEllipsis": "Running…",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    },
+    "costTracker": {
+      "inputTokens": "Input tokens: {{value}}",
+      "outputTokens": "Output tokens: {{value}}",
+      "totalTokens": "Total: {{value}}",
+      "costLabel": "Cost: {{value}}",
+      "modelLabel": "Model: {{model}}",
+      "empty": "No cost data yet",
+      "modelPrefix": "Model:",
+      "tokenUsage": "Token usage",
+      "inputShort": "Input:",
+      "outputShort": "Output:",
+      "estimatedCost": "Estimated cost",
+      "updatedAt": "Updated: {{time}}"
+    },
+    "participants": {
+      "aria": "Conversation participants",
+      "title": "Participants",
+      "loading": "Loading roster…",
+      "error": "Failed to load roster",
+      "empty": "No agents in this conversation.",
+      "sourceWorkspace": "workspace",
+      "sourceConversation": "conversation",
+      "coordinator": "coordinator",
+      "focused": "focused",
+      "setFocused": "Set as focused agent",
+      "setFocusedFor": "Set {{name}} as focused agent",
+      "setCoordinator": "Set as coordinator",
+      "setCoordinatorFor": "Set {{name}} as coordinator",
+      "remove": "Remove {{name}}",
+      "removeConfirmTitle": "Remove {{name}} from the conversation?",
+      "removeOk": "Remove",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "setFocusedSuccess": "Focused agent updated",
+      "setCoordinatorSuccess": "Coordinator updated",
+      "actionFailed": "Action failed",
+      "autonomousRequiresCoordinator": "Autonomous mode requires a coordinator. Click ★ on a participant to assign.",
+      "isolatedSuggestsFocused": "Isolated mode works best with one focused agent. Click ◎ on a participant to set it.",
+      "noneAvailable": "No more agents available. Add agents to the linked workspace to see them here.",
+      "addLabel": "Add agent",
+      "addPlaceholder": "Select an agent…"
+    }
+  },
+  "hitl": {
+    "types": {
+      "clarification": {
+        "title": "Needs Clarification",
+        "submitText": "Confirm Answer"
+      },
+      "decision": {
+        "title": "Needs Decision",
+        "submitText": "Confirm Decision"
+      },
+      "envVar": {
+        "title": "Configure Environment Variables",
+        "submitText": "Save Config"
+      },
+      "permission": {
+        "title": "Permission Request",
+        "submitText": "Authorize"
+      }
+    },
+    "clarificationType": {
+      "scope": "Scope confirmation",
+      "approach": "Approach selection",
+      "prerequisite": "Prerequisite",
+      "priority": "Priority",
+      "custom": "Custom"
+    },
+    "decisionType": {
+      "branch": "Branch selection",
+      "method": "Method selection",
+      "confirmation": "Confirm operation",
+      "risk": "Risk confirmation",
+      "custom": "Custom"
+    },
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "remainingTime": "Remaining time",
+    "contextHeading": "Context:",
+    "recommended": "Recommended",
+    "customAnswer": "Custom input",
+    "customDecision": "Custom decision",
+    "answerPlaceholder": "Enter your answer…",
+    "decisionPlaceholder": "Enter your decision…",
+    "noPresetOptions": "No preset options available, please enter manually",
+    "emptyOptionsMessage": "No options available",
+    "emptyOptionsDescription": "There are no options to select from",
+    "emptyDecisionDescription": "There are no decision options available",
+    "cancel": "Cancel",
+    "confirmAndAcceptRisk": "Confirm and accept risk",
+    "timeoutDefaultMessage": "Default option on timeout",
+    "timeoutDefaultDescription": "If you do not decide in time, the system will automatically pick: {{label}}",
+    "riskAlertTitle": "Risk warning",
+    "envInputPlaceholder": "Enter {{label}}",
+    "envRequiredTag": "Required",
+    "envValidationMessage": "Please enter {{label}}",
+    "envSecurityTitle": "Security notice",
+    "envSecurityDescription": "Password environment variables are stored encrypted to protect your sensitive information.",
+    "highRiskTitle": "High-risk operation warning",
+    "highRiskDescription": "This operation may significantly impact the system. Please review carefully before deciding.",
+    "toolName": "Tool name",
+    "requestedAction": "Requested action",
+    "riskLevel": "Risk level",
+    "requestDescription": "Request description:",
+    "detailsHeading": "Details:",
+    "deny": "Deny",
+    "allowAlways": "Always allow",
+    "authorize": "Authorize",
+    "unknownType": "Unknown HITL type"
+  },
+  "executionDag": {
+    "graphStats": "{{nodes}} nodes · {{edges}} edges",
+    "ariaLabel": "Execution graph",
+    "actualSize": "Actual size",
+    "centerCurrent": "Center current or root node",
+    "centerSelected": "Center selected node",
+    "currentSession": "Current session",
+    "downloadSvg": "Download SVG",
+    "empty": "No execution graph is available.",
+    "fitView": "Fit width",
+    "fitZoom": "Fit",
+    "metrics": "{{evidence}} refs · {{artifacts}} artifacts",
+    "overviewMap": "Graph overview map",
+    "panMode": "Drag to pan",
+    "resetView": "Reset view",
+    "toggleOverview": "Toggle overview map",
+    "tools": "Graph tools",
+    "unassignedAgent": "Unassigned",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomSlider": "Zoom level"
+  },
+  "evidence": {
+    "open": "Open evidence"
+  },
+  "tenant": {
+    "acp": {
+      "title": "ACP",
+      "subtitle": "Manage external Agent Client Protocol agents and monitor runtime sessions.",
+      "noTenant": "Select an organization to manage ACP.",
+      "disabledWarning": "ACP is disabled on this backend.",
+      "deleteConfirm": "Delete this ACP agent configuration?",
+      "actions": {
+        "addAgent": "Add agent",
+        "test": "Test agent",
+        "runTest": "Run test"
+      },
+      "tabs": {
+        "agents": "Agents",
+        "sessions": "Sessions",
+        "events": "Events"
+      },
+      "stats": {
+        "agents": "Agents",
+        "available": "Available",
+        "activeSessions": "Active sessions",
+        "missingEnv": "Missing env"
+      },
+      "columns": {
+        "agent": "Agent",
+        "transport": "Transport",
+        "status": "Status",
+        "sessions": "Sessions",
+        "lastLatency": "Last latency",
+        "lastError": "Last error",
+        "session": "Session",
+        "createdAt": "Created",
+        "lastActivity": "Last activity",
+        "action": "Action",
+        "duration": "Duration",
+        "timestamp": "Timestamp",
+        "error": "Error",
+        "runnerPool": "Runner Pool"
+      },
+      "form": {
+        "createTitle": "Create ACP agent",
+        "editTitle": "Edit ACP agent",
+        "agentKey": "Agent key",
+        "transport": "Transport",
+        "command": "Command",
+        "args": "Arguments, one per line",
+        "url": "WebSocket URL",
+        "env": "Environment",
+        "headers": "Headers",
+        "addEnv": "Add env",
+        "addHeader": "Add header",
+        "envRef": "Env ref",
+        "secret": "Secret",
+        "namePlaceholder": "Name",
+        "envRefPlaceholder": "Environment variable name",
+        "secretPlaceholder": "Leave blank to keep the stored secret",
+        "cwdPolicy": "CWD policy JSON",
+        "directRunner": "Direct transport",
+        "requiredLabels": "Required labels JSON",
+        "runnerPool": "Runner Pool",
+        "runnerPoolHelp": "Leave empty to run this ACP agent directly in the API process."
+      },
+      "test": {
+        "title": "Test {{name}}",
+        "cwd": "Working directory",
+        "projectId": "Project ID",
+        "prompt": "Prompt",
+        "defaultPrompt": "Reply with PONG only",
+        "timeout": "Timeout seconds",
+        "success": "ACP test succeeded",
+        "failure": "ACP test failed",
+        "duration": "Duration: {{duration}} ms",
+        "updates": "Updates: {{count}}"
+      },
+      "messages": {
+        "created": "ACP agent created.",
+        "updated": "ACP agent updated.",
+        "deleted": "ACP agent deleted."
+      },
+      "errors": {
+        "loadFailed": "Failed to load ACP status.",
+        "saveFailed": "Failed to save ACP agent.",
+        "deleteFailed": "Failed to delete ACP agent.",
+        "testFailed": "Failed to test ACP agent.",
+        "agentKeyRequired": "Agent key is required.",
+        "nameRequired": "Name is required.",
+        "commandRequired": "Command is required for stdio transport.",
+        "urlRequired": "URL is required for WebSocket transport.",
+        "cwdRequired": "Working directory is required.",
+        "invalidJson": "Invalid JSON object"
+      }
+    },
+    "agentDefinitions": {
+      "title": "Agent Definitions",
+      "subtitle": "Configure and manage AI agent definitions for your tenant",
+      "createNew": "Create Agent",
+      "createFirst": "Create your first agent",
+      "empty": "No agent definitions yet",
+      "noResults": "No agents match your filters",
+      "loadFailed": "Failed to load agent definitions",
+      "refresh": "Refresh agent definitions",
+      "toggleAgent": "Toggle {{name}}",
+      "openActions": "Open actions for {{name}}",
+      "detail": {
+        "viewDetails": "View details",
+        "backToList": "Agent definitions",
+        "loadFailed": "Unable to load agent definition",
+        "notFound": "Agent not found",
+        "sections": {
+          "identity": "Identity",
+          "prompt": "System prompt",
+          "trigger": "Trigger and routing",
+          "permissions": "Permissions and resources",
+          "workspace": "Workspace",
+          "bindings": "Bindings",
+          "raw": "Raw definition",
+          "runtime": "Runtime",
+          "spawn": "Spawn and A2A",
+          "sessionDelegation": "Session and delegation",
+          "metrics": "Metrics",
+          "timestamps": "Timestamps",
+          "metadata": "Metadata"
+        },
+        "executionBackend": {
+          "externalAcp": "External ACP ({{agentKey}})",
+          "memstack": "MemStack Native"
+        },
+        "binding": {
+          "priority": "priority {{value}}",
+          "score": "score {{value}}",
+          "accountId": "Account ID",
+          "channelId": "Channel ID",
+          "channelType": "Channel type",
+          "groupId": "Group ID",
+          "peerId": "Peer ID"
+        },
+        "labels": {
+          "discoverable": "Discoverable",
+          "enabled": "Enabled",
+          "mode": "Mode",
+          "semantic": "Semantic",
+          "keywords": "Keywords",
+          "rawTrigger": "Raw trigger",
+          "bindings": "Bindings",
+          "fallbackModels": "Fallback models",
+          "invocations": "Invocations",
+          "avgExecutionTime": "Avg execution time",
+          "successRate": "Success rate",
+          "createdAt": "Created at",
+          "updatedAt": "Updated at",
+          "id": "ID",
+          "projectId": "Project ID",
+          "source": "Source",
+          "tenantId": "Tenant ID"
+        }
+      },
+      "stats": {
+        "agents": "{{count}} agents",
+        "enabled": "{{count}} enabled",
+        "tenantScoped": "{{count}} tenant",
+        "projectScoped": "{{count}} project",
+        "pageScopeHint": "These counts reflect the current page",
+        "currentPageNote": "(current page)"
+      },
+      "filters": {
+        "all": "All",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "groupLabel": "Status filter"
+      },
+      "sort": {
+        "label": "Sort agent definitions",
+        "name": "Name",
+        "recent": "Recent",
+        "invocations": "Invocations"
+      },
+      "messages": {
+        "enabled": "Agent enabled",
+        "disabled": "Agent disabled",
+        "deleted": "Agent definition deleted",
+        "toggleFailed": "Failed to update the agent status",
+        "deleteFailed": "Failed to delete the agent definition",
+        "createSuccess": "Agent definition created",
+        "updateSuccess": "Agent definition updated",
+        "projectsLoadFailed": "Failed to load projects"
+      },
+      "scope": {
+        "tenant": "Tenant scope"
+      },
+      "scopeFilter": {
+        "label": "Filter by scope",
+        "all": "All scopes"
+      },
+      "deleteConfirm": {
+        "title": "Delete {{name}}?",
+        "content": "This removes the agent definition and cannot be undone."
+      },
+      "noSystemPrompt": "No system prompt",
+      "capabilities": {
+        "spawn": "Spawn"
+      },
+      "metrics": {
+        "invocations": "{{count}} invocations",
+        "success": "{{percent}}% success"
+      },
+      "modal": {
+        "createTitle": "Create Agent Definition",
+        "editTitle": "Edit Agent Definition",
+        "basicInfo": "Basic Info",
+        "triggerConfig": "Trigger & Routing",
+        "permissions": "Permissions & Resources",
+        "sandboxIsolation": "Sandbox & Isolation",
+        "loadingResources": "Loading resources…",
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "namePattern": "Lowercase letters, digits, underscores. Must start with letter.",
+        "namePlaceholder": "e.g., customer_support",
+        "displayName": "Display Name",
+        "displayNameRequired": "Display name is required",
+        "displayNamePlaceholder": "e.g., Customer Support Agent",
+        "systemPrompt": "System Prompt",
+        "systemPromptRequired": "System prompt is required",
+        "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior…",
+        "scope": "Scope",
+        "personaFiles": "Persona files",
+        "model": "Model",
+        "maxRetries": "Max Retries",
+        "triggerKeywords": "Trigger Keywords",
+        "addKeyword": "Add keyword…",
+        "noKeywords": "No keywords added",
+        "discoverable": "Discoverable",
+        "agentToAgent": "Agent-to-Agent",
+        "agentToAgentAllowlist": "A2A Allowlist",
+        "agentToAgentAllowlistTooltip": "Allowed sender agent IDs or names. Leave untouched on create to use the default trusted built-in senders; use an empty list to deny all.",
+        "agentToAgentAllowlistPlaceholder": "Add agent IDs or names",
+        "canSpawn": "Can Spawn Children",
+        "maxSpawnDepth": "Max Spawn Depth",
+        "allowedTools": "Allowed Tools",
+        "allowedToolsTooltip": "Tools this agent can use. Select * for all.",
+        "allowedToolsPlaceholder": "Select tools",
+        "allToolsOption": "All Tools (*)",
+        "allowedSkills": "Allowed Skills",
+        "allowedSkillsTooltip": "Skills this agent can activate.",
+        "allowedSkillsPlaceholder": "Select skills (leave empty for none)",
+        "allowedMcpServers": "MCP Servers",
+        "allowedMcpServersTooltip": "MCP servers this agent can access.",
+        "allowedMcpServersPlaceholder": "Select servers (leave empty for none)",
+        "maxTokens": "Max Tokens",
+        "temperature": "Temperature",
+        "maxIterations": "Max Iterations",
+        "spawnPolicy": "Spawn Policy",
+        "maxActiveRuns": "Max Active Runs",
+        "maxActiveRunsTooltip": "Maximum number of active subagent runs",
+        "maxChildrenPerRequester": "Max Children Per Requester",
+        "maxChildrenPerRequesterTooltip": "Maximum subagents allowed per requester",
+        "allowedSubagents": "Allowed Subagents",
+        "allowedSubagentsTooltip": "Allowed subagent names or IDs",
+        "workspaceConfig": "Workspace Config",
+        "workspaceType": "Workspace Type",
+        "workspaceBaseDir": "Base Directory",
+        "workspaceBaseDirTooltip": "Custom workspace directory path",
+        "workspaceBaseDirPlaceholder": "/path/to/dir",
+        "sessionPolicy": "Session Policy",
+        "dmScope": "DM Scope",
+        "dmScopeTooltip": "Controls how direct-message conversations share or isolate session state.",
+        "dmScopePlaceholder": "Use default",
+        "dmScopePerUser": "Per user",
+        "dmScopePerChat": "Per chat",
+        "dmScopeGlobal": "Global",
+        "maxMessages": "Max Messages",
+        "maxMessagesTooltip": "Maximum messages before the session is trimmed.",
+        "idleResetMinutes": "Idle Reset Minutes",
+        "dailyResetHour": "Daily Reset Hour",
+        "dailyResetHourTooltip": "UTC hour from 0 to 23. Leave empty for no daily reset.",
+        "sessionTtlHours": "Session TTL Hours",
+        "delegateConfig": "Delegate Config",
+        "delegateCapabilityTier": "Capability Tier",
+        "delegateCapabilityTierTooltip": "Capability tier granted to delegated work.",
+        "delegateCapabilityTierPlaceholder": "Use default",
+        "delegateCapabilityFull": "Full",
+        "delegateCapabilityReadWrite": "Read/write",
+        "delegateCapabilityReadOnly": "Read-only",
+        "delegateCapabilityNone": "None",
+        "maxDelegationDepth": "Max Delegation Depth",
+        "delegateBudgetLimitTokens": "Budget Limit Tokens",
+        "delegateAllowedTools": "Delegate Tools",
+        "delegateAllowedToolsTooltip": "Tool names this agent may grant to delegated work. Leave empty to inherit the tier boundary.",
+        "delegateAllowedToolsPlaceholder": "Add delegate tool names",
+        "toolPolicy": "Tool Policy",
+        "toolPolicyAllow": "Allow List",
+        "toolPolicyAllowTooltip": "Allowed tool patterns",
+        "toolPolicyDeny": "Deny List",
+        "toolPolicyDenyTooltip": "Denied tool patterns",
+        "resourceFetchError": "Failed to load available tools and skills",
+        "workspaceTypes": {
+          "shared": "Shared",
+          "isolated": "Isolated",
+          "inherited": "Inherited"
+        },
+        "executionBackend": "Execution Backend",
+        "executionBackendAcp": "External ACP Agent",
+        "executionBackendMemstack": "MemStack Native",
+        "externalAcpAgent": "External ACP Agent",
+        "externalAcpAgentPlaceholder": "Select an external ACP agent",
+        "externalAcpAgentRequired": "Select an external ACP agent",
+        "fallbackModels": "Fallback Models",
+        "fallbackModelsPlaceholder": "Add fallback model IDs",
+        "fallbackModelsTooltip": "Models to try in order if the primary model cannot complete a request.",
+        "toolPolicyPrecedence": "Precedence",
+        "toolPolicyPrecedenceAllowFirst": "Allow first",
+        "toolPolicyPrecedenceDenyFirst": "Deny first"
+      }
+    },
+    "providers": {
+      "title": "LLM Providers",
+      "subtitle": "Configure and manage AI model providers for your workspace.",
+      "addProvider": "Add Provider",
+      "searchPlaceholder": "Search by name or model…",
+      "allTypes": "All Types",
+      "typeFilterLabel": "Filter providers by type",
+      "statusFilterLabel": "Filter providers by status",
+      "noProviders": "No providers configured",
+      "addFirstProvider": "Add your first provider",
+      "emptyHint": "Get started by adding your first LLM provider",
+      "tabs": {
+        "myProviders": "My Providers",
+        "marketplace": "Marketplace",
+        "assignments": "Routing & Assignments"
+      },
+      "view": {
+        "card": "Card View",
+        "table": "Table View"
+      },
+      "columns": {
+        "provider": "Provider",
+        "responseTime": "Response Time",
+        "actions": "Actions"
+      },
+      "marketplace": {
+        "docs": "Docs",
+        "connect": "Connect"
+      },
+      "defaultBadge": "Default",
+      "notAvailable": "N/A",
+      "deleteConfirm": "Are you sure you want to delete this provider?",
+      "deleteSuccess": "Provider deleted",
+      "systemStatusError": "Failed to load provider system status",
+      "healthCheckError": "Failed to check provider health",
+      "connectionTest": {
+        "savedPrefix": "Saved provider health check",
+        "livePrefix": "Connection test",
+        "passed": "{{prefix}} passed{{responseTime}}.",
+        "configurationValid": "Configuration validated. Network probing is not supported for this provider.",
+        "returned": "{{prefix}} returned {{status}}{{responseTime}}{{detail}}.",
+        "apiKeyRequired": "API key is required",
+        "failed": "Connection failed. Please check the provider configuration."
+      },
+      "deleteConfirmNamed": "Delete provider \"{{name}}\"?",
+      "types": {
+        "openai": "OpenAI",
+        "openrouter": "OpenRouter",
+        "anthropic": "Anthropic",
+        "gemini": "Google Gemini",
+        "dashscope": "Alibaba Dashscope",
+        "dashscope_coding": "Dashscope Coding",
+        "dashscope_embedding": "Dashscope Embedding",
+        "dashscope_reranker": "Dashscope Reranker",
+        "kimi": "Moonshot Kimi",
+        "kimi_coding": "Kimi Coding",
+        "kimi_embedding": "Kimi Embedding",
+        "kimi_reranker": "Kimi Reranker",
+        "deepseek": "DeepSeek",
+        "minimax": "MiniMax",
+        "minimax_coding": "MiniMax Coding",
+        "minimax_embedding": "MiniMax Embedding",
+        "minimax_reranker": "MiniMax Reranker",
+        "zai": "ZhipuAI 智谱",
+        "zai_coding": "Z.AI Coding",
+        "zai_embedding": "Z.AI Embedding",
+        "zai_reranker": "Z.AI Reranker",
+        "cohere": "Cohere",
+        "mistral": "Mistral AI",
+        "groq": "Groq",
+        "xai": "xAI Grok",
+        "azure_openai": "Azure OpenAI",
+        "bedrock": "AWS Bedrock",
+        "vertex": "Google Vertex AI",
+        "ollama": "Ollama",
+        "lmstudio": "LM Studio",
+        "volcengine": "Volcengine 火山引擎",
+        "volcengine_coding": "Volcengine Coding",
+        "volcengine_embedding": "Volcengine Embedding",
+        "volcengine_reranker": "Volcengine Reranker"
+      }
+    },
+    "skills": {
+      "title": "Skill Management",
+      "subtitle": "Configure and manage agent skill library",
+      "registry": "Skill Registry",
+      "createWithChat": "Create in chat",
+      "createWithChatPrompt": "Help me create a new skill. Ask for the goal, trigger scenarios, allowed tools, inputs and outputs, and bundled files before generating a spec-compliant skill package.",
+      "searchPlaceholder": "Search skills…",
+      "statusFilterLabel": "Filter skills by status",
+      "scopeFilterLabel": "Filter skills by scope",
+      "projectsLoadFailed": "Failed to load projects",
+      "statusSelectAria": "Set status for {{name}}",
+      "allStatus": "All Status",
+      "activeOnly": "Active Only",
+      "disabledOnly": "Disabled Only",
+      "deprecatedOnly": "Deprecated Only",
+      "tools": "Tools",
+      "empty": "No skills yet",
+      "noResults": "No matching skills found",
+      "libraryViewLabel": "Skill library view",
+      "libraryViews": {
+        "all": "All skills",
+        "managed": "Managed",
+        "readonly": "Read-only"
+      },
+      "scope": {
+        "all": "All scopes",
+        "system": "System",
+        "tenant": "Tenant",
+        "project": "Project"
+      },
+      "stats": {
+        "total": "Total Skills",
+        "active": "Active",
+        "visible": "Visible"
+      },
+      "source": {
+        "database": "Database",
+        "filesystem": "Filesystem",
+        "hybrid": "Hybrid",
+        "plugin": "Plugin"
+      },
+      "actions": {
+        "view": "View details",
+        "viewAria": "View skill details",
+        "edit": "Edit",
+        "editAria": "Edit skill",
+        "duplicate": "Duplicate",
+        "duplicateAria": "Duplicate skill",
+        "export": "Export",
+        "exportAria": "Export skill package",
+        "versions": "Versions",
+        "versionsAria": "Manage skill versions",
+        "delete": "Delete",
+        "deleteAria": "Delete skill",
+        "more": "More actions",
+        "viewShort": "Preview"
+      },
+      "card": {
+        "tools": "Tools",
+        "version": "v{{version}}"
+      },
+      "systemConfig": {
+        "disable": "Tenant disabled",
+        "override": "Tenant override",
+        "disableAction": "Disable for tenant",
+        "disableAria": "Disable {{name}} for this tenant",
+        "disableConfirm": "Disable this system skill for the tenant?",
+        "disableSuccess": "System skill disabled for this tenant",
+        "disableFailed": "Failed to disable system skill",
+        "restoreAction": "Restore system default",
+        "restoreAria": "Restore {{name}} system default for this tenant",
+        "restoreConfirm": "Restore the system default for this tenant?",
+        "restoreSuccess": "System skill default restored",
+        "restoreFailed": "Failed to restore system skill"
+      },
+      "deleteConfirm": "Are you sure you want to delete this skill?",
+      "deleteSuccess": "Skill deleted successfully",
+      "enableSuccess": "Skill enabled",
+      "disableSuccess": "Skill disabled",
+      "updateSuccess": "Skill updated successfully",
+      "saveFailed": "Failed to save skill",
+      "import": {
+        "button": "Import",
+        "title": "Import Agent Skill",
+        "placeholder": "Paste SKILL.md content with YAML frontmatter…",
+        "zipPlaceholder": "Choose a .zip skill package",
+        "zipButton": "Browse",
+        "scopeLabel": "Import scope",
+        "scopeTenant": "Tenant library",
+        "scopeProject": "Project library",
+        "projectLabel": "Project",
+        "projectPlaceholder": "Select a project",
+        "projectRequired": "Select a project for project-scoped imports",
+        "overwrite": "Overwrite existing skill with the same name",
+        "confirm": "Import",
+        "empty": "Paste SKILL.md content before importing",
+        "success": "Skill imported",
+        "failed": "Skill import failed"
+      },
+      "export": {
+        "success": "Skill package exported",
+        "failed": "Skill export failed"
+      },
+      "versions": {
+        "title": "Versions for {{name}}",
+        "empty": "No saved versions yet",
+        "loadFailed": "Failed to load skill versions",
+        "current": "Current",
+        "createdBy": "{{author}} · {{date}}",
+        "rollback": "Rollback",
+        "rollingBack": "Rolling back",
+        "rollbackConfirm": "Rollback to this version?",
+        "rollbackSuccess": "Skill rolled back",
+        "rollbackFailed": "Skill rollback failed"
+      },
+      "detail": {
+        "back": "Back to skills",
+        "notFound": "Skill not found",
+        "loadFailed": "Failed to load skill",
+        "versionLoadFailed": "Failed to load skill versions",
+        "refresh": "Refresh",
+        "edit": "Edit",
+        "export": "Export",
+        "package": "Package",
+        "identity": "Identity",
+        "versions": "Versions",
+        "metadata": "Metadata",
+        "id": "ID",
+        "source": "Source",
+        "filePath": "File path",
+        "scope": "Scope",
+        "scopeValues": {
+          "system": "System",
+          "tenant": "Tenant",
+          "project": "Project"
+        },
+        "project": "Project",
+        "created": "Created",
+        "updated": "Updated",
+        "license": "License",
+        "compatibility": "Compatibility",
+        "specVersion": "Spec",
+        "allowedToolsRaw": "Allowed tools",
+        "fullContent": "SKILL.md",
+        "files": "File preview",
+        "packageFiles": "{{count}} files",
+        "fileKinds": {
+          "markdown": "Markdown",
+          "text": "Text"
+        },
+        "contentMode": "SKILL.md display mode",
+        "contentModes": {
+          "preview": "Preview",
+          "raw": "Source"
+        },
+        "viewMode": "Skill detail view",
+        "viewModes": {
+          "preview": "Preview",
+          "manage": "Manage",
+          "report": "Assessment"
+        },
+        "assessment": {
+          "title": "Assessment report",
+          "description": "Summarizes package structure, permissions, metadata, and version state so reviewers can spot missing launch notes or loose configuration.",
+          "copy": "Copy report",
+          "copySuccess": "Assessment report copied",
+          "copyFailed": "Failed to copy assessment report",
+          "details": "Assessment details",
+          "groupPassed": "Passed checks",
+          "generatedAt": "Generated from the {{date}} skill snapshot",
+          "staticNotice": "This report is a local static check. It does not run an external sandbox security scan or live quality evaluation.",
+          "reportTitle": "Skill assessment report",
+          "reportSkill": "Skill",
+          "reportGeneratedAt": "Generated at",
+          "reportStatus": "Status",
+          "status": {
+            "safe": "No high-risk findings",
+            "attention": "Needs attention"
+          },
+          "itemStatus": {
+            "pass": "Pass",
+            "warn": "Review"
+          },
+          "groups": {
+            "p0": "P0 required",
+            "p1": "P1 important",
+            "p2": "P2 recommended"
+          },
+          "items": {
+            "secrets": {
+              "title": "Hardcoded credentials",
+              "pass": "No obvious key, token, or password literals were found in the skill files.",
+              "warn": "Possible key, token, or password literals were detected. Remove them before release."
+            },
+            "hiddenCharacters": {
+              "title": "Hidden characters",
+              "pass": "No zero-width characters or BOM markers were found.",
+              "warn": "Hidden characters were detected. Check for invisible instructions or formatting issues."
+            },
+            "allowedTools": {
+              "title": "Tool permissions",
+              "pass": "The skill declares available tools, so the permission boundary is reviewable.",
+              "warn": "The skill does not declare tool permissions. Add allowed-tools or confirm runtime policy."
+            },
+            "packageFiles": {
+              "title": "Package integrity",
+              "pass": "{{count}} skill package files are available for preview."
+            },
+            "metadata": {
+              "title": "Metadata",
+              "pass": "The skill includes structured metadata.",
+              "warn": "The skill has no metadata, leaving less context for search, categorization, or governance."
+            },
+            "versioning": {
+              "title": "Version history",
+              "pass": "The skill has a current version or saved version snapshots.",
+              "warn": "No rollback-friendly version snapshot was found."
+            },
+            "documentation": {
+              "title": "Supplementary docs",
+              "pass": "The package includes files beyond SKILL.md.",
+              "warn": "The package only includes SKILL.md. Complex skills should add examples or schemas."
+            },
+            "licenseCompatibility": {
+              "title": "License and compatibility",
+              "pass": "License and compatibility notes are filled in.",
+              "warn": "License or compatibility notes are incomplete. Add runtime constraints where relevant."
+            }
+          }
+        },
+        "emptyContent": "No SKILL.md content saved",
+        "emptyVersions": "No version snapshots yet",
+        "notVersioned": "Filesystem skills are read-only and do not have database version snapshots",
+        "current": "Current",
+        "rollback": "Rollback",
+        "rollbackConfirm": "Rollback to this version?",
+        "rollbackSuccess": "Skill rolled back",
+        "rollbackFailed": "Skill rollback failed",
+        "exportSuccess": "Skill package exported",
+        "exportFailed": "Skill export failed",
+        "readOnlySource": "This skill source is read-only",
+        "versionCreatedBy": "{{author}} · {{date}}",
+        "evolutionRoute": "Evolution route",
+        "runEvolution": "Run evolution",
+        "evolutionRunning": "Running",
+        "evolutionRunSuccess": "Evolution cycle completed",
+        "evolutionRunFailed": "Evolution cycle failed",
+        "capturedSessions": "Captured",
+        "triggerHook": "Hook",
+        "evolutionThreshold": "Threshold",
+        "emptyEvolutionRoute": "No evolution jobs or version route yet",
+        "notSet": "Not set",
+        "packageFilesLoadFailed": "Failed to load package files",
+        "viewInEvolution": "View in Evolution"
+      },
+      "modal": {
+        "editTitle": "Edit Skill",
+        "specPanelTitle": "AgentSkills.io package",
+        "specPanelDescription": "Define the required frontmatter, write the Markdown instructions, and review the generated SKILL.md before saving.",
+        "basicInfo": "Basic Information",
+        "tools": "Tools Configuration",
+        "package": "Package",
+        "metadata": "Metadata",
+        "frontmatter": "Frontmatter",
+        "name": "Skill Name",
+        "nameRequired": "Please enter skill name",
+        "namePattern": "Use lowercase letters, numbers, and single hyphens only",
+        "nameMax": "Skill name must be 64 characters or fewer",
+        "namePlaceholder": "e.g., data-analysis-skill",
+        "description": "Description",
+        "descriptionRequired": "Please enter skill description",
+        "descriptionMax": "Description must be 1024 characters or fewer",
+        "descriptionPlaceholder": "Describe what this skill does…",
+        "scope": "Scope",
+        "scopeRequired": "Please select a scope",
+        "scopeTenant": "Tenant",
+        "scopeProject": "Project",
+        "projectId": "Project ID",
+        "projectIdRequired": "Project ID is required for project scope",
+        "projectIdPlaceholder": "Project UUID",
+        "allowedTools": "Allowed Tools",
+        "allowedToolsRaw": "allowed-tools",
+        "allowedToolsRawPlaceholder": "Bash(git:*) Bash(jq:*) Read",
+        "body": "Markdown instructions",
+        "bodyPlaceholder": "Write the instructions agents should follow when this skill activates…",
+        "advanced": "Optional frontmatter",
+        "advancedHint": "License, compatibility, spec version, and metadata.",
+        "preview": "Generated package",
+        "previewEmpty": "Enter a name and description to preview SKILL.md.",
+        "previewInvalid": "Fix invalid metadata to preview SKILL.md.",
+        "fullContent": "SKILL.md content",
+        "fullContentPlaceholder": "Paste or edit the complete SKILL.md content…",
+        "fullContentHint": "If omitted, the backend can generate a minimal SKILL.md from the fields above.",
+        "metadataJson": "Metadata JSON",
+        "metadataInvalid": "Metadata must be a JSON object",
+        "specVersion": "Spec version",
+        "license": "License",
+        "licensePlaceholder": "Apache-2.0",
+        "compatibility": "Compatibility",
+        "compatibilityMax": "Compatibility must be 500 characters or fewer",
+        "compatibilityPlaceholder": "Required product, system packages, network access, or runtime notes",
+        "requireTools": "At least one tool is required",
+        "addTool": "Enter tool name…",
+        "noTools": "No tools yet, please add at least one",
+        "toolsHint": "Optional. Leave blank to omit allowed-tools from frontmatter; the runtime stores this as unrestricted internally."
+      },
+      "statusUpdateSuccess": "Skill status updated",
+      "deleteConfirmNamed": "Delete skill \"{{name}}\"?"
+    },
+    "skillEvolution": {
+      "eyebrow": "Skill evolution",
+      "title": "Evolution Observatory",
+      "subtitle": "Inspect captured skill sessions, scoring coverage, evolution jobs, and scheduler policy across the tenant.",
+      "loadFailed": "Failed to load skill evolution data",
+      "loadRetryHint": "Retry the request to restore the evolution dashboard.",
+      "staleDataHint": "Showing the last loaded data. Retry to refresh the current state.",
+      "empty": "No skill evolution data available",
+      "stats": {
+        "captured": "Captured sessions",
+        "skillCaptured": "{{count}} attributed to skills · {{rate}}% attribution",
+        "processing": "Processed",
+        "queued": "{{count}} waiting for summarization or judging",
+        "score": "Average score",
+        "scored": "{{count}} scored sessions",
+        "jobs": "Evolution jobs",
+        "pending": "{{count}} pending · {{applied}} applied · {{rejected}} rejected"
+      },
+      "monitor": {
+        "attention": "Evolution needs attention",
+        "healthy": "Evolution loop is clear",
+        "summary": "{{backlog}} queued, {{unscored}} unscored, {{blocked}} blocked by review, {{eligible}} eligible skill groups",
+        "lastUpdated": "Last refresh: {{time}}",
+        "latestSession": "Latest session: {{time}}",
+        "latestJob": "Latest job: {{time}}",
+        "pause": "Pause live tracking",
+        "resume": "Resume live tracking",
+        "stageCounts": "{{count}} done · {{backlog}} waiting"
+      },
+      "stageCountDetails": {
+        "capture": "{{count}} captured · {{backlog}} waiting for capture",
+        "summarize": "{{count}} summarized · {{backlog}} waiting for summarization",
+        "judge": "{{count}} scored · {{backlog}} waiting for scheduler scoring",
+        "review": "{{count}} pending review · {{backlog}} blocking duplicate batches",
+        "apply": "{{count}} applied · {{backlog}} waiting for apply"
+      },
+      "stageDetails": {
+        "capture": "After each agent turn, the plugin records skills, tool calls, results, and final responses.",
+        "summarize": "The scheduler turns captured sessions into comparable trajectory summaries.",
+        "judge": "Waiting for the next scheduler run to call the judge model and produce scores plus improvement signals.",
+        "review": "In manual review mode, pending jobs must be applied or rejected before the same batch advances.",
+        "apply": "Approved jobs create new skill versions attributed to evolution."
+      },
+      "stages": {
+        "capture": "Capture",
+        "summarize": "Summarize",
+        "judge": "Judge",
+        "review": "Review",
+        "apply": "Apply"
+      },
+      "stageWaitingStatuses": {
+        "capture": "Pending capture",
+        "summarize": "Pending summary",
+        "judge": "Pending scoring",
+        "review": "Pending review",
+        "apply": "Pending apply"
+      },
+      "stageStatuses": {
+        "active": "Active",
+        "waiting": "Waiting",
+        "complete": "Clear",
+        "blocked": "Blocked"
+      },
+      "manualRun": {
+        "action": "Run now",
+        "running": "Running",
+        "success": "Skill evolution run started",
+        "failed": "Failed to run skill evolution"
+      },
+      "trigger": {
+        "capture": "Capture",
+        "schedule": "Schedule",
+        "policy": "Policy"
+      },
+      "policy": {
+        "enabled": "Scheduler enabled",
+        "autoApply": "Auto apply",
+        "publishMode": "Publish mode",
+        "reviewMode": "Manual review",
+        "directMode": "Direct publish",
+        "scoringMinSessions": "Score only skills with at least",
+        "evolutionMinSessions": "Evolve only skills with at least",
+        "minScore": "Evolution score threshold",
+        "batchSize": "Batch session limit",
+        "interval": "Scheduler interval minutes",
+        "save": "Save policy",
+        "saving": "Saving",
+        "saveSuccess": "Skill evolution policy saved",
+        "saveFailed": "Failed to save skill evolution policy"
+      },
+      "status": {
+        "success": "Success",
+        "failed": "Failed",
+        "processed": "Processed",
+        "queued": "Queued",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "autoApply": "Auto apply",
+        "review": "Review"
+      },
+      "units": {
+        "sessions": "{{count}} sessions",
+        "scoringSessions": "Score ≥ {{count}} sessions",
+        "minScore": "Score ≥ {{score}}",
+        "tools": "{{count}} tools",
+        "ms": "{{count}} ms"
+      },
+      "jobActions": {
+        "improve_skill": "Improve skill",
+        "create_skill": "Create skill",
+        "optimize_description": "Optimize description",
+        "skip": "Skip"
+      },
+      "jobStatuses": {
+        "pending_review": "Pending review",
+        "applied": "Applied",
+        "skipped": "Skipped",
+        "rejected": "Rejected"
+      },
+      "publishModes": {
+        "review": "Review",
+        "direct": "Direct",
+        "auto_apply": "Auto apply"
+      },
+      "tabs": {
+        "ariaLabel": "Skill evolution panels",
+        "skills": "Skill evidence",
+        "sessions": "Tasks",
+        "jobs": "Recent jobs"
+      },
+      "skills": {
+        "title": "Skill evidence",
+        "subtitle": "{{count}} skills with captured sessions",
+        "empty": "No skill evidence has been captured yet"
+      },
+      "scope": {
+        "tenant": "Tenant scope",
+        "project": "Project {{projectId}}"
+      },
+      "table": {
+        "skill": "Skill",
+        "sessions": "Sessions",
+        "success": "Success",
+        "score": "Score",
+        "queued": "Queued",
+        "jobs": "Jobs",
+        "eligibility": "Evolution status"
+      },
+      "eligibility": {
+        "eligible": "Meets threshold",
+        "hasJob": "Scheduled",
+        "pendingReview": "Pending review",
+        "notEnoughSessions": "Below {{count}} sessions",
+        "notScored": "Not scored",
+        "lowScore": "{{score}} < {{threshold}}"
+      },
+      "sessions": {
+        "title": "Recent sessions",
+        "empty": "No captured sessions"
+      },
+      "jobs": {
+        "title": "Recent jobs",
+        "openSkills": "Open skills",
+        "empty": "No evolution jobs yet",
+        "apply": "Apply",
+        "reject": "Reject",
+        "applyConfirm": "Apply this evolution job? It will overwrite the skill content.",
+        "rejectConfirm": "Reject this evolution job?",
+        "applySuccess": "Evolution job applied",
+        "applyFailed": "Failed to apply evolution job",
+        "rejectSuccess": "Evolution job rejected",
+        "rejectFailed": "Failed to reject evolution job"
+      }
+    },
+    "mcpServers": {
+      "title": "MCP Servers",
+      "subtitle": "Manage Model Context Protocol server integrations",
+      "createNew": "Add Server",
+      "searchPlaceholder": "Search servers…",
+      "allStatus": "All Status",
+      "enabledOnly": "Enabled Only",
+      "disabledOnly": "Disabled Only",
+      "allTypes": "All Types",
+      "empty": "No MCP Servers",
+      "createFirst": "Add your first MCP server",
+      "noResults": "No matching servers found",
+      "createTitle": "Add MCP Server",
+      "editTitle": "Edit MCP Server",
+      "invalidConfig": "Invalid configuration",
+      "jsonMode": "JSON Mode",
+      "simpleMode": "Simple Mode",
+      "stats": {
+        "total": "Total Servers",
+        "enabled": "Enabled",
+        "totalTools": "Total Tools",
+        "byType": "By Type"
+      },
+      "tabs": {
+        "basic": "Basic Info",
+        "config": "Transport Config"
+      },
+      "fields": {
+        "name": "Server Name",
+        "description": "Description",
+        "serverType": "Server Type",
+        "enabled": "Enabled",
+        "command": "Command",
+        "args": "Arguments",
+        "url": "URL",
+        "transportConfig": "Transport Config"
+      },
+      "validation": {
+        "nameRequired": "Please enter server name",
+        "nameTooLong": "Name cannot exceed 100 characters",
+        "commandRequired": "Please enter command",
+        "urlRequired": "Please enter URL",
+        "urlInvalid": "Please enter a valid URL"
+      },
+      "placeholders": {
+        "name": "e.g. My MCP Server",
+        "description": "Describe what this server does…"
+      },
+      "tooltips": {
+        "command": "Command to execute, e.g. python, npx",
+        "args": "Command arguments, comma-separated",
+        "url": "Server URL address",
+        "websocketUrl": "WebSocket server address"
+      },
+      "hints": {
+        "stdioExample": "Example: command=python, args=-m,mcp_server",
+        "sseExample": "Example: https://example.com/sse",
+        "httpExample": "Example: https://example.com/api"
+      },
+      "config": "Config",
+      "tools": "Tools",
+      "lastSync": "Last Sync",
+      "neverSynced": "Never synced",
+      "justNow": "Just now",
+      "minutesAgo": "{{count}} minutes ago",
+      "hoursAgo": "{{count}} hours ago",
+      "daysAgo": "{{count}} days ago",
+      "card": {
+        "tools": "Tools",
+        "lastSync": "Last Sync",
+        "never": "Never",
+        "noTools": "No tools"
+      },
+      "deleteConfirm": "Are you sure you want to delete this MCP server?",
+      "deleteSuccess": "MCP server deleted successfully",
+      "enabledSuccess": "MCP server enabled",
+      "disabledSuccess": "MCP server disabled",
+      "createSuccess": "MCP server created successfully",
+      "updateSuccess": "MCP server updated successfully",
+      "syncSuccess": "Tools synced successfully",
+      "syncFailed": "Failed to sync tools",
+      "toggleFailed": "Failed to update server status",
+      "deleteFailed": "Failed to delete MCP server",
+      "testSuccess": "Connection test successful",
+      "testFailed": "Connection test failed",
+      "actions": {
+        "sync": "Sync Tools",
+        "test": "Test Connection",
+        "edit": "Edit",
+        "delete": "Delete",
+        "viewTools": "View Tools"
+      },
+      "toolsModal": {
+        "title": "Server Tools",
+        "noTools": "No tools available",
+        "syncFirst": "Please sync tools first",
+        "name": "Tool Name",
+        "description": "Description",
+        "parameters": "Parameters"
+      }
+    },
+    "subagents": {
+      "title": "SubAgents",
+      "subtitle": "Manage specialized AI agents for different tasks",
+      "createNew": "Create SubAgent",
+      "fromTemplate": "From Template",
+      "noTemplates": "No templates available",
+      "importTarget": {
+        "label": "Import target",
+        "tenant": "Tenant"
+      },
+      "stats": {
+        "total": "Total SubAgents",
+        "enabled": "Active",
+        "successRate": "Success Rate",
+        "invocations": "Total Runs"
+      },
+      "filter": {
+        "searchPlaceholder": "Search subagents…",
+        "statusGroup": "Filter by status",
+        "all": "All",
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "sort": {
+        "label": "Sort subagents",
+        "name": "Name",
+        "invocations": "Most Runs",
+        "successRate": "Success Rate",
+        "recent": "Recently Used"
+      },
+      "pagination": {
+        "summary": "{{start}}-{{end}} of {{total}}",
+        "rowsPerPage": "Rows",
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
+      },
+      "card": {
+        "inherit": "Inherit",
+        "allTools": "All",
+        "runs": "runs",
+        "noDescription": "No trigger description",
+        "toggle": "Toggle {{name}}",
+        "openActions": "Open actions for {{name}}",
+        "exportTemplate": "Export as Template",
+        "deleteConfirm": "Delete this SubAgent?",
+        "filesystem": "File",
+        "database": "DB",
+        "tenantScope": "Tenant",
+        "importToDb": "Import to Database"
+      },
+      "empty": {
+        "title": "No subagents yet",
+        "hint": "Create your first SubAgent to specialize AI tasks.",
+        "noResults": "No matching subagents",
+        "noResultsHint": "Try adjusting your search or filters."
+      },
+      "messages": {
+        "enableSuccess": "SubAgent enabled",
+        "disableSuccess": "SubAgent disabled",
+        "deleteSuccess": "SubAgent deleted",
+        "createFromTemplateSuccess": "SubAgent created from template",
+        "importSuccess": "SubAgent imported to database",
+        "projectsLoadFailed": "Failed to load projects"
+      },
+      "createSuccess": "SubAgent created successfully",
+      "updateSuccess": "SubAgent updated successfully",
+      "saveFailed": "Failed to save SubAgent",
+      "modal": {
+        "createTitle": "Create SubAgent",
+        "editTitle": "Edit SubAgent",
+        "basicInfo": "Basic Info",
+        "triggerConfig": "Trigger Config",
+        "permissions": "Permissions",
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "namePattern": "Must start with lowercase letter, only a-z, 0-9, underscore",
+        "namePlaceholder": "e.g., code_reviewer",
+        "displayName": "Display Name",
+        "displayNameRequired": "Display name is required",
+        "displayNamePlaceholder": "e.g., Code Reviewer",
+        "systemPrompt": "System Prompt",
+        "systemPromptRequired": "System prompt is required",
+        "systemPromptPlaceholder": "Enter the system prompt for this SubAgent…",
+        "model": "Model",
+        "color": "Color",
+        "triggerDescription": "Trigger Description",
+        "triggerDescriptionRequired": "Trigger description is required",
+        "triggerDescriptionPlaceholder": "Describe when this SubAgent should be activated…",
+        "triggerKeywords": "Trigger Keywords",
+        "addKeyword": "Add keyword…",
+        "noKeywords": "No keywords added",
+        "triggerExamples": "Trigger Examples",
+        "addExample": "Add example message…",
+        "noExamples": "No examples added",
+        "allowedTools": "Allowed Tools",
+        "allowedToolsTooltip": "Comma-separated tool names, or * for all tools",
+        "allowedToolsPlaceholder": "Select tools",
+        "allToolsOption": "All Tools (*)",
+        "allowedSkills": "Allowed Skills",
+        "allowedSkillsTooltip": "Comma-separated skill names this SubAgent can use",
+        "allowedSkillsPlaceholder": "Select skills (leave empty for none)",
+        "allowedMcpServers": "MCP Servers",
+        "allowedMcpServersTooltip": "Comma-separated MCP server names this SubAgent can access",
+        "allowedMcpServersPlaceholder": "Select servers (leave empty for none)",
+        "maxTokens": "Max Tokens",
+        "temperature": "Temperature",
+        "maxIterations": "Max Iterations",
+        "spawnPolicy": "Spawn Policy",
+        "spawnPolicyDescription": "Configure how this SubAgent can spawn and be spawned by other agents.",
+        "maxDepth": "Max Depth",
+        "maxDepthHint": "Maximum nesting depth (0 = no nesting)",
+        "maxActiveRuns": "Max Active Runs",
+        "maxActiveRunsHint": "Global cap on concurrent SubAgent runs",
+        "maxChildren": "Max Children per Requester",
+        "maxChildrenHint": "Per-parent cap on active children",
+        "allowedSubagents": "Allowed SubAgents",
+        "allowedSubagentsPlaceholder": "Select SubAgents that can spawn this one (empty = all)",
+        "toolPolicy": "Tool Policy",
+        "toolPolicyDescription": "Configure which tools this SubAgent can use. Precedence determines how conflicts are resolved.",
+        "precedence": "Precedence",
+        "denyFirst": "Deny First",
+        "allowFirst": "Allow First",
+        "denyFirstHint": "Deny wins on conflict; unlisted tools are allowed.",
+        "allowFirstHint": "Allow wins on conflict; unlisted tools are allowed unless in deny.",
+        "allowList": "Allow List",
+        "allowListPlaceholder": "Tools to explicitly allow",
+        "denyList": "Deny List",
+        "denyListPlaceholder": "Tools to explicitly deny",
+        "policyPreview": "Policy Preview",
+        "toolsAllowed": "{{count}} of {{total}} tools allowed",
+        "identity": "Identity",
+        "identityIntro": "Configure the identity this SubAgent uses when spawning child agents. Leave empty to use defaults.",
+        "identityDescription": "Identity Description",
+        "identityDescriptionField": "Identity Description",
+        "identityDescriptionPlaceholder": "Describe this SubAgent's role and personality when spawning child agents…",
+        "metadata": "Metadata",
+        "metadataKey": "Key",
+        "metadataValue": "Value",
+        "addMetadata": "Add Metadata",
+        "removeExample": "Remove example {{example}}",
+        "removeMetadata": "Remove metadata row {{index}}",
+        "testKeywords": "Test Keyword Match",
+        "modelInherit": "Inherit from Tenant Config",
+        "colorPresets": "Presets",
+        "testQueryPlaceholder": "Enter query to test match…",
+        "keywordMatchFound": "Matches keyword: \"{{keyword}}\"",
+        "noExactKeywordMatch": "No exact keyword match found. The LLM may still route based on description.",
+        "resourceFetchError": "Failed to load available tools and skills"
+      }
+    },
+    "agentBindings": {
+      "title": "Agent Bindings",
+      "subtitle": "Bind agents to channels to control which agent handles which conversations",
+      "createNew": "Create Binding",
+      "createFirst": "Create your first binding",
+      "loadFailed": "Failed to load agent bindings",
+      "refresh": "Refresh bindings",
+      "testRoutingButton": "Test Routing",
+      "toggleBinding": "Toggle binding for {{name}}",
+      "channelTypes": {
+        "web": "Web Chat",
+        "feishu": "Feishu",
+        "dingtalk": "DingTalk",
+        "wechat": "WeChat",
+        "slack": "Slack",
+        "api": "API"
+      },
+      "stats": {
+        "count": "{{count}} bindings",
+        "count_one": "{{count}} binding",
+        "count_other": "{{count}} bindings"
+      },
+      "testRouting": {
+        "title": "Test Routing Resolution",
+        "test": "Test",
+        "channelType": "Channel Type",
+        "channelTypeRequired": "Please select a channel type",
+        "selectChannelType": "Select channel type",
+        "channelId": "Channel ID",
+        "channelIdPlaceholder": "Optional: specific channel identifier",
+        "accountId": "Account ID",
+        "accountIdPlaceholder": "Optional: user account identifier",
+        "peerId": "Peer ID",
+        "peerIdPlaceholder": "Optional: peer identifier",
+        "result": "Routing Result",
+        "matchedAgent": "Matched Agent",
+        "specificity": "Specificity Score",
+        "confidence": "Confidence",
+        "noMatch": "No matching binding found for this context"
+      },
+      "trace": {
+        "agentId": "Agent ID",
+        "specificity": "Score",
+        "priority": "Priority",
+        "channelType": "Channel Type",
+        "matchCriteria": "Match Criteria",
+        "channel": "Channel",
+        "account": "Account",
+        "peer": "Peer",
+        "status": "Status",
+        "hide": "Hide Decision Trace",
+        "show": "Show Decision Trace",
+        "candidatesCount": "{{count}} candidates"
+      },
+      "search": "Search bindings…",
+      "empty": "No agent bindings yet",
+      "noResults": "No bindings match your search",
+      "columns": {
+        "agent": "Agent",
+        "channelType": "Channel Type",
+        "any": "Any",
+        "channelId": "Channel ID",
+        "accountId": "Account ID",
+        "peerId": "Peer ID",
+        "specificity": "Specificity",
+        "priority": "Priority",
+        "enabled": "Enabled"
+      },
+      "deleteConfirm": {
+        "title": "Delete this binding?"
+      },
+      "messages": {
+        "createSuccess": "Binding created",
+        "createError": "Failed to create binding",
+        "enabled": "Binding enabled",
+        "disabled": "Binding disabled",
+        "deleted": "Binding deleted",
+        "testFailed": "Failed to test routing"
+      },
+      "modal": {
+        "createTitle": "Create Agent Binding",
+        "agent": "Agent",
+        "agentRequired": "Please select an agent",
+        "selectAgent": "Select a tenant-level agent definition",
+        "tenantAgentOnly": "Channel bindings can only target tenant-level agents.",
+        "noTenantAgents": "No tenant-level agents available",
+        "channelType": "Channel Type",
+        "channelId": "Channel ID",
+        "channelIdTooltip": "Leave empty to match all channels of the selected type",
+        "channelIdPlaceholder": "Optional: specific channel identifier",
+        "accountId": "Account ID",
+        "accountIdTooltip": "Optional: bind to a specific user account",
+        "accountIdPlaceholder": "Optional: user account identifier",
+        "peerId": "Peer ID",
+        "peerIdTooltip": "Optional: bind to a specific peer identity (highest specificity)",
+        "peerIdPlaceholder": "Optional: peer identifier",
+        "groupId": "Group ID",
+        "groupIdTooltip": "Optional: group bindings for broadcast routing (all agents in group receive messages)",
+        "groupIdPlaceholder": "Optional: broadcast group identifier",
+        "priority": "Priority",
+        "priorityTooltip": "Higher priority bindings are matched first. Default is 0.",
+        "specificityPreview": "Specificity Preview",
+        "specificityHint": "Higher specificity = higher routing priority. The more fields filled, the higher the score."
+      },
+      "specificity": {
+        "veryHigh": "Very High",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+        "minimal": "Minimal"
+      }
+    },
+    "decisionRecords": {
+      "title": "Decision Records",
+      "subtitle": "Review agent approval requests and historical decisions.",
+      "refresh": "Refresh decision records",
+      "empty": "No decision records found",
+      "loadError": "Failed to load decision records",
+      "noWorkspace": "No workspace is available in this tenant yet. Create a workspace to start recording approval decisions.",
+      "workspaceNotFound": "The selected workspace no longer exists or is not visible to your account.",
+      "filters": {
+        "workspaceId": "Filter by Workspace ID",
+        "agentId": "Filter by Agent ID",
+        "decisionType": "Decision Type"
+      },
+      "types": {
+        "permission": "Permission",
+        "action": "Action"
+      },
+      "outcomes": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "denied": "Denied"
+      },
+      "columns": {
+        "decisionType": "Decision Type",
+        "agentInstance": "Agent Instance",
+        "outcome": "Outcome",
+        "context": "Context",
+        "createdAt": "Created At"
+      },
+      "actions": {
+        "resolve": "Resolve",
+        "details": "Details"
+      },
+      "messages": {
+        "resolved": "Decision recorded successfully"
+      },
+      "drawer": {
+        "title": "Decision Record Details",
+        "recordId": "Record ID",
+        "outcome": "Outcome",
+        "decisionType": "Decision Type",
+        "workspaceId": "Workspace ID",
+        "agentInstanceId": "Agent Instance ID",
+        "reviewerId": "Reviewer ID",
+        "createdAt": "Created At",
+        "resolvedAt": "Resolved At",
+        "contextSummary": "Context Summary",
+        "reviewComment": "Review Comment",
+        "proposalDetails": "Proposal Details"
+      },
+      "resolve": {
+        "title": "Resolve Approval Request",
+        "descriptionPrefix": "Select an action for the pending request from agent",
+        "descriptionSuffix": ".",
+        "decision": "Decision",
+        "ok": "Record Decision",
+        "actions": {
+          "allow_once": "Allow Once",
+          "allow_always": "Allow Always",
+          "deny": "Deny"
+        }
+      }
+    },
+    "trustPolicies": {
+      "title": "Trust Policies",
+      "subtitle": "Manage automated execution permissions for agents in your workspaces.",
+      "refresh": "Refresh trust policies",
+      "empty": "No trust policies found",
+      "loadError": "Failed to load trust policies",
+      "noWorkspace": "No workspace is available in this tenant yet. Create a workspace to manage trust policies.",
+      "workspaceNotFound": "The selected workspace no longer exists or is not visible to your account.",
+      "actions": {
+        "createPolicy": "Create Policy",
+        "viewDetails": "View Details",
+        "revoke": "Revoke"
+      },
+      "messages": {
+        "created": "Trust policy created successfully",
+        "revokeFailed": "Failed to revoke trust policy",
+        "revoked": "Trust policy revoked"
+      },
+      "filters": {
+        "workspaceId": "Filter by Workspace ID",
+        "agentInstanceId": "Filter by Agent Instance ID",
+        "defaultWorkspaceHint": "No workspace filter set — showing policies for workspace {{workspace}}."
+      },
+      "columns": {
+        "actionType": "Action Type",
+        "agentInstance": "Agent Instance",
+        "grantType": "Grant Type",
+        "grantedBy": "Granted By",
+        "createdAt": "Created At"
+      },
+      "grantTypes": {
+        "once": "Allow Once",
+        "always": "Allow Always"
+      },
+      "details": {
+        "title": "Trust Policy Details",
+        "policyId": "Policy ID",
+        "createdAt": "Created At",
+        "actionType": "Action Type",
+        "grantType": "Grant Type",
+        "workspaceId": "Workspace ID",
+        "agentInstanceId": "Agent Instance ID",
+        "grantedBy": "Granted By",
+        "deletedAt": "Deleted At"
+      },
+      "create": {
+        "title": "Create Trust Policy",
+        "workspaceId": "Workspace ID",
+        "workspaceIdRequired": "Please enter a workspace ID",
+        "workspaceIdPlaceholder": "Enter workspace ID",
+        "agentInstanceId": "Agent Instance ID",
+        "agentInstanceIdRequired": "Please enter an agent instance ID",
+        "agentInstanceIdPlaceholder": "Enter agent instance ID",
+        "actionType": "Action Type",
+        "actionTypeRequired": "Please enter the action type",
+        "actionTypeTooltip": "E.g., shell_execution, file_write, or * for all",
+        "actionTypePlaceholder": "Enter action type",
+        "grantType": "Grant Type",
+        "grantTypeRequired": "Please select a grant type",
+        "alwaysConfirmContent": "An \"always\" grant lets this agent run \"{{actionType}}\" without asking again until you revoke the policy.",
+        "alwaysConfirmTitle": "Grant persistent access?"
+      },
+      "revokeConfirm": "Revoke the \"{{actionType}}\" grant for {{agent}}? The agent will need approval again.",
+      "statusRevoked": "Revoked"
+    },
+    "agentDashboard": {
+      "eyebrow": "Tenant runtime policy",
+      "activeRuns": "{{count}} active runs",
+      "title": "Agent Configuration",
+      "description": "Set the model, execution guardrails, tool boundaries, and runtime hooks that shape every Sisyphus turn in this tenant.",
+      "scopeTitle": "Scope",
+      "scopeDescription": "This page stays focused on live configuration surfaces. Definitions, skills, bindings, and plugins are linked as supporting systems instead of duplicated dashboard widgets.",
+      "noTenantTitle": "Select a tenant to edit agent policy",
+      "noTenantDescription": "The configuration surface is scoped per tenant. Open it from a tenant route to review or edit the active runtime policy.",
+      "feedbackEyebrow": "Operational feedback",
+      "feedbackTitle": "Validate policy changes against live runs",
+      "traceLoadErrorTitle": "We could not load runtime traces",
+      "traceLoadErrorDescription": "Retry to fetch recent runs for this tenant before validating a policy change.",
+      "retryTraceLoad": "Retry trace load",
+      "traceChainLoadErrorTitle": "Failed to load trace details",
+      "traceChainLoadErrorDescription": "The selected trace exists, but its detail chain could not be loaded right now.",
+      "retryTraceChainLoad": "Retry loading trace",
+      "loadingTracesTitle": "Loading runtime traces",
+      "loadingTracesDescription": "Fetching recent runs for this tenant to validate the current runtime policy.",
+      "noTracesTitle": "No runtime traces yet",
+      "noTracesDescription": "Start a conversation in Agent Workspace to confirm how the current model, tool policy, and runtime hooks behave in practice.",
+      "openWorkspace": "Open Agent Workspace",
+      "selectedTrace": "Selected trace",
+      "clearSelectedTrace": "Clear selected trace",
+      "relatedSurfaces": "Related surfaces",
+      "editingModelTitle": "Editing model",
+      "editingModelApplies": "Tenant policy applies broadly unless a narrower workspace binding overrides it.",
+      "editingModelHooks": "Runtime hooks are stored only when they diverge from catalog defaults.",
+      "editingModelTraces": "Use live traces to verify that a policy change actually changes behavior.",
+      "related": {
+        "agentWorkspaceDescription": "Run a conversation and inspect how the current runtime policy behaves.",
+        "skillsDescription": "Manage reusable skill packs that the runtime policy can allow or restrict.",
+        "agentDefinitionsDescription": "Update agent prompts, boundaries, and capabilities available to this tenant.",
+        "agentBindingsDescription": "Choose where definitions are attached across projects and workspaces.",
+        "pluginsDescription": "Review runtime plugins and the hook implementations backing this policy.",
+        "mcpServersDescription": "Audit connected tool surfaces that affect agent execution at runtime."
+      },
+      "refreshTraces": "Refresh traces",
+      "scopeTenant": "Tenant: {{id}}",
+      "lastUpdated": "Updated {{time}}"
+    },
+    "agentConfigView": {
+      "loading": "Loading tenant policy",
+      "loadError": "Failed to load configuration",
+      "errorTitle": "We couldn't load the tenant policy",
+      "emptyTitle": "No tenant policy was returned",
+      "emptyDescription": "The runtime returned an empty configuration payload. Reload to try again.",
+      "title": "Tenant runtime policy",
+      "description": "Every tenant conversation inherits this policy unless a narrower binding overrides it. Model selection, reasoning flags, tool boundaries, and runtime hook overrides all land here.",
+      "defaultBanner": "This tenant is inheriting the platform default. Save any change to create a custom policy for this tenant.",
+      "actions": {
+        "reload": "Reload configuration",
+        "edit": "Edit configuration"
+      },
+      "badges": {
+        "defaultPolicy": "Using default policy",
+        "customPolicy": "Custom tenant policy",
+        "multiAgentEnabled": "Multi-agent enabled",
+        "multiAgentDisabled": "Multi-agent disabled"
+      },
+      "summary": {
+        "model": "Model",
+        "modelHint": "Provider-prefixed model in use",
+        "temperature": "Temperature",
+        "temperatureHint": "Lower values keep responses more deterministic",
+        "toolPolicy": "Tool policy",
+        "toolPolicyInherited": "Inherited",
+        "toolPolicyOverrides": "{{count}} overrides",
+        "toolPolicyHint": "Explicit allow / deny rules stored for this tenant",
+        "hookOverrides": "Hook overrides",
+        "hookOverridesDefault": "Catalog defaults",
+        "hookOverridesHint": "Runtime hooks only appear here when this tenant diverges",
+        "agentRuntime": "Agent runtime",
+        "agentRuntimeHint": "Global execution mode used by the agent runtime.",
+        "memoryRuntime": "Memory runtime",
+        "memoryRuntimeHint": "Rollout mode currently applied to durable memory hooks.",
+        "memoryTools": "Memory tools",
+        "memoryToolsHint": "Global rollout mode for plugin-provided durable memory tools.",
+        "failurePersistence": "Failure persistence",
+        "failurePersistenceHint": "Whether memory runtime failures are written into audit logs.",
+        "runtimeUnavailable": "Unavailable",
+        "runtimeModes": {
+          "auto": "Auto",
+          "ray": "Ray",
+          "local": "Local"
+        },
+        "memoryModes": {
+          "plugin": "Plugin",
+          "disabled": "Disabled",
+          "legacy": "Legacy",
+          "dual": "Dual"
+        }
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "Model & reasoning",
+          "description": "How Sisyphus plans and reasons before it reaches for tools.",
+          "modelIdentifier": "Model identifier",
+          "temperature": "Temperature",
+          "temperatureHint": "0 is more deterministic, 2 is more exploratory.",
+          "patternLearning": "Pattern learning",
+          "multiLevelThinking": "Multi-level thinking"
+        },
+        "executionGuardrails": {
+          "title": "Execution guardrails",
+          "description": "Limits that shape runtime depth, tool execution, and the last persisted update.",
+          "maxWorkPlanSteps": "Max work plan steps",
+          "maxWorkPlanStepsValue": "{{count}} steps",
+          "maxWorkPlanStepsHint": "Upper bound for the planner before it needs to simplify.",
+          "toolTimeout": "Tool timeout",
+          "toolTimeoutValue": "{{count}}s",
+          "toolTimeoutHint": "Default timeout applied to tool execution.",
+          "lastUpdated": "Last updated"
+        },
+        "toolPolicy": {
+          "title": "Tool policy",
+          "description": "Explicit allow / deny lists. Empty lists mean the runtime stays on its default tool boundary.",
+          "enabledTools": "Enabled tools",
+          "enabledToolsEmpty": "No explicit allowlist. Runtime uses its default enabled tools.",
+          "disabledTools": "Disabled tools",
+          "disabledToolsEmpty": "No explicit denylist stored for this tenant."
+        },
+        "runtimeHooks": {
+          "title": "Runtime hooks",
+          "description": "Per-tenant runtime hook overrides. Hooks only appear here when the tenant diverges from the shared catalog defaults.",
+          "empty": "No explicit hook overrides are stored. The tenant is currently inheriting the built-in runtime hook catalog defaults.",
+          "noCustomSettings": "No custom settings",
+          "settingsHidden": "Hook settings are visible to tenant admins only.",
+          "family": "Family: {{value}}",
+          "executorKind": "Executor: {{value}}",
+          "sourceRef": "Source: {{value}}",
+          "entrypoint": "Entrypoint: {{value}}",
+          "notSet": "not set",
+          "priority": "Priority {{value}}",
+          "inherit": "inherit"
+        }
+      }
+    },
+    "agentConfigEditor": {
+      "eyebrow": "Tenant runtime policy",
+      "title": "Edit configuration",
+      "description": "Update the model, execution guardrails, tool policy, and runtime hook overrides applied across this tenant.",
+      "loadError": "Failed to load configuration",
+      "saveError": "Failed to save configuration",
+      "saveErrorToast": "We could not save the tenant policy. Try again.",
+      "saveSuccess": "Tenant policy saved.",
+      "authorityUnavailable": "The configuration revision could not be loaded. Reopen the editor and try again.",
+      "revisionConflict": "This policy changed elsewhere while you were editing. Your edits are preserved; review them before trying again.",
+      "validationError": "Some configuration values are invalid. Review the highlighted fields.",
+      "accessDenied": "You do not have access to edit this tenant policy.",
+      "alertTitle": "We couldn't save the tenant policy",
+      "discardChangesTitle": "Discard changes?",
+      "discardChangesDescription": "You have unsaved edits in the tenant policy.",
+      "actions": {
+        "save": "Save configuration",
+        "close": "Close",
+        "discard": "Discard changes",
+        "keepEditing": "Keep editing"
+      },
+      "sections": {
+        "modelReasoning": {
+          "title": "Model & reasoning",
+          "description": "Set the primary model and the reasoning features that shape every response.",
+          "modelIdentifier": "Model identifier",
+          "modelIdentifierHint": "Use the exact provider-prefixed model name the runtime should call.",
+          "modelIdentifierRequired": "Please enter a model identifier.",
+          "modelIdentifierPlaceholder": "openai/gpt-5.4",
+          "temperature": "Temperature",
+          "temperatureHint": "Lower values keep responses more deterministic.",
+          "temperatureRequired": "Please set a temperature.",
+          "temperatureRange": "Temperature must stay between 0 and 2.",
+          "patternLearning": "Pattern learning",
+          "patternLearningDescription": "Let successful workflows teach the runtime reusable patterns.",
+          "patternLearningToggle": "Toggle pattern learning",
+          "multiLevelThinking": "Multi-level thinking",
+          "multiLevelThinkingDescription": "Allow the planner to reason across both work plans and individual steps.",
+          "multiLevelThinkingToggle": "Toggle multi-level thinking"
+        },
+        "executionGuardrails": {
+          "title": "Execution guardrails",
+          "description": "Set planning depth and execution timeouts for the tenant runtime.",
+          "maxWorkPlanSteps": "Max work plan steps",
+          "maxWorkPlanStepsHint": "Upper bound for the planner before it needs to simplify.",
+          "maxWorkPlanStepsRequired": "Please set a max work plan step count.",
+          "minValue": "Value must be at least 1.",
+          "toolTimeout": "Tool timeout (seconds)",
+          "toolTimeoutHint": "Default timeout applied to tool execution.",
+          "toolTimeoutRequired": "Please set a tool timeout.",
+          "toolTimeoutMin": "Value must be at least 1 second.",
+          "multiAgentRouting": "Multi-agent routing",
+          "multiAgentRoutingDescription": "This is controlled at the system level through"
+        },
+        "toolPolicy": {
+          "title": "Tool policy",
+          "description": "Use explicit allow and deny lists when this tenant needs a narrower tool boundary than the shared runtime default.",
+          "enabledTools": "Enabled tools",
+          "enabledToolsHint": "Comma-separated internal tool names. Leave empty to inherit the runtime default.",
+          "disabledTools": "Disabled tools",
+          "disabledToolsHint": "Comma-separated internal tool names to explicitly deny for this tenant.",
+          "toolPlaceholder": "tool_name, another_tool"
+        }
+      },
+      "runtimeHooks": {
+        "title": "Runtime hooks",
+        "description": "Only save a hook when this tenant needs to diverge from the shared catalog defaults.",
+        "catalogUnavailableTitle": "Runtime hook catalog unavailable",
+        "catalogUnavailableDescription": "Runtime hook catalog is currently unavailable. You can still update the rest of this tenant policy.",
+        "override": "Override",
+        "catalogDefault": "Catalog default",
+        "defaultHookDescription": "This hook applies runtime reminders during execution.",
+        "useDefaults": "Use defaults",
+        "useDefaultsAria": "Use defaults for {{name}}",
+        "priority": "Priority",
+        "priorityAria": "{{name}} priority",
+        "catalogDefaultPriority": "Catalog default: {{value}}",
+        "executorKindLabel": "Executor {{value}}",
+        "sourceRefLabel": "Source {{value}}",
+        "entrypointLabel": "Entrypoint {{value}}",
+        "unknown": "unknown",
+        "none": "none",
+        "noExtraSettings": "This hook exposes no extra settings beyond enablement and priority.",
+        "empty": "No runtime hooks are currently exposed for tenant customization.",
+        "familyOptions": {
+          "observational": "Observational",
+          "mutating": "Mutating",
+          "policy": "Policy / decision",
+          "side_effect": "Side effect"
+        },
+        "executorOptions": {
+          "builtin": "Built-in",
+          "script": "Script",
+          "plugin": "Plugin"
+        },
+        "custom": {
+          "title": "Custom hooks",
+          "description": "Add unmanaged hooks when you need a tenant-specific script or plugin executor that is not part of the shared catalog.",
+          "add": "Add custom hook",
+          "empty": "No custom hooks are configured for this tenant.",
+          "badge": "Custom",
+          "itemLabel": "Custom hook {{index}}",
+          "identityDescription": "Configure lifecycle, executor identity, and runtime settings separately. These fields are sent directly to the runtime hook config model.",
+          "enabledToggle": "Toggle custom hook",
+          "remove": "Remove",
+          "hookName": "Lifecycle hook name",
+          "hookNamePlaceholder": "before_tool_execution",
+          "priority": "Priority",
+          "priorityPlaceholder": "inherit",
+          "hookFamily": "Hook family",
+          "executorKind": "Executor kind",
+          "sourceRef": "Source reference",
+          "sourceRefPlaceholder": "plugins/demo_hooks.py",
+          "entrypoint": "Entrypoint",
+          "entrypointPlaceholder": "run",
+          "settings": "Runtime settings (JSON object)",
+          "settingsPlaceholder": "{\n  \"message\": \"Annotate the response\"\n}",
+          "settingsHint": "Use a JSON object only. Executor identity fields belong above, not inside settings.",
+          "validation": {
+            "title": "Custom hook is incomplete",
+            "summary": "Review the custom hook fields before saving.",
+            "hookName": "Hook name is required.",
+            "hookFamily": "Hook family is required.",
+            "executorKind": "Executor kind is required.",
+            "sourceRef": "Source reference is required.",
+            "entrypoint": "Entrypoint is required for script and plugin hooks.",
+            "settingsJson": "Settings must be valid JSON.",
+            "settingsObject": "Settings must be a JSON object."
+          }
+        }
+      },
+      "runtimeStatus": {
+        "title": "Runtime rollout status",
+        "memoryDisabled": "Memory runtime is globally disabled. Hook overrides can still be edited, but they will not execute until the rollout mode is re-enabled.",
+        "memoryToolsDisabled": "Memory runtime hooks are active, but plugin-provided memory tools are globally disabled. Memory tool policy changes will not take effect until tool rollout is re-enabled.",
+        "failurePersistenceDisabled": "Memory runtime is active, but failure persistence is globally disabled. Runtime failures will not be written into audit logs.",
+        "normal": "Agent runtime mode: {{agentMode}}. Memory runtime mode: {{memoryMode}}. Memory tool mode: {{toolMode}}."
+      }
+    },
+    "analytics": {
+      "active_projects": "Active Projects",
+      "avg_memories": "Average memories",
+      "avg_per_project": "Avg per Project",
+      "chart_memories": "Memories",
+      "creation_trend": "Creation trend",
+      "load_error": "Failed to load analytics",
+      "no_data": "No data available",
+      "plan": "Plan",
+      "project_count": "Total projects",
+      "quota": "Storage quota",
+      "storage_distribution": "Storage distribution",
+      "storage_usage": "Storage Usage",
+      "title": "Analytics",
+      "total_memories": "Total Memories",
+      "trend_down": "Declining vs previous period",
+      "trend_flat": "Flat vs previous period",
+      "trend_up": "Growing vs previous period",
+      "workspace_info": "Workspace usage statistics and insights"
+    },
+    "evolution": {
+      "empty": "No evolution events found",
+      "filterByType": "Filter by type",
+      "noInstance": "No instance ID provided",
+      "title": "Evolution Log",
+      "trigger": "Trigger"
+    }
+  },
+  "project": {
+    "agentTeammates": {
+      "title": "Agent teammates",
+      "loadFailed": "Failed to load agents",
+      "manage": "Manage",
+      "startConversation": "Start conversation",
+      "chatTitle": "Chat with {{name}}",
+      "startError": "Failed to start chat. Please try again.",
+      "emptyPrefix": "No agent definitions for this project yet. Create one from",
+      "emptySuffix": ".",
+      "agentDefinitions": "Agent Definitions",
+      "defaultModel": "default model",
+      "invocations": "{{count}} invocations",
+      "successRate": "{{percent}}% success",
+      "canSpawn": "can spawn",
+      "discoverable": "discoverable",
+      "status": {
+        "enabled": "enabled",
+        "disabled": "disabled"
+      }
+    }
+  },
+  "components": {
+    "provider": {
+      "operationTypes": {
+        "llm": "LLM (Chat/Completion)",
+        "embedding": "Embedding",
+        "rerank": "Rerank"
+      },
+      "card": {
+        "labels": {
+          "llm": "LLM",
+          "small": "Small",
+          "embed": "Embed",
+          "rerank": "Rerank"
+        },
+        "failureCount": "{{count}} fails",
+        "actions": {
+          "checkHealth": "Check Health",
+          "health": "Health",
+          "resetCircuitBreaker": "Reset Circuit Breaker",
+          "reset": "Reset",
+          "viewStatistics": "View Statistics",
+          "assignToTenant": "Assign to Tenant"
+        }
+      },
+      "health": {
+        "title": "System Health",
+        "description": "Real-time provider status overview",
+        "percentHealthy": "{{percent}}% Healthy",
+        "totalProviders": "Total Providers",
+        "activeCount": "{{count}} active",
+        "healthy": "Healthy",
+        "providers": "providers",
+        "issues": "Issues",
+        "downCount": "{{count}} down",
+        "allClear": "all clear",
+        "circuitBreakers": "Circuit Breakers",
+        "open": "open",
+        "allClosed": "all closed",
+        "avgResponseTime": "Avg Response Time",
+        "notAvailable": "N/A",
+        "activeProviders": "Active Providers"
+      },
+      "assignment": {
+        "loadFailed": "Failed to load assignments",
+        "removeConfirm": "Are you sure you want to remove this assignment?",
+        "unassignFailed": "Failed to unassign provider",
+        "noneAssigned": "No provider assigned",
+        "emptyDescription": "No provider assigned. System defaults will be used.",
+        "configuredCount": "{{count}} provider(s) configured",
+        "editTitle": "Edit Assignment",
+        "removeTitle": "Remove Assignment",
+        "heading": "Provider Routing Configuration",
+        "description": "Configure which providers handle specific operations. Requests are routed based on priority (lower number = higher priority). If the primary provider fails, the system automatically falls back to the next available provider in the list.",
+        "selectorTitle": "Select Provider for {{operation}}"
+      },
+      "modal": {
+        "addTitle": "Add LLM Provider",
+        "editTitle": "Edit Provider",
+        "addDescription": "Configure a new AI model provider",
+        "editDescription": "Update provider configuration",
+        "setDefaultProvider": "Set as default provider",
+        "type": "Type:",
+        "created": "Created:",
+        "updated": "Updated:",
+        "close": "Close provider dialog",
+        "tabs": {
+          "basic": "Basic Info",
+          "models": "Models",
+          "advanced": "Advanced"
+        },
+        "labels": {
+          "providerName": "Provider Name",
+          "providerType": "Provider Type",
+          "apiKey": "API Key",
+          "primaryLlmModel": "Primary LLM Model",
+          "smallFastModel": "Small/Fast Model",
+          "embeddingModel": "Embedding Model",
+          "rerankerModel": "Reranker Model",
+          "customBaseUrl": "Custom Base URL",
+          "authMethod": "Authentication",
+          "environmentVariable": "Environment variable"
+        },
+        "placeholders": {
+          "providerName": "e.g., Production OpenAI",
+          "keepCurrentKey": "Leave empty to keep current key",
+          "enterApiKey": "Enter your API key",
+          "optionalLocalApiKey": "Optional for local providers",
+          "primaryModel": "e.g., gpt-6-astra",
+          "smallModel": "e.g., gpt-6-luna",
+          "embeddingModel": "e.g., text-embedding-3-small",
+          "rerankerModel": "e.g., gpt-6-luna (optional)",
+          "baseUrl": "https://api.example.com/v1",
+          "environmentVariable": "PROVIDER_API_KEY"
+        },
+        "help": {
+          "apiKeyRequired": "Your API key is encrypted and stored securely.",
+          "apiKeyOptional": "API key is optional for local providers and will be encrypted if provided.",
+          "primaryModel": "Main model for complex tasks and entity extraction.",
+          "smallModel": "Faster model for simpler tasks and cost optimization.",
+          "embeddingModel": "Model for generating vector embeddings.",
+          "rerankerModel": "Model for reranking search results. Uses LLM if not specified.",
+          "baseUrl": "Override the default API endpoint. Useful for proxies or self-hosted models.",
+          "authUnavailable": "This provider cannot be configured until secure credential storage is available.",
+          "authLoading": "Authentication options are loading. Saving stays disabled until the server confirms them.",
+          "authLoadFailed": "Authentication options could not be loaded. Reopen this dialog to try again.",
+          "currentCredentialRetained": "Leave this field empty to keep the current credential for the same endpoint.",
+          "environmentDetected": "Detected {{environmentVariable}}. Its secret value remains in the runtime environment.",
+          "environmentVariable": "Only the variable name is saved and sent. The secret value is never copied into this form.",
+          "noAuthentication": "This provider does not require a credential."
+        },
+        "providerInformation": "Provider Information",
+        "saving": "Saving…",
+        "updateProvider": "Update Provider",
+        "createProvider": "Create Provider",
+        "auth": {
+          "apiKey": "API key",
+          "environment": "Environment variable",
+          "none": "No authentication",
+          "oauth": "OAuth",
+          "unavailable": "No secure authentication available",
+          "loading": "Loading authentication capabilities…",
+          "loadFailed": "Authentication capabilities unavailable"
+        },
+        "errors": {
+          "credentialRequired": "Configure the selected authentication method before saving."
+        }
+      },
+      "config": {
+        "addTitle": "Add New Provider",
+        "editTitle": "Edit Provider",
+        "subtitle": "Configure your LLM provider settings",
+        "chooseProviderTitle": "Choose Your LLM Provider",
+        "chooseProviderDescription": "Select from supported AI model providers",
+        "steps": {
+          "provider": {
+            "label": "Select Provider",
+            "description": "Choose LLM provider"
+          },
+          "credentials": {
+            "label": "Credentials",
+            "description": "API key & config"
+          },
+          "models": {
+            "label": "Models",
+            "description": "Configure models"
+          },
+          "review": {
+            "label": "Review",
+            "description": "Review & save"
+          }
+        },
+        "usePresetModel": "Use preset model",
+        "customModelNameOption": "Custom model name…",
+        "customModelPlaceholder": "Enter custom model name",
+        "loadingModels": "Loading models…",
+        "selectModel": "Select a model",
+        "fetchingModels": "Fetching available models…",
+        "primaryLlmModel": "Primary LLM Model",
+        "smallFastModelOptional": "Small/Fast Model (Optional)",
+        "embeddingModel": "Embedding Model",
+        "embeddingModelOptional": "Embedding Model (Optional)",
+        "rerankerModel": "Reranker Model",
+        "rerankerModelOptional": "Reranker Model (Optional)",
+        "selectOrEnterCustomModel": "Select or enter custom model…",
+        "active": "Active",
+        "setAsDefault": "Set as Default",
+        "userIdOptional": "User ID (Optional)",
+        "userIdPlaceholder": "End-user ID",
+        "timeoutMs": "Timeout (ms)",
+        "providerOptionsJson": "Provider Options (JSON)",
+        "poolRouting": "Pool & Routing",
+        "poolRoutingDescription": "Controls whether this provider participates in the tenant LLM pool (load balancing + auto-routing). Turn off to silence a broken provider without disabling it entirely.",
+        "poolEnabled": "Pool enabled",
+        "poolWeight": "Pool weight",
+        "poolWeightHint": "(>= 0, default 1.0)",
+        "modelTier": "Model tier",
+        "modelTierSmall": "small",
+        "modelTierMedium": "medium",
+        "modelTierLarge": "large",
+        "secondaryModels": "Secondary models",
+        "secondaryModelsHint": "(extra model names sharing this API key)",
+        "secondaryModelsPlaceholder": "Type a model name and press Enter",
+        "modelInfo": "Model Info",
+        "deprecated": "Deprecated",
+        "context": "Context",
+        "maxOutput": "Max Output",
+        "costPerMillion": "Cost ($/1M)",
+        "limitUnknown": "Unknown until the catalog lists this model",
+        "roleLabel": "Role",
+        "connectionTestHelp": "Test checks the credential, endpoint, and whether model discovery responds. You can continue after a failed discovery and enter an exact model ID.",
+        "roles": {
+          "primary": {
+            "name": "Primary",
+            "purpose": "Main agent replies and tool calls. Must be a chat model."
+          },
+          "fast": {
+            "name": "Fast",
+            "purpose": "Shorter, cheaper chat calls. It still has to be a chat model."
+          },
+          "embedding": {
+            "name": "Embedding",
+            "purpose": "Turns text into vectors for search. It cannot answer chat."
+          },
+          "rerank": {
+            "name": "Rerank",
+            "purpose": "Reorders retrieved passages. It cannot answer chat."
+          },
+          "voice": {
+            "name": "Voice",
+            "purpose": "Spoken input. Audio stays off until this provider explicitly declares the model."
+          }
+        },
+        "flags": {
+          "reasoning": "Reasoning",
+          "tools": "Tools",
+          "vision": "Vision",
+          "audio": "Audio"
+        },
+        "roleReason": {
+          "ok": "This model can fill the selected role.",
+          "unknown_assumed_chat": "This model is not in the catalog. It can be saved as a chat model, but embedding, rerank, vision, and audio are not assumed.",
+          "not_a_chat_model": "This model cannot answer chat. Choose it only for embedding or rerank.",
+          "embedding_capability_required": "Embedding requires a model whose catalog capability is embedding.",
+          "rerank_capability_required": "Rerank requires a model whose catalog capability is rerank.",
+          "llm_scoring_rerank": "This chat model can score passages for rerank. It is not a native reranker.",
+          "audio_input_not_declared": "Audio input stays off until you explicitly declare this model. The name alone does not enable it.",
+          "audio_declaration_unsupported": "This provider cannot store an audio-input declaration.",
+          "deprecated": "This model still runs, and the catalog marks it deprecated.",
+          "provider_has_no_embedding_models": "This provider has no embedding models in the catalog.",
+          "provider_has_no_rerank_models": "This provider has no rerank models in the catalog."
+        },
+        "default": "Default",
+        "float": "Float",
+        "base64": "Base64",
+        "envDetectedTitle": "Environment Variables Detected",
+        "envDetectedDescription": "We found configuration in your environment variables. The fields below have been auto-filled.",
+        "envCredentialReferenceDetected": "Credential reference {{environmentVariable}} was detected. Secret values remain in the runtime environment.",
+        "envCredentialReferenceUnavailable": "Non-secret configuration was detected, but no credential variable reference was exposed. No credential was auto-filled.",
+        "authMethod": "Authentication",
+        "authUnavailable": "No secure authentication available",
+        "authUnavailableHelp": "This provider cannot be configured until secure credential storage is available.",
+        "authLoading": "Loading authentication capabilities…",
+        "authLoadingHelp": "Authentication options are loading. Saving stays disabled until the server confirms them.",
+        "authLoadFailed": "Authentication capabilities unavailable",
+        "authLoadFailedHelp": "Authentication options could not be loaded. Reopen this dialog to try again.",
+        "credentialConfigured": "Configured",
+        "environmentVariable": "Environment variable",
+        "codingPlan": "Coding plan",
+        "environmentVariablePlaceholder": "PROVIDER_API_KEY",
+        "environmentVariableHelp": "Only the variable name is saved and sent. The secret value never enters this form.",
+        "noAuthenticationHelp": "This provider does not require a credential.",
+        "operationType": "Operation type",
+        "operationTypeLlm": "LLM",
+        "operationTypeEmbedding": "Embedding",
+        "operationTypeRerank": "Rerank",
+        "secureRtcCredentials": "Secure RTC credentials",
+        "secureRtcCredentialsUnavailable": "Unavailable until dedicated encrypted fields are supported.",
+        "auth": {
+          "apiKey": "API key",
+          "environment": "Environment variable",
+          "none": "No authentication",
+          "oauth": "OAuth"
+        },
+        "providerName": "Provider Name",
+        "providerNamePlaceholder": "My OpenAI Provider",
+        "apiKey": "API Key",
+        "fromEnv": "From ENV",
+        "baseUrl": "Base URL",
+        "providerConfigurationJson": "Provider Configuration (JSON)",
+        "primaryModel": "Primary Model:",
+        "smallModel": "Small Model:",
+        "embedding": "Embedding:",
+        "reranker": "Reranker:",
+        "status": "Status:",
+        "custom": "Custom",
+        "rtcDescription": "Configure Volcengine RTC for real-time voice and video AI conversations. Leave blank to use environment variables as fallback.",
+        "rtcTitle": "Voice & Video Call (RTC)",
+        "rtcAppId": "RTC App ID:",
+        "rtcAppIdPlaceholder": "Your RTC App ID",
+        "rtcAppKey": "RTC App Key:",
+        "rtcAppKeyPlaceholder": "Your RTC App Key",
+        "accessKey": "Access Key:",
+        "accessKeyPlaceholder": "Your Volcengine Access Key",
+        "secretKey": "Secret Key:",
+        "secretKeyPlaceholder": "Your Volcengine Secret Key",
+        "speechAppId": "Speech App ID:",
+        "speechAppIdPlaceholder": "Speech App ID from Volcengine Speech Console",
+        "speechAccessToken": "Speech Access Token:",
+        "speechAccessTokenPlaceholder": "Access Token from Volcengine Speech Console",
+        "doubaoEndpointId": "Doubao Endpoint ID",
+        "endpointId": "Endpoint ID:",
+        "endpointIdPlaceholder": "Doubao model endpoint ID for voice chat",
+        "close": "Close provider configuration"
+      },
+      "modelCatalog": {
+        "providerIconAria": "provider",
+        "searchPlaceholder": "Search models by name, provider, or capability…",
+        "filtersLabel": "Filters:",
+        "columns": {
+          "model": "Model",
+          "context": "Context",
+          "maxOutput": "Max Output",
+          "cost": "Cost ($/1M)",
+          "features": "Features",
+          "action": "Action"
+        },
+        "cost": {
+          "in": "In",
+          "out": "Out"
+        },
+        "features": {
+          "vision": "Vision",
+          "reasoning": "Reasoning",
+          "tools": "Tools",
+          "temp": "Temp",
+          "seed": "Seed",
+          "json": "JSON",
+          "open": "Open",
+          "structured": "Structured",
+          "topP": "TopP",
+          "freqP": "FreqP",
+          "presP": "PresP",
+          "stop": "Stop"
+        },
+        "actions": {
+          "selected": "Selected",
+          "select": "Select"
+        }
+      },
+      "assign": {
+        "title": "Assign Provider",
+        "assignFailed": "Failed to assign provider",
+        "descriptionPrefix": "Assign",
+        "descriptionSuffix": "to the current tenant.",
+        "operationType": "Operation Type",
+        "operationTypeHelp": "The type of operation this provider will handle.",
+        "priority": "Priority",
+        "priorityHelp": "Higher priority providers are tried first (default: 0).",
+        "submit": "Assign"
+      },
+      "selector": {
+        "title": "Select Provider",
+        "searchPlaceholder": "Search providers…",
+        "searchAria": "Search providers",
+        "empty": "No providers found."
+      },
+      "usage": {
+        "title": "Usage Statistics",
+        "loadError": "Failed to load usage statistics",
+        "totalRequests": "Total Requests",
+        "totalTokens": "Total Tokens",
+        "tokenBreakdown": "{{inCount}} in / {{outCount}} out",
+        "totalCost": "Total Cost",
+        "avgResponse": "Avg Response",
+        "details": "Details",
+        "firstRequest": "First Request",
+        "lastRequest": "Last Request",
+        "providerId": "Provider ID",
+        "notAvailable": "N/A",
+        "empty": "No usage data available for this provider."
+      }
+    },
+    "toolExecutionDetail": {
+      "status": {
+        "running": "Running",
+        "success": "Success",
+        "failed": "Failed"
+      },
+      "inputParameters": "Input Parameters",
+      "start": "Start: {{time}}",
+      "duration": "Duration: {{duration}}",
+      "error": "Error",
+      "imageResult": "Image Result",
+      "result": "Result",
+      "showLess": "Show Less",
+      "showFull": "Show Full",
+      "toolResultAlt": "Tool result",
+      "loadImageFailed": "Failed to load image.",
+      "openUrl": "Open URL",
+      "openInNewTab": "Open in new tab",
+      "screenshotAlt": "Screenshot",
+      "screenshotCaptured": "Screenshot captured",
+      "executing": "Executing…"
+    },
+    "toolExecutionLive": {
+      "status": {
+        "preparing": "Preparing",
+        "running": "Running",
+        "success": "Success",
+        "failed": "Failed"
+      },
+      "queryParameters": "Query Parameters",
+      "executionMode": "Execution Mode",
+      "running": {
+        "webTitle": "Fetching web context",
+        "webDescription": "Collecting and ranking remote sources before returning results.",
+        "scrapeTitle": "Reading remote content",
+        "scrapeDescription": "Loading page content and extracting structured evidence.",
+        "searchTitle": "Searching knowledge graph",
+        "searchDescription": "Finding relevant entities, memories, and relationships.",
+        "createTitle": "Creating resource",
+        "createDescription": "Validating input and writing the requested resource.",
+        "graphTitle": "Querying graph data",
+        "graphDescription": "Running the graph query and preparing a concise result set.",
+        "defaultTitle": "Executing tool",
+        "defaultDescription": "Processing the request and waiting for the tool response.",
+        "inputAccepted": "Input accepted",
+        "modeActive": "{{mode}} mode active",
+        "partialResults": "{{count}} partial results",
+        "awaitingResponse": "Awaiting response"
+      },
+      "scanningTitle": "Scanning knowledge graph…",
+      "scanningDescription": "Searching for relevant entities and relationships",
+      "searchCompleted": "Search completed",
+      "resultsFound": "{{count}} results found",
+      "failedMessage": "Tool execution failed. Please try again."
+    },
+    "messageRenderer": {
+      "showSystemMessage": "Show system message",
+      "hideSystemMessage": "Hide system message",
+      "defaultToolName": "Tool",
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed"
+      },
+      "errorPrefix": "Error: {{error}}",
+      "unknownRole": "Unknown message role",
+      "renderFailed": "Failed to render message {{messageId}}…",
+      "messageAria": "{{role}} message"
+    },
+    "messageStream": {
+      "reasoningLog": "Reasoning Log",
+      "complete": "COMPLETE",
+      "error": "Error",
+      "output": "Output",
+      "showLess": "Show Less",
+      "showFullLines": "Show Full ({{count}} lines)",
+      "status": {
+        "preparing": "Preparing",
+        "running": "Running",
+        "success": "Success",
+        "failed": "Failed"
+      },
+      "details": "Details",
+      "toolTitle": "Tool: {{tool}}",
+      "parametersPreview": "Parameters: {{preview}}",
+      "purposeLabel": "Purpose: {{purpose}}",
+      "purpose": {
+        "read": "Read files",
+        "write": "Change files",
+        "command": "Run command",
+        "search": "Search files",
+        "open": "Open link",
+        "tool": "Call tool"
+      },
+      "preview": {
+        "read": "Read: {{detail}}",
+        "write": "Changed: {{detail}}",
+        "command": "Command: {{detail}}",
+        "search": "Search: {{detail}}",
+        "open": "Open: {{detail}}",
+        "report": "Report: {{detail}}",
+        "tool": "Call: {{detail}}",
+        "toolWithDetail": "Content: {{detail}}",
+        "error": "Error: {{detail}}"
+      },
+      "todo": {
+        "read": "Read todos",
+        "readMany": "Read {{count}} todos: {{summary}}",
+        "write": "{{verb}} todos",
+        "writeOne": "{{verb}} todo {{id}}",
+        "writeMany": "{{verb}} {{count}} todos: {{summary}}",
+        "addVerb": "Add",
+        "updateVerb": "Update",
+        "replaceVerb": "Replace",
+        "writeVerb": "Update",
+        "moreItems": " and {{count}} more"
+      },
+      "todoStatus": {
+        "pending": "pending",
+        "inProgress": "in progress",
+        "completed": "completed",
+        "blocked": "blocked",
+        "cancelled": "cancelled",
+        "count": "{{count}} {{status}}"
+      },
+      "buildingArguments": "Building Arguments",
+      "preparingToolCall": "Preparing tool call…",
+      "input": "Input",
+      "executionMode": "Execution Mode",
+      "liveResults": "Live Results",
+      "executing": "Executing…"
+    },
+    "messageArea": {
+      "loadingConversation": "Loading conversation…",
+      "emptyTitle": "No messages yet",
+      "emptySubtitle": "Start a conversation to see messages here",
+      "loading": "Loading…",
+      "copyFailed": "Failed to copy to clipboard",
+      "scrollToBottom": "Scroll to bottom",
+      "loadEarlierFailed": "Failed to load earlier messages"
+    },
+    "messageErrorBoundary": {
+      "title": "Failed to render message",
+      "retryAttempts": "Retry attempts: {{count}}",
+      "tryAgain": "Try Again"
+    },
+    "finalResponseDisplay": {
+      "defaultVersion": "v1.0 Final",
+      "copySuccess": "Copied to clipboard",
+      "copyFailed": "Copy failed",
+      "exportTargetMissing": "Nothing available to export",
+      "exportFailed": "Failed to export PDF",
+      "shareTitle": "MemStack Report",
+      "shareText": "Check out this report from MemStack",
+      "shareFailed": "Share failed",
+      "linkCopied": "Link copied to clipboard",
+      "copyLinkFailed": "Failed to copy share link",
+      "title": "Final Synthesis Report",
+      "actions": "Actions",
+      "copied": "Copied!",
+      "copyToClipboard": "Copy to Clipboard",
+      "exporting": "Exporting…",
+      "exportAsPdf": "Export as PDF",
+      "shareWithTeam": "Share with Team",
+      "generated": "Generated {{time}}",
+      "time": {
+        "minutesAgo": "{{count}}m ago",
+        "hoursAgo": "{{count}}h ago"
+      }
+    },
+    "a2uiIsolated": {
+      "tabDetail": "\"{{title}}\" failed to render. You can still switch to other tabs.",
+      "tabFallbackTitle": "Tab {{index}}"
+    },
+    "a2uiProgress": {
+      "progress": "Progress"
+    },
+    "a2uiTable": {
+      "noData": "No data"
+    },
+    "a2uiViewer": {
+      "noContent": "No content to display"
+    },
+    "audioPlayer": {
+      "unsupported": "Your browser does not support the audio element."
+    },
+    "jitContext": {
+      "allSources": "all",
+      "copyFailed": "Failed to copy to clipboard",
+      "copySuccess": "Copied to clipboard",
+      "pin": "Pin",
+      "pinned": "{{count}} pinned",
+      "recalled": "Recalled {{count}} memories",
+      "scoreTitle": "Score: {{score}}",
+      "showFull": "Show full",
+      "showLess": "Show less",
+      "unpin": "Unpin",
+      "viaSource": "via {{source}}"
+    },
+    "memoryTimeline": {
+      "captured": "Captured {{count}} memories"
+    },
+    "timelineItems": {
+      "loadingMarkdown": "Loading…"
+    }
+  },
+  "commandPalette": {
+    "title": "Command palette"
+  },
+  "common": {
+    "actions": {
+      "checkHealth": "Check Health",
+      "label": "Actions",
+      "retry": "Retry"
+    },
+    "add": "Add",
+    "back": "Back",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "create": "Create",
+    "delete": "Delete",
+    "discard": "Discard",
+    "edit": "Edit",
+    "eliminated": "Eliminated",
+    "error": "Error",
+    "evaluated": "Evaluated",
+    "forms": {
+      "model": "Model",
+      "name": "Name",
+      "status": "Status",
+      "type": "Type"
+    },
+    "loading": "Loading…",
+    "noTenant": "No tenant selected",
+    "pagination": {
+      "label": "Pagination",
+      "total": "Total {{total}} items"
+    },
+    "readOnly": "Read-only",
+    "ready": "Ready",
+    "refresh": "Refresh",
+    "remove": "Remove",
+    "retry": "Retry",
+    "save": "Save",
+    "search": "Search",
+    "selected": "Selected",
+    "stats": {
+      "healthStatus": "Health Status"
+    },
+    "status": {
+      "active": "Active",
+      "all": "All Status",
+      "configurationValid": "Configuration validated",
+      "deprecated": "Deprecated",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "healthy": "Healthy",
+      "inactive": "Inactive",
+      "unavailable": "Unavailable",
+      "unhealthy": "Unhealthy",
+      "unknown": "Unknown"
+    },
+    "unsavedChanges": "You have unsaved changes. Discard them and close?",
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "yesterday": "yesterday",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago"
+    }
+  },
+  "comparison": {
+    "compare": "Compare"
+  },
+  "nav": {
+    "agentBindings": "Agent Bindings",
+    "agentDefinitions": "Agent Definitions",
+    "agentWorkspace": "Agent Workspace",
+    "mcpServers": "MCP",
+    "plugins": "Plugins",
+    "skills": "Skills"
+  }
+}

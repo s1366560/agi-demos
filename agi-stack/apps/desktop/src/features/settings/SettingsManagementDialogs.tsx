@@ -1,0 +1,137 @@
+import type { AuthState, DesktopRuntimeConfig } from '../../types';
+import { AgentDefinitionEditorDialog } from './AgentDefinitionEditorDialog';
+import { ChannelConnectionsDialog } from './ChannelConnectionsDialog';
+import { MCPServerDialog } from './MCPServerDialog';
+import { PluginInstallDialog, PluginUninstallDialog } from './PluginManagementDialogs';
+import { SkillManagementDialogs } from './SkillManagementDialogs';
+import { SubAgentEditorDialog } from './SubAgentEditorDialog';
+import { SubAgentLibraryDialog } from './SubAgentLibraryDialog';
+import type { useAgentDefinitionManagement } from './useAgentDefinitionManagement';
+import type { useChannelConnectionManagement } from './useChannelConnectionManagement';
+import type { useMCPServerManagement } from './useMCPServerManagement';
+import type { usePluginManagement } from './usePluginManagement';
+import type { useSkillManagement } from './useSkillManagement';
+import type { useSkillPackageManagement } from './useSkillPackageManagement';
+import type { useSubAgentLibraryManagement } from './useSubAgentLibraryManagement';
+import type { useSubAgentDefinitionManagement } from './useSubAgentDefinitionManagement';
+
+export function SettingsManagementDialogs({
+  auth,
+  config,
+  allowTenantSkillScope,
+  agents,
+  skills,
+  skillPackages,
+  plugins,
+  channels,
+  mcpServers,
+  subagentDefinitions,
+  subagents,
+}: {
+  auth: AuthState;
+  config: DesktopRuntimeConfig;
+  allowTenantSkillScope: boolean;
+  agents: ReturnType<typeof useAgentDefinitionManagement>;
+  skills: ReturnType<typeof useSkillManagement>;
+  skillPackages: ReturnType<typeof useSkillPackageManagement>;
+  plugins: ReturnType<typeof usePluginManagement>;
+  channels: ReturnType<typeof useChannelConnectionManagement>;
+  mcpServers: ReturnType<typeof useMCPServerManagement>;
+  subagentDefinitions: ReturnType<typeof useSubAgentDefinitionManagement>;
+  subagents: ReturnType<typeof useSubAgentLibraryManagement>;
+}) {
+  const projects = auth.projects.filter((project) => project.tenant_id === config.tenantId);
+  return (
+    <>
+      {agents.dialog ? (
+        <AgentDefinitionEditorDialog
+          key={agents.dialog.key}
+          definition={agents.dialog.definition}
+          projects={projects}
+          initialProjectId={config.projectId || null}
+          externalAcpAgents={agents.externalAcpAgents}
+          externalAcpAgentsLoading={agents.externalAcpAgentsLoading}
+          externalAcpAgentsError={agents.externalAcpAgentsError}
+          busy={agents.busy}
+          error={agents.error}
+          onClose={agents.close}
+          onSave={(input) => void agents.save(input)}
+          onDelete={agents.dialog.definition ? () => void agents.remove() : null}
+        />
+      ) : null}
+      <SkillManagementDialogs
+        projects={projects}
+        initialProjectId={config.projectId || null}
+        allowTenantScope={allowTenantSkillScope}
+        management={skills}
+        packages={skillPackages}
+      />
+      {plugins.dialog?.kind === 'uninstall' ? (
+        <PluginUninstallDialog
+          key={plugins.dialog.key}
+          plugin={plugins.dialog.plugin}
+          busy={plugins.dialogBusy}
+          error={plugins.dialogError}
+          onClose={plugins.closeDialog}
+          onUninstall={() => void plugins.uninstall()}
+        />
+      ) : null}
+      {plugins.dialog?.kind === 'install' ? (
+        <PluginInstallDialog
+          key={plugins.dialog.key}
+          plugin={plugins.dialog.plugin}
+          busy={plugins.dialogBusy}
+          error={plugins.dialogError}
+          onClose={plugins.closeDialog}
+          onInstall={() => void plugins.install()}
+        />
+      ) : null}
+      <ChannelConnectionsDialog management={channels} />
+      {mcpServers.dialog ? (
+        <MCPServerDialog
+          key={mcpServers.dialog.key}
+          server={mcpServers.dialog.kind === 'edit' ? mcpServers.dialog.server : null}
+          busy={mcpServers.dialogBusy}
+          error={mcpServers.dialogError}
+          onClose={mcpServers.closeDialog}
+          onSubmit={(input) =>
+            void (mcpServers.dialog?.kind === 'edit'
+              ? mcpServers.update(input)
+              : mcpServers.create(input))
+          }
+          onDelete={
+            mcpServers.dialog.kind === 'edit' ? () => void mcpServers.remove() : null
+          }
+        />
+      ) : null}
+      {subagentDefinitions.dialog ? (
+        <SubAgentEditorDialog
+          key={subagentDefinitions.dialog.key}
+          definition={subagentDefinitions.dialog.definition}
+          projects={projects}
+          initialProjectId={config.projectId || null}
+          busy={subagentDefinitions.busy}
+          error={subagentDefinitions.error}
+          onClose={subagentDefinitions.close}
+          onSave={(input) => void subagentDefinitions.save(input)}
+          onDelete={
+            subagentDefinitions.dialog.definition
+              ? () => void subagentDefinitions.remove()
+              : null
+          }
+        />
+      ) : null}
+      {subagents.dialog ? (
+        <SubAgentLibraryDialog
+          key={subagents.dialog.key}
+          templates={subagents.dialog.templates}
+          loading={subagents.dialog.loading}
+          busyId={subagents.busyId}
+          error={subagents.error}
+          onClose={subagents.close}
+          onInstall={(template) => void subagents.install(template)}
+        />
+      ) : null}
+    </>
+  );
+}

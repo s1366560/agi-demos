@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca',
-  '4c2044","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:6c5d786b02d04c328e19591476b39d606a6ed8715c3e800b08b077b76f',
+  'da0791","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -3984,7 +3984,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'src.infrastructure.plugins.v2.ai_tool_services:_apply_ai_tool_tenant_provider_v2","m',
   'odule_ref":"builtin://memstack/persistence/ai-tool-tenant-provider","plugin_id":"mem',
   'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_dige',
-  'st":"sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20","artif',
+  'st":"sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c","artif',
   'act_source":"repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime',
   '.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/s',
   'chema","additionalProperties":false,"properties":{"batch_size":{"maximum":100,"minim',
@@ -4037,8 +4037,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ure.plugins.v2.artifact_lifecycle_persistence:artifact_lifecycle_persistence_provide',
   'r_definition_v2","module_ref":"builtin://memstack/persistence/artifact-lifecycle-pro',
   'vider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["py',
-  'thon"]},{"artifact_digest":"sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17cee',
-  'cdd6b41d9385f20","artifact_source":"repo+python://src/infrastructure/plugins/v2/arti',
+  'thon"]},{"artifact_digest":"sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336',
+  'efa6b207d83126c","artifact_source":"repo+python://src/infrastructure/plugins/v2/arti',
   'fact_content_gc_runtime.py","contract":{"config_schema":{"$schema":"https://json-sch',
   'ema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":',
   '{"const":"sqlalchemy-async-sessionmaker","type":"string"}},"required":["strategy"],"',
@@ -4926,8 +4926,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   't":"sha256:081387f06d341da12450daedda2583999da04ae134406a5f5c7804dcc64f0b9c","entryp',
   'oint":"src.infrastructure.plugins.v2.session_event_log:_apply_session_event_log_v2",',
   '"module_ref":"builtin://memstack/session/event-log","plugin_id":"memstack-runtime-ke',
-  'rnel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:ce81',
-  'ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20","artifact_source":"rep',
+  'rnel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:5dfa',
+  '1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c","artifact_source":"rep',
   'o+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py","contract":',
   '{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addition',
   'alProperties":false,"properties":{"strategy":{"const":"s3-settings","type":"string"}',
@@ -5099,4 +5099,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:ea14c107c684486402a0487a204104d05fd9e903499fbb52a82a1f67ca4c2044' as const;
+  'sha256:6c5d786b02d04c328e19591476b39d606a6ed8715c3e800b08b077b76fda0791' as const;
