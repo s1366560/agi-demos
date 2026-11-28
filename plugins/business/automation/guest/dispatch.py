@@ -1,29 +1,10 @@
-"""Map admitted command names onto host capabilities."""
+"""Map admitted command names onto guest shapers."""
 
 from __future__ import annotations
 
-from plugins.business.guest_runtime.binding import bind_operation
+from plugins.business.automation.guest.commands import OPERATIONS
 
-OPERATIONS = {
-    name: bind_operation(name)
-    for name in (
-        "app.automation.playbooks.read",
-        "app.automation.schedules.read",
-        "app.automation.schedules.write",
-        "app.automation.schedules.run",
-        "app.automation.schedules.delete",
-        "app.automation.patterns.read",
-        "app.automation.patterns.delete",
-        "app.automation.verdicts.read",
-        "app.automation.events.read",
-        "app.automation.events.types",
-        "app.automation.webhooks.read",
-        "app.automation.webhooks.create",
-        "app.automation.webhooks.update",
-        "app.automation.webhooks.delete",
-        "app.automation.conversations.read",
-    )
-}
+__all__ = ["OPERATIONS", "TOOLS"]
 
 TOOLS = {
     "automation.list-playbooks": "app.automation.playbooks.read",

@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from plugins.business.workspace.command_models import _ROOT, _SCOPED, _WRITES
 from src.infrastructure.i18n import gettext as _
 
 from .collaboration import Identifier
@@ -15,101 +16,6 @@ from .workspace_directory_export import _body, _request_core, read_workspace_ope
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
-
-# Item positions are identifiers. The scoped or workspace-root prefix comes from authenticated scope.
-_SCOPED = frozenset(
-    {
-        "",
-        "members",
-        "agents",
-        "objectives",
-        "genes",
-        "messages",
-        "collaboration/authority",
-        "blackboard/posts",
-        "blackboard/posts/:id/replies",
-        "blackboard/execution-diagnostics",
-        "blackboard/files",
-    }
-)
-_ROOT = frozenset(
-    {
-        "tasks",
-        "plan",
-        "topology/nodes",
-        "topology/edges",
-        "autonomy/attentions",
-        "tasks/:id/experience",
-        "tasks/:id/execution-session",
-    }
-)
-_WRITES = {
-    "POST": frozenset(
-        {
-            "blackboard/posts",
-            "blackboard/posts/:id/replies",
-            "blackboard/posts/:id/pin",
-            "blackboard/posts/:id/unpin",
-            "objectives",
-            "objectives/:id/project-to-task",
-            "genes",
-            "tasks",
-            "topology/nodes",
-            "topology/edges",
-            "messages",
-            "collaboration/mutations",
-            "members",
-            "agents",
-            "autonomy/tick",
-            "tasks/:id/recovery-actions",
-            "tasks/:id/assign-agent",
-            "tasks/:id/unassign-agent",
-            "plan/outbox/:id/retry",
-            "plan/recover-stale-attempts",
-            "plan/nodes/:id/request-replan",
-            "plan/nodes/:id/reopen",
-            "plan/nodes/:id/accept-review",
-            "plan/iteration/pause",
-            "plan/iteration/resume",
-            "plan/iteration/trigger-next",
-            "plan/delivery/run-pipeline",
-            "plan/delivery/regenerate-contract",
-            "blackboard/files/mkdir",
-            "blackboard/files/:id/copy",
-        }
-    ),
-    "PATCH": frozenset(
-        {
-            "",
-            "members/:id",
-            "agents/:id",
-            "blackboard/files/:id",
-            "blackboard/posts/:id",
-            "blackboard/posts/:id/replies/:id",
-            "objectives/:id",
-            "genes/:id",
-            "tasks/:id",
-            "topology/nodes/:id",
-            "topology/edges/:id",
-        }
-    ),
-    "DELETE": frozenset(
-        {
-            "",
-            "members/:id",
-            "agents/:id",
-            "blackboard/files/:id",
-            "blackboard/posts/:id",
-            "blackboard/posts/:id/replies/:id",
-            "objectives/:id",
-            "genes/:id",
-            "tasks/:id",
-            "topology/nodes/:id",
-            "topology/edges/:id",
-        }
-    ),
-}
-
 
 class SurfaceQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -193,33 +99,18 @@ async def _call(ctx: "PackageOperationContext", args: SurfaceQuery) -> dict[str,
 
 
 async def read_surface(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    query = SurfaceQuery.model_validate(payload)
-    if query.resource == "blackboard/files/:id/download" and len(query.ids) == 1:
-        from .board_file_transfer import download
+    from plugins.business.workspace.guest.commands import read_surface as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-        return await download(ctx, query.workspace_id, query.ids[0], _progress)
-    if query.resource in {"published-genes", "board-conversations"} and not query.ids:
-        from .board_projections import read_projection
-
-        return await read_projection(ctx, query.workspace_id, query.resource, query.query)
-    return await _call(ctx, query)
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def change_surface(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    change = SurfaceChange.model_validate(payload)
-    if change.method == "POST" and change.resource.startswith("file-transfer/") and not change.ids:
-        from .board_file_transfer import upload
+    from plugins.business.workspace.guest.commands import change_surface as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-        return await upload(
-            ctx,
-            change.workspace_id,
-            change.resource.removeprefix("file-transfer/"),
-            UUID(change.request_id),
-            change.revision,
-            change.fields or {},
-        )
-    return await _call(ctx, change)
+    return await call_in_guest(ctx, shaped, payload, progress)

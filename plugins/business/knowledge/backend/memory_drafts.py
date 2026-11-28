@@ -39,12 +39,13 @@ def _key(ctx: "PackageOperationContext") -> NamespaceKeyV2:
 async def read_draft(ctx: "PackageOperationContext") -> dict[str, Any]:
     key = _key(ctx)
     record = await ctx.db.run_sync(lambda db: SqlPluginNamespaceStoreV2(db).get(key))
-    return {"draft": record.document if record else None}
+    return {"document": record.document if record else None, "owner_id": ctx.user.id}
 
 
-async def write_draft(ctx: "PackageOperationContext", value: object) -> dict[str, Any]:
+async def write_draft_document(
+    ctx: "PackageOperationContext", document: dict[str, Any]
+) -> dict[str, Any]:
     key = _key(ctx)
-    document = Draft.model_validate(value).model_dump()
     record = NamespaceRecordV2(schema_version=1, document=document)
     try:
         async with ctx.db.begin_nested():

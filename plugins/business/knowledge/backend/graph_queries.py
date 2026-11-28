@@ -2,11 +2,7 @@
 
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-
-from src.host.operations.remote_application_commands import application_result
-from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.host.operations.application_commands import PackageOperationContext, Progress
@@ -26,32 +22,18 @@ class SubgraphRead(GraphRead):
 
 
 async def read_graph(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _project_graph(ctx, GraphRead.model_validate(payload))
+    from plugins.business.knowledge.guest.commands import read_graph as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
 
 
 async def read_subgraph(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    return await _project_graph(ctx, SubgraphRead.model_validate(payload))
+    from plugins.business.knowledge.guest.commands import read_subgraph as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
 
-
-async def _project_graph(ctx: "PackageOperationContext", query: GraphRead) -> dict[str, Any]:
-    if not ctx.scope.project_id or not ctx.scope.tenant_id:
-        raise HTTPException(403, _("Project membership is required"))
-    data = {
-        **query.model_dump(),
-        "tenant_id": ctx.scope.tenant_id,
-        "project_id": ctx.scope.project_id,
-    }
-    from src.host.operations.admitted_loopback import admitted_client
-
-    async with admitted_client(ctx) as client:
-        if isinstance(query, SubgraphRead):
-            response = await client.post("/api/v1/graph/memory/graph/subgraph", json=data)
-        else:
-            response = await client.get("/api/v1/graph/memory/graph", params=data)
-    if not response.is_success:
-        raise HTTPException(response.status_code, _("Failed to read the project graph"))
-    return application_result(response.json())
+    return await call_in_guest(ctx, shaped, payload, progress)

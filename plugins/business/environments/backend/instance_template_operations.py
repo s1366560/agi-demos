@@ -1,11 +1,11 @@
 """Selected-tenant instance template reads, editing, and creation from the original wizard."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 
+from plugins.business.environments.command_models import TemplateChange, TemplateRead
 from src.application.schemas.instance_schemas import InstanceCreate
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
 from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
@@ -26,27 +26,8 @@ if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
 
-type Identifier = Annotated[str, Field(min_length=1, max_length=128)]
-
-
-class TemplateRead(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    view: Literal["list", "detail", "items", "names"]
-    id: Identifier | None = None
-    page: int = Field(1, ge=1)
-    page_size: int = Field(20, ge=1, le=100)
-    is_published: bool | None = None
-
-
-class TemplateChange(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["create", "publish", "clone", "delete"]
-    id: Identifier | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
-
-
-async def read_templates(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
+async def raw_read_templates(
+    ctx: "TenantPackageContext", payload: dict[str, Any]
 ) -> dict[str, Any]:
     query = TemplateRead.model_validate(payload)
     tenant = ctx.scope.tenant_id
@@ -81,8 +62,8 @@ async def read_templates(
         return {"items": [{"id": row.slug, "name": row.name} for row in rows]}
 
 
-async def change_template(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
+async def raw_change_template(
+    ctx: "TenantPackageContext", payload: dict[str, Any]
 ) -> dict[str, Any]:
     edit = TemplateChange.model_validate(payload)
     tenant = ctx.scope.tenant_id
@@ -104,26 +85,57 @@ async def change_template(
             row = await templates.publish_template(edit.id, authority)
         else:
             await templates.delete_template(edit.id, authority)
-            return {}
-        return row.model_dump(mode="json")
+            return {"deleted": True}
+        return {"row": row.model_dump(mode="json")}
+
+
+async def read_templates(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import read_templates as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def change_template(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import change_template as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def raw_instance_access(ctx: "TenantPackageContext") -> dict[str, Any]:
+    await require_tenant_access(ctx.db, ctx.user, ctx.scope.tenant_id)
+    return {}
+
+
+async def raw_cluster_owned(ctx: "TenantPackageContext", cluster_id: str) -> dict[str, Any]:
+    found = await ctx.db.scalar(
+        select(ClusterModel.id).where(
+            ClusterModel.id == cluster_id, ClusterModel.tenant_id == ctx.scope.tenant_id
+        )
+    )
+    return {"ok": found is not None}
+
+
+async def raw_create_instance(
+    ctx: "TenantPackageContext", payload: dict[str, Any]
+) -> dict[str, Any]:
+    data = InstanceCreate.model_validate(payload)
+    async with asynccontextmanager(instance_application_authority_dependency_v2)(
+        ctx.request, ctx.user, ctx.scope.tenant_id, ctx.db
+    ) as authority:
+        row = await instances.create_instance(data, authority)
+    return {"id": row.id}
 
 
 async def create_instance(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    tenant = ctx.scope.tenant_id
-    await require_tenant_access(ctx.db, ctx.user, tenant)
-    data = InstanceCreate.model_validate(payload)
-    if data.tenant_id != tenant or data.workspace_id:
-        raise OptionalBusinessError("forbidden", "Instance is outside the tenant wizard scope")
-    if data.cluster_id and not await ctx.db.scalar(
-        select(ClusterModel.id).where(
-            ClusterModel.id == data.cluster_id, ClusterModel.tenant_id == tenant
-        )
-    ):
-        raise OptionalBusinessError("page_not_found", "Cluster unavailable")
-    async with asynccontextmanager(instance_application_authority_dependency_v2)(
-        ctx.request, ctx.user, tenant, ctx.db
-    ) as authority:
-        row = await instances.create_instance(data, authority)
-        return {"id": row.id}
+    from plugins.business.environments.guest.commands import create_instance as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

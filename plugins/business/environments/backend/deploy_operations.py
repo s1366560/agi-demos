@@ -1,10 +1,9 @@
 """Run deployment reads and transitions in the tenant selected by the signed page."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from plugins.business.environments.command_models import DeployChange as Change, DeployRead as Read
 from src.application.schemas.deploy_schemas import DeployCreate, DeployResponse
 from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
     deploy_application_authority_dependency_v2,
@@ -21,24 +20,6 @@ if TYPE_CHECKING:
     from src.infrastructure.adapters.primary.web.instance_deploy_application_authority_v2 import (
         InstanceDeployApplicationAuthorityV2,
     )
-
-type Identifier = Annotated[str, Field(min_length=1, max_length=128)]
-
-
-class Read(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    view: Literal["list", "detail", "latest"]
-    id: Identifier
-    page: int = Field(1, ge=1)
-    page_size: int = Field(20, ge=1, le=100)
-
-
-class Change(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["create", "success", "failed", "cancel"]
-    id: Identifier
-    message: str = Field("", max_length=2000)
-
 
 @asynccontextmanager
 async def _authority(
@@ -65,24 +46,20 @@ def _row(record: DeployResponse) -> dict[str, Any]:
     }
 
 
-async def read_deploys(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_read_deploys(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     query = Read.model_validate(payload)
     async with _authority(ctx, query.id, instance=query.view != "detail") as authority:
         if query.view == "list":
             page = await deploy.list_deploys(query.id, query.page, query.page_size, authority)
-            return {
-                **page.model_dump(exclude={"deploys"}),
-                "deployments": [_row(row) for row in page.deploys],
-            }
+            return {"kind": "list", "page": page.model_dump(mode="json")}
         getter = deploy.get_latest_deploy if query.view == "latest" else deploy.get_deploy
-        return _row(await getter(query.id, authority))
+        return {
+            "kind": "record",
+            "record": (await getter(query.id, authority)).model_dump(mode="json"),
+        }
 
 
-async def change_deploy(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_change_deploy(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     item = Change.model_validate(payload)
     async with _authority(ctx, item.id, instance=item.action == "create") as authority:
         match item.action:
@@ -98,4 +75,22 @@ async def change_deploy(
                 )
             case "cancel":
                 row = await deploy.cancel_deploy(item.id, authority)
-        return _row(row)
+        return {"record": row.model_dump(mode="json")}
+
+
+async def read_deploys(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import read_deploys as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def change_deploy(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import change_deploy as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

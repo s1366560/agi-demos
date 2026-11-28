@@ -5,11 +5,11 @@ import io
 import json
 from collections.abc import AsyncIterable
 from typing import TYPE_CHECKING, Annotated, Any, Literal
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
@@ -80,31 +80,39 @@ class DirectoryQuery(BaseModel):
     cards: bool = False
 
 
-async def read_directory_operation(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    from .directory_cards import Card, SummaryQuery, directory_card, directory_summary
-
-    try:
-        if "summary_for" in payload:
-            return await directory_summary(ctx, SummaryQuery.model_validate(payload))
-        query = DirectoryQuery.model_validate(payload)
-        if not query.cards and query.limit > 8:
-            raise HTTPException(422, _("The export page size is limited to 8 workspaces"))
-    except ValidationError as exc:
-        raise HTTPException(422, _("Invalid workspace directory query")) from exc
-    upstream = await _request_core(
-        ctx, query=urlencode(query.model_dump(exclude={"cards"})).encode()
+async def core_document(ctx: "PackageOperationContext", params: dict[str, Any]) -> dict[str, Any]:
+    """Return the Workspace Core document before the guest projects public fields."""
+    request_id = params.get("request_id")
+    response = await _request_core(
+        ctx,
+        method=params.get("method") or "GET",
+        workspace=params.get("workspace"),
+        child=tuple(params.get("child") or ()),
+        task_route=bool(params.get("task_route")),
+        query=str(params.get("query") or "").encode(),
+        data=params.get("data"),
+        request_id=UUID(request_id) if request_id else None,
+        expected_revision=params.get("expected_revision"),
+        read_authority=bool(params.get("read_authority")),
     )
     try:
-        if upstream.status_code != 200:
-            raise HTTPException(upstream.status_code, _("Workspace directory unavailable"))
-        if query.cards:
-            cards = TypeAdapter(list[Card]).validate_json(await _body(upstream))
-            return {"rows": [directory_card(card, ctx.scope) for card in cards]}
-        return {"rows": await _authorized_page(upstream, ctx.scope)}
+        raw = await _body(response)
+        return {
+            "status": response.status_code,
+            "body": json.loads(raw) if raw else None,
+            "headers": {key: value for key, value in response.headers.items()},
+        }
     finally:
-        await upstream.aclose()
+        await response.aclose()
+
+
+async def read_directory_operation(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.workspace.guest.commands import read_directory
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, read_directory, payload, progress)
 
 
 class _WorkspaceQuery(BaseModel):
@@ -193,31 +201,12 @@ async def _request_core(
 
 
 async def read_workspace_operation(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    try:
-        query = _WorkspaceRead.model_validate(payload)
-    except ValidationError as exc:
-        raise HTTPException(422, _("Invalid workspace detail query")) from exc
-    revision = None
-    if query.include_revision:
-        authority = await _request_core(ctx, workspace=query.workspace_id, read_authority=True)
-        try:
-            if authority.status_code != 200:
-                raise HTTPException(authority.status_code, _("Workspace settings unavailable"))
-            value = _WorkspaceAuthority.model_validate_json(await _body(authority))
-            if (value.tenant_id, value.project_id, value.workspace_id) != (
-                ctx.scope.tenant_id,
-                ctx.scope.project_id,
-                query.workspace_id,
-            ):
-                raise OptionalBusinessError("forbidden", "Workspace settings scope mismatch")
-            revision = value.revision
-        finally:
-            await authority.aclose()
-    upstream = await _request_core(ctx, workspace=query.workspace_id)
-    result = await _workspace_result(ctx, upstream, query.workspace_id)
-    return {**result, "revision": revision} if revision is not None else result
+    from plugins.business.workspace.guest.commands import read_workspace
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, read_workspace, payload, progress)
 
 
 async def _workspace_result(
@@ -250,42 +239,21 @@ class _UpdateRequest(_WorkspaceQuery, WorkspaceUpdateRequest):
 
 
 async def create_workspace_operation(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    try:
-        data = _CreateRequest.model_validate(payload)
-    except ValidationError as exc:
-        raise HTTPException(422, _("Invalid workspace creation request")) from exc
-    response = await _request_core(
-        ctx,
-        method="POST",
-        request_id=data.request_id,
-        data=data.model_dump(exclude_unset=True, exclude={"request_id"}, mode="json"),
-    )
-    return await _workspace_result(ctx, response, None)
+    from plugins.business.workspace.guest.commands import create_workspace
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, create_workspace, payload, progress)
 
 
 async def update_workspace_operation(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
 ) -> dict[str, Any]:
-    try:
-        data = _UpdateRequest.model_validate(payload)
-    except ValidationError as exc:
-        raise HTTPException(422, _("Invalid workspace settings request")) from exc
-    changes = data.model_dump(
-        exclude_unset=True, exclude={"workspace_id", "request_id", "expected_revision"}
-    )
-    if not changes:
-        raise HTTPException(422, _("Provide workspace settings to change"))
-    response = await _request_core(
-        ctx,
-        workspace=data.workspace_id,
-        method="PATCH",
-        request_id=data.request_id,
-        expected_revision=data.expected_revision,
-        data=changes,
-    )
-    return await _workspace_result(ctx, response, data.workspace_id)
+    from plugins.business.workspace.guest.commands import update_workspace
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, update_workspace, payload, progress)
 
 
 def _check_csv(document: object, expected_rows: int, columns: int | None) -> tuple[str, int]:

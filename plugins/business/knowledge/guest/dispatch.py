@@ -1,26 +1,10 @@
-"""Map admitted command names onto host capabilities."""
+"""Map admitted command names onto guest shapers."""
 
 from __future__ import annotations
 
-from plugins.business.guest_runtime.binding import bind_operation
+from plugins.business.knowledge.guest.commands import OPERATIONS
 
-OPERATIONS = {
-    name: bind_operation(name)
-    for name in (
-        "app.knowledge.memories.read",
-        "app.knowledge.memories.write",
-        "app.knowledge.entities.list",
-        "app.knowledge.entities.types",
-        "app.knowledge.entities.relationships",
-        "app.knowledge.memories.delete",
-        "app.knowledge.memories.reindex",
-        "app.knowledge.memories.index_status",
-        "app.knowledge.memories.optimize",
-        "app.knowledge.graph.read",
-        "app.knowledge.graph.subgraph",
-        "app.knowledge.search",
-    )
-}
+__all__ = ["OPERATIONS", "TOOLS"]
 
 TOOLS = {
     "knowledge.list-memories": "app.knowledge.memories.read",

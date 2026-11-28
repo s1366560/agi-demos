@@ -82,6 +82,86 @@ def subprocess_env() -> dict[str, str]:
     }
 
 
+async def _pump_stdout(
+    process: asyncio.subprocess.Process,
+    messages: asyncio.Queue[dict[str, Any] | None],
+    on_progress: Progress | None,
+) -> None:
+    assert process.stdout is not None
+    while True:
+        line = await process.stdout.readline()
+        if not line:
+            await messages.put(None)
+            return
+        message = json.loads(line)
+        if message.get("type") == "progress":
+            if on_progress is not None:
+                await on_progress(message.get("data") or {})
+            continue
+        await messages.put(message)
+
+
+async def _read_guest(
+    process: asyncio.subprocess.Process,
+    bridge: HostBridge,
+    on_progress: Progress | None,
+) -> dict[str, Any] | None:
+    messages: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    pumping = asyncio.create_task(_pump_stdout(process, messages, on_progress))
+    result: dict[str, Any] | None = None
+    try:
+        while True:
+            message = await asyncio.wait_for(messages.get(), 60)
+            if message is None:
+                break
+            kind = message.get("type")
+            if kind == "call":
+                await _reply(process, bridge, message)
+            elif kind == "result":
+                result = message
+                break
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        pumping.cancel()
+        if result is None and process.stderr is not None:
+            error = await process.stderr.read()
+            if error:
+                result = {
+                    "ok": False,
+                    "code": "runtime_unavailable",
+                    "message": error.decode(errors="replace")[-2000:],
+                }
+    return result
+
+
+async def _reply(
+    process: asyncio.subprocess.Process, bridge: HostBridge, message: dict[str, Any]
+) -> None:
+    call_id = message["id"]
+
+    async def relay(frame: dict[str, Any], reply_id: object = call_id) -> None:
+        assert process.stdin is not None
+        process.stdin.write(
+            json.dumps(
+                {"type": "event", "id": reply_id, "data": frame}, separators=(",", ":")
+            ).encode()
+            + b"\n"
+        )
+        await process.stdin.drain()
+
+    output, code, text = await _serve(bridge, message, relay)
+    reply: dict[str, Any] = {"id": call_id, "ok": code is None, "output": output}
+    if code is not None:
+        reply["code"] = code
+        reply["message"] = text
+    assert process.stdin is not None
+    process.stdin.write(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
+    await process.stdin.drain()
+
+
 async def run_business_command(
     application: PackageOperationContext | TenantPackageContext,
     plugin_id: str,
@@ -115,29 +195,8 @@ async def run_business_command(
     }
     process.stdin.write(json.dumps(start, separators=(",", ":")).encode() + b"\n")
     await process.stdin.drain()
-    result: dict[str, Any] | None = None
-    try:
-        while True:
-            line = await asyncio.wait_for(process.stdout.readline(), 60)
-            if not line:
-                break
-            message = json.loads(line)
-            kind = message.get("type")
-            if kind == "call":
-                output, code, text = await _serve(bridge, message, on_progress)
-                reply: dict[str, Any] = {"id": message["id"], "ok": code is None, "output": output}
-                if code is not None:
-                    reply["code"] = code
-                    reply["message"] = text
-                process.stdin.write(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
-                await process.stdin.drain()
-            elif kind == "result":
-                result = message
-                break
-    finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
+    result = await _read_guest(process, bridge, on_progress)
+
     if result is None or not result.get("ok", False):
         code = "runtime_unavailable" if result is None else str(result.get("code"))
         text = "business command guest failed" if result is None else str(result.get("message"))
@@ -156,9 +215,9 @@ async def _serve(
     method = message.get("method")
     params = message.get("params") or {}
     try:
-        if method == "call":
-            output: Any = await bridge.call(
-                str(params.get("name") or ""), params.get("payload") or {}, on_progress
+        if method == "data":
+            output: Any = await bridge.data(
+                str(params.get("name") or ""), params.get("params") or {}, on_progress
             )
         elif method == "http":
             output = await bridge.http(
@@ -166,6 +225,7 @@ async def _serve(
                 str(params.get("path") or ""),
                 body=params.get("body"),
                 query=params.get("query"),
+                headers=params.get("headers"),
             )
         else:
             raise OptionalBusinessError("forbidden", "unknown host capability")

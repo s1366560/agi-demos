@@ -1,10 +1,15 @@
 """Tenant-admin mutations used by the original cluster management form."""
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
+from plugins.business.environments.command_models import (
+    ClusterCreateCommand as _Create,
+    ClusterEditCommand as _Edit,
+    ClusterUpdateCommand as _Update,
+)
 from src.application.schemas.cluster_schemas import ClusterCreate, ClusterUpdate
 from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 import (
     cluster_application_authority_dependency_v2,
@@ -12,45 +17,12 @@ from src.infrastructure.adapters.primary.web.cluster_application_authority_v2 im
 from src.infrastructure.adapters.primary.web.routers import clusters
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 
-from .inventory_operations import project_inventory_row
-
 if TYPE_CHECKING:
     from src.host.operations.application_commands import Progress
     from src.host.operations.tenant_commands import TenantPackageContext
 
 
-class _Input(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class _Key(_Input):
-    id: str = Field(min_length=1, max_length=128)
-
-
-class _Settings(_Input):
-    name: str = Field(min_length=1, max_length=255)
-    compute_provider: str | None = Field(None, max_length=50)
-    proxy_endpoint: str | None = Field(None, max_length=2048)
-    provider_config: dict[str, Any] | None = None
-
-
-class _Create(_Input):
-    action: Literal["create"]
-    data: _Settings
-
-
-class _Edit(_Key):
-    action: Literal["edit"]
-
-
-class _Update(_Key):
-    action: Literal["update"]
-    data: _Settings
-
-
-async def write_cluster(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_write_cluster(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     from pydantic import TypeAdapter
 
     change: _Create | _Edit | _Update = TypeAdapter(
@@ -73,19 +45,32 @@ async def write_cluster(
             )
         else:
             row = await clusters.get_cluster(change.id, authority)
-        result = project_inventory_row(row, tenant)
-        result["provider_config"] = row.provider_config
-        return {"item": result}
+    return {"row": row.model_dump(mode="json")}
 
 
-async def delete_cluster(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    key = _Key.model_validate(payload)
+async def raw_delete_cluster(ctx: "TenantPackageContext", cluster_id: str) -> dict[str, Any]:
     tenant = ctx.scope.tenant_id
     await require_tenant_access(ctx.db, ctx.user, tenant, require_admin=True)
     async with asynccontextmanager(cluster_application_authority_dependency_v2)(
         ctx.request, ctx.user, tenant, ctx.db
     ) as authority:
-        await clusters.delete_cluster(key.id, authority)
+        await clusters.delete_cluster(cluster_id, authority)
     return {}
+
+
+async def write_cluster(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import write_cluster as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)
+
+
+async def delete_cluster(
+    ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.environments.guest.commands import delete_cluster as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

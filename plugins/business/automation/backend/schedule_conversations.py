@@ -29,16 +29,27 @@ async def require_schedule_conversation(ctx: "PackageOperationContext", conversa
         raise HTTPException(403, _("Conversation is unavailable in this project"))
 
 
-async def schedule_conversations(
-    ctx: "PackageOperationContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
-    if payload:
-        raise HTTPException(422, _("Unexpected schedule conversation filter"))
+async def raw_schedule_conversations(ctx: "PackageOperationContext") -> dict[str, Any]:
     rows = await ctx.db.execute(
         _choices(ctx).order_by(Conversation.updated_at.desc(), Conversation.id)
     )
     return {
-        "items": [
-            {"id": row.id, "title": row.title, "workspaceId": row.workspace_id} for row in rows
+        "rows": [
+            {
+                "id": row.id,
+                "title": row.title,
+                "workspace_id": row.workspace_id,
+                "updated_at": None,
+            }
+            for row in rows
         ]
     }
+
+
+async def schedule_conversations(
+    ctx: "PackageOperationContext", payload: dict[str, Any], progress: "Progress | None"
+) -> dict[str, Any]:
+    from plugins.business.automation.guest.commands import schedule_conversations as shaped
+    from src.host.operations.business_guest.loopback import call_in_guest
+
+    return await call_in_guest(ctx, shaped, payload, progress)

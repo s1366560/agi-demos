@@ -192,3 +192,35 @@ async def download(
         }
     finally:
         await response.aclose()
+
+
+async def raw_file_chunks(
+    ctx: "PackageOperationContext",
+    workspace: str,
+    file_id: str,
+    progress: "Progress | None",
+) -> dict[str, Any]:
+    """Stream file bytes as raw transport frames. The guest renames them for the caller."""
+    if progress is None:
+        raise HTTPException(422, _("File download requires a stream"))
+    response = await _request_core(
+        ctx, workspace=workspace, child=("blackboard", "files", file_id, "download")
+    )
+    try:
+        if not 200 <= response.status_code < 300:
+            raise HTTPException(response.status_code, _("File download failed"))
+        size = 0
+        async for block in response.aiter_raw():
+            size += len(block)
+            if size > MAX_BYTES:
+                raise HTTPException(413, _("File too large"))
+            for offset in range(0, len(block), CHUNK):
+                await progress(
+                    {"raw": base64.b64encode(block[offset : offset + CHUNK]).decode("ascii")}
+                )
+        return {
+            "size": size,
+            "mime": response.headers.get("content-type", "application/octet-stream"),
+        }
+    finally:
+        await response.aclose()

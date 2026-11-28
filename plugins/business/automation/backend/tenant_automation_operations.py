@@ -47,9 +47,7 @@ class _Update(_Key):
     data: tenant_webhooks.WebhookUpdateRequest
 
 
-async def read_events(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_read_events(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     query = _Events.model_validate(payload)
     tenant = ctx.scope.tenant_id
     await require_tenant_access(ctx.db, ctx.user, tenant)
@@ -60,9 +58,7 @@ async def read_events(
         return result.model_dump(mode="json")
 
 
-async def event_types(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_event_types(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     _Input.model_validate(payload)
     tenant = ctx.scope.tenant_id
     role = await get_tenant_role(ctx.db, ctx.user, tenant)
@@ -72,17 +68,13 @@ async def event_types(
         return {"role": role, "items": await events.list_event_types(tenant, authority.services)}
 
 
-async def list_hooks(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_list_hooks(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     _Input.model_validate(payload)
     rows = await tenant_webhooks.list_webhooks(ctx.scope.tenant_id, ctx.request, ctx.user, ctx.db)
     return {"items": [row.model_dump(mode="json") for row in rows]}
 
 
-async def create_hook(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_create_hook(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     change = _Create.model_validate(payload)
     row = await tenant_webhooks.create_webhook(
         ctx.scope.tenant_id, change.data, ctx.request, ctx.user, ctx.db
@@ -113,16 +105,32 @@ async def _change_hook(ctx: "TenantPackageContext", change: _Key | _Update) -> d
         return result
 
 
-async def update_hook(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_update_hook(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     return await _change_hook(ctx, _Update.model_validate(payload))
 
 
-async def delete_hook(
-    ctx: "TenantPackageContext", payload: dict[str, Any], _progress: "Progress | None"
-) -> dict[str, Any]:
+async def raw_delete_hook(ctx: "TenantPackageContext", payload: dict[str, Any]) -> dict[str, Any]:
     return await _change_hook(ctx, _Key.model_validate(payload))
+
+
+def _guest(name: str) -> object:
+    async def handler(
+        ctx: "TenantPackageContext", payload: dict[str, Any], progress: "Progress | None"
+    ) -> dict[str, Any]:
+        from plugins.business.automation.guest import commands
+        from src.host.operations.business_guest.loopback import call_in_guest
+
+        return await call_in_guest(ctx, getattr(commands, name), payload, progress)
+
+    return handler
+
+
+read_events = _guest("read_events")
+event_types = _guest("event_types")
+list_hooks = _guest("list_hooks")
+create_hook = _guest("create_hook")
+update_hook = _guest("update_hook")
+delete_hook = _guest("delete_hook")
 
 
 TENANT_AUTOMATION_OPERATIONS = {
