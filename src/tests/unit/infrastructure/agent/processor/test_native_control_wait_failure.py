@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.native_control import (
+    NativeControlWaitError,
+    await_native_control,
+)
+from plugins.business.agent.engine.processor.processor import ToolDefinition
 from src.domain.events.agent_events import AgentCompleteEvent, AgentErrorEvent, AgentObserveEvent
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.message import ToolState
 from src.infrastructure.agent.native_computer_use.store import DeviceBridgeError
-from src.infrastructure.agent.processor.native_control import (
-    NativeControlWaitError,
-    await_native_control,
-)
-from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.tools.result import ToolControlOutcome, ToolResult
 from src.tests.unit.infrastructure.agent.processor.test_native_control_results import (
     control_result,
@@ -134,7 +134,7 @@ async def test_parallel_failure_preserves_all_finished_observations_then_ends_ru
             )
         yield SimpleNamespace(type=StreamEventType.FINISH, data={"reason": "tool_calls"})
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.LLMStream.generate", generate)
     events = [event async for event in processor._run_native_loop("session", [])]
     observations = [event for event in events if isinstance(event, AgentObserveEvent)]
     assert [(event.call_id, event.status) for event in observations] == [

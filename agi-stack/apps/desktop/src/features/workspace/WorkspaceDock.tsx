@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ScrollArea } from '@radix-ui/themes';
 import {
@@ -9,7 +9,7 @@ import {
 import { useI18n } from '../../i18n';
 import { Skeleton, SkeletonGroup } from '../../components/Skeleton';
 import { treeSkeletonRows } from '../../components/skeletonModel';
-import { useAgentSocketConnected } from '../../hooks/useAgentSocket';
+import { useAgentSocketConnected } from '../../hooks/agentSocketConnection';
 import type {
   AgentConversation,
   RuntimeNodeLoadState,
@@ -69,6 +69,9 @@ type WorkspaceDockProps = {
     workspaceId: string,
     conversation: AgentConversation,
   ) => void;
+  /** Scoped address for the row. Present so the tree matches the web sidebar anchors. */
+  workspaceHref?: (workspaceId: string) => string | null;
+  conversationHref?: (conversation: AgentConversation, workspaceId: string) => string | null;
   onRenameConversation?: (
     projectId: string,
     workspaceId: string,
@@ -99,6 +102,8 @@ export function WorkspaceDock({
   onRetryWorkspace,
   onSelectWorkspace,
   onSelectConversation,
+  workspaceHref,
+  conversationHref,
   onRenameConversation,
   onDeleteConversation,
   onCreateWorkspace,
@@ -146,6 +151,7 @@ export function WorkspaceDock({
         conversation.id,
         selectionMode,
       )}
+      href={conversationHref?.(conversation, workspaceId) ?? null}
       onSelect={() => onSelectConversation(currentProjectId, workspaceId, conversation)}
       actionRef={(element) => {
         if (element) conversationActionRefs.current.set(conversation.id, element);
@@ -413,11 +419,11 @@ export function WorkspaceDock({
                     >
                       {workspaceExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                     </button>
-                    <button
-                      type="button"
+                    <TreeAnchor
                       className="workspace-tree-workspace-action"
-                      aria-current={workspaceSelected ? 'page' : undefined}
-                      onClick={() => onSelectWorkspace(currentProjectId, workspace.id)}
+                      href={workspaceHref?.(workspace.id) ?? null}
+                      ariaCurrent={workspaceSelected ? 'page' : undefined}
+                      onSelect={() => onSelectWorkspace(currentProjectId, workspace.id)}
                     >
                       <span>
                         <strong>{workspaceLabel(workspace)}</strong>
@@ -430,7 +436,7 @@ export function WorkspaceDock({
                         aria-label={rootStatusTitle}
                         title={rootStatusTitle}
                       />
-                    </button>
+                    </TreeAnchor>
                   </div>
 
                   {workspaceExpanded ? (
@@ -530,11 +536,56 @@ const recencyGroupLabels: Record<ConversationRecencyGroup, string> = {
   older: 'workspaceTree.group.older',
 };
 
+function TreeAnchor({
+  className,
+  href,
+  ariaCurrent,
+  title,
+  onSelect,
+  children,
+}: {
+  className: string;
+  href: string | null;
+  ariaCurrent?: 'page';
+  title?: string;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return (
+      <button
+        type="button"
+        className={className}
+        aria-current={ariaCurrent}
+        title={title}
+        onClick={onSelect}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <a
+      className={className}
+      href={'#' + href}
+      aria-current={ariaCurrent}
+      title={title}
+      onClick={(event) => {
+        event.preventDefault();
+        onSelect();
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 function ConversationTreeRow({
   conversation,
   now,
   socketConnected,
   selected,
+  href,
   onSelect,
   actionRef,
   onRename,
@@ -544,6 +595,7 @@ function ConversationTreeRow({
   now: Date;
   socketConnected: boolean;
   selected: boolean;
+  href: string | null;
   onSelect: () => void;
   actionRef: (element: HTMLElement | null) => void;
   onRename?: () => void;
@@ -569,12 +621,12 @@ function ConversationTreeRow({
 
   return (
     <div className={`workspace-tree-session-row-shell ${selected ? 'selected' : ''}`}>
-      <button
+      <TreeAnchor
         className={`workspace-tree-session-row ${selected ? 'selected' : ''}`}
-        type="button"
-        aria-current={selected ? 'page' : undefined}
+        href={href}
+        ariaCurrent={selected ? 'page' : undefined}
         title={details}
-        onClick={onSelect}
+        onSelect={onSelect}
       >
         {showStatus ? (
           <i
@@ -593,7 +645,7 @@ function ConversationTreeRow({
           localRootLabel={conversation.local_root_label}
         />
         </span>
-      </button>
+      </TreeAnchor>
       {hasLifecycleActions ? (
         <ConversationActionsMenu
           title={title}

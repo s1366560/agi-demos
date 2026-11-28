@@ -76,7 +76,7 @@ async fn wait_continuation(
     conversation_id: &str,
     llm: &ContinuationLlm,
 ) {
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    tokio::time::timeout(SIGNED_TURN_TIMEOUT, async {
         loop {
             if llm.saw_catalog.load(Ordering::SeqCst)
                 && !state
@@ -91,7 +91,7 @@ async fn wait_continuation(
         }
     })
     .await
-    .unwrap();
+    .expect("signed continuation did not finish with its authorized tool catalog");
 }
 async fn revoke_package(state: &Arc<LocalRuntimeState>, reference: &Value) {
     let (status, body) = request(

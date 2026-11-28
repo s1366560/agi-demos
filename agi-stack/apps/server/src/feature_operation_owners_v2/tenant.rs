@@ -35,10 +35,6 @@ pub(super) fn owner(method: &str, route: &str) -> Option<FeatureOperationOwnerV2
             | "/api/v1/tenants/:tenant_id/audit-logs/runtime-hooks/summary"
             | "/api/v1/tenants/:tenant_id/audit-logs/export",
         ) => declared(&["tenant-audit-logs"]).path(TENANT),
-        ("GET", "/api/v1/tenants/:tenant_id/billing" | "/api/v1/tenants/:tenant_id/invoices")
-        | ("POST", "/api/v1/tenants/:tenant_id/upgrade") => {
-            declared(&["tenant-billing"]).path(TENANT)
-        }
         ("GET", "/api/v1/instances/") => declared(&["tenant-instances"]),
         (
             "GET",

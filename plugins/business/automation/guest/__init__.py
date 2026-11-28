@@ -1,0 +1,1 @@
+"""Isolated command guest."""

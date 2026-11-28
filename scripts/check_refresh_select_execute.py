@@ -27,6 +27,8 @@ class QueryState(str, Enum):
 TARGET_ROOTS = (
     Path("src/application/services"),
     Path("src/infrastructure/adapters"),
+    Path("src/host"),
+    *Path("plugins/business").glob("*/backend"),
 )
 
 SELECT_CHAIN_METHODS = {

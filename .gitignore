@@ -77,6 +77,8 @@ Thumbs.db
 node_modules/
 web/node_modules/
 web/dist/
+web/dist-project-packages/
+web/dist-compat/
 web/build/
 web/playwright-report/
 web/test-results/
@@ -164,3 +166,6 @@ web/vite.config.d.ts
 .agent_history/
 
 .ua/
+
+# Private credentials and signed archives for the checkout-local standard project.
+.memstack/standard/

@@ -213,6 +213,27 @@
           }
         },
         {
+          "name": "export_package",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Export this page as CSV using an enabled project package",
+            "title": "Export Package"
+          },
+          "description": "Export this page as CSV using an enabled project package"
+        },
+        {
           "name": "authorization",
           "in": "header",
           "required": false,
@@ -242,7 +263,8 @@
                 },
                 "title": "Response List Workspaces Api V1 Tenants  Tenant Id  Projects  Project Id  Workspaces Get"
               }
-            }
+            },
+            "text/csv": {}
           }
         },
         "422": {
@@ -14836,5 +14858,5 @@
     },
     "securitySchemes": {}
   },
-  "contractSha256": "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
+  "contractSha256": "56278e246fbb5ce4221c7b2ec4c088449ae6a70623946cfcfa6551e6c4d5a89e"
 }

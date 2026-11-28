@@ -286,7 +286,7 @@ fn marketplace_error(
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod tests {
     use std::{
         path::PathBuf,

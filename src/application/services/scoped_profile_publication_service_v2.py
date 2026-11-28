@@ -112,7 +112,10 @@ class ScopedProfilePublicationServiceV2:
             generation=desired.revision,
         )
         projected = project_service_closure_v2(
-            snapshot, scope=canonical, required_services=self._requirements
+            snapshot,
+            scope=canonical,
+            required_services=self._requirements,
+            include_scoped_http=True,
         )
         publication = await self._coordinator.publish(
             canonical, projected, expected_desired=desired, verified_archives=tuple(archives)

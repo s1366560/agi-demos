@@ -98,8 +98,7 @@ async fn skill_discovery_is_exact_scoped_current_and_does_not_expand_signed_tool
         assert!(host.list_tools().is_empty());
         state.session_store.save_execution_selection(&conversation.id,&run.message_id,&local_runtime::execution_selection::ExecutionSelection{agent_id:Some("discovery-agent".into()),..Default::default()},&local_runtime::now_iso()).unwrap();
         assert!(host.call("skill_loader",r#"{"skill_id":"scope-skill"}"#).await.is_ok());
-        let (status,_) = request(&state,"POST","/api/v1/auth/signout",json!({})).await;
-        assert_eq!(status,StatusCode::OK);
+        assert!(state.session_store.revoke_session(TOKEN, chrono::Utc::now().timestamp_millis()).unwrap());
         assert!(host.call("skill_loader",r#"{"skill_id":"scope-skill"}"#).await.is_err());
         state.release_agent_run_if_control(&conversation.id,&control);
         assert!(host.list_tools().is_empty());

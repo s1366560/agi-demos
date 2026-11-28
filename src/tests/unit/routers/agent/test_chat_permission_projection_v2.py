@@ -10,6 +10,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.application.services.conversation_session_projection_service import (
     ConversationSessionProjectionService,
 )
@@ -20,11 +25,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_session_
 )
 from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
 from src.infrastructure.agent.hitl.coordinator import HITLCoordinator
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.truncation import OutputTruncator
@@ -50,7 +50,7 @@ async def test_real_chat_permission_is_reviewable_after_sql_hydration(
         async_sessionmaker(test_engine, expire_on_commit=False),
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.complete_hitl_request", AsyncMock()
+        "plugins.business.agent.engine.processor.processor.complete_hitl_request", AsyncMock()
     )
     async with chat_guard_case() as (run, _policy):
         coordinator = HITLCoordinator(run.conversation_id, run.tenant_id, run.project_id, run.id)

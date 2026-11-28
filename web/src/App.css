@@ -1,3 +1,25 @@
 .App {
   min-height: 100vh;
 }
+
+/* Immersive pages occupy the actual space below the responsive tenant header. */
+.tenant-immersive-content {
+  container-type: size;
+}
+
+.tenant-immersive-content .project-business-pages {
+  --workbench-frame-height: 100cqh;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Keep iframe-local drawers aligned with the workbench when a focused row
+   scrolls the outer marketplace return link into view. */
+.tenant-immersive-content .project-business-pages > :has(+ .project-business-navigation:last-child) {
+  position: sticky;
+  top: 0;
+}
+
+.tenant-immersive-content .project-business-navigation:last-child {
+  position: relative;
+}

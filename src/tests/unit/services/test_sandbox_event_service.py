@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
 from src.domain.events.agent_events import AgentArtifactCreatedEvent
 
 

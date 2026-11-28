@@ -2,7 +2,7 @@ import {
   PROJECT_MEMORIES_DEGRADED_REASON,
   type ProjectMemory,
   type ProjectMemoriesPageOptions,
-} from '../features/project-knowledge/projectMemoriesClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 import {
   isRecord,
   projectKnowledgeError,
@@ -11,7 +11,7 @@ import {
   requireNonnegativeInteger,
   requireText,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import type { DesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMemoriesHttpProjectionV2';
 import { normalizeDesktopProjectMemoriesPageV2 } from './desktopProjectMemoriesOperationContractV2';

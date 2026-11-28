@@ -10,7 +10,7 @@ import type { DesktopRuntimeConfig } from '../types';
 import type {
   ProjectPlaybooksClient,
   ProjectPlaybooksSnapshot,
-} from '../features/project-playbooks/projectPlaybooksClient';
+} from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksClient';
 import {
   createDesktopProjectPlaybooksReadHttpAuthorityV2,
   requireDesktopProjectPlaybooksSnapshotV2,

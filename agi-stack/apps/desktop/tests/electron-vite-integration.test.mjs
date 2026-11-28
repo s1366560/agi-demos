@@ -93,8 +93,9 @@ test('electron-vite reuses the existing React renderer and isolates its output',
   assert.match(configSource, /root:\s*desktopRoot/);
   assert.match(configSource, /input:\s*\{\s*index:\s*resolve\(desktopRoot,\s*'index\.html'\)/);
   assert.match(configSource, /mcpApp:\s*resolve\(desktopRoot,\s*'mcp-app\.html'\)/);
-  assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*'out\/renderer'\)/);
-  assert.match(configSource, /plugins:\s*\[rendererRootHotReload\(desktopRoot\), react\(\)\]/);
+  assert.match(configSource, /desktopOutput = compatibilityProfile \? 'out-compat' : 'out'/);
+  assert.match(configSource, /outDir:\s*resolve\(desktopRoot,\s*desktopOutput,\s*'renderer'\)/);
+  assert.match(configSource, /plugins:\s*\[\s*rendererRootHotReload\(desktopRoot\),\s*react\(\),\s*richPageFramePlugin\(\)/);
   assert.match(ciWorkflow, /node-version: '22'/);
   assert.match(ciWorkflow, /make desktop-test/);
   assert.match(ciWorkflow, /run: make desktop-icons/);
@@ -162,6 +163,10 @@ test('Electron renderer protocol confines assets to the real application directo
     assert.equal(
       await resolveRendererAsset(rendererRoot, 'agistack://app/assets/app.js'),
       await realpath(join(rendererRoot, 'assets', 'app.js')),
+    );
+    assert.equal(
+      await resolveRendererAsset(rendererRoot, RENDERER_ENTRY_URL + '#/inventory/labels'),
+      await realpath(join(rendererRoot, 'index.html')),
     );
     await assert.rejects(
       resolveRendererAsset(rendererRoot, 'agistack://app/%2e%2e%2foutside.txt'),

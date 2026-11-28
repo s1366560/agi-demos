@@ -11,8 +11,10 @@ from typing import Any, override
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
+from plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager import (
+    SandboxMCPServerManager,
+)
 from src.application.services.marketplace_oauth import MarketplaceOAuth
-from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 from src.infrastructure.adapters.secondary.persistence.models import MCPServer, Project
 from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
     MarketplaceRecordV3,

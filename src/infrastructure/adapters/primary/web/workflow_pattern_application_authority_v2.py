@@ -4,16 +4,22 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.auth.user import User
+from plugins.business.automation.backend.workflow_pattern_services import (
+    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
+    WorkflowPatternApplicationResolverProtocolV2,
+    WorkflowPatternApplicationServicesV2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -21,11 +27,6 @@ from src.infrastructure.plugins.v2.boundary import (
     current_generation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.workflow_pattern_services import (
-    WORKFLOW_PATTERN_APPLICATION_SERVICE_V2,
-    WorkflowPatternApplicationResolverProtocolV2,
-    WorkflowPatternApplicationServicesV2,
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -45,6 +46,14 @@ async def workflow_pattern_application_authority_dependency_v2(
 ) -> AsyncIterator[WorkflowPatternApplicationAuthorityV2]:
     """Yield workflow-pattern services from the generation pinned to this request."""
     tenant_id = _scope_id_v2(request.query_params.get("tenant_id"))
+    async with workflow_pattern_authority(request, current_user, db, tenant_id) as authority:
+        yield authority
+
+
+@asynccontextmanager
+async def workflow_pattern_authority(
+    request: Request, current_user: User, db: AsyncSession, tenant_id: str | None
+) -> AsyncIterator[WorkflowPatternApplicationAuthorityV2]:
     scope = (
         ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=tenant_id)
         if tenant_id is not None

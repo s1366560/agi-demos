@@ -5,23 +5,25 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
-from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
-from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
-from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
-from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
-from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.workflow_runtime import (
+from plugins.business.automation.backend.workflow_runtime import (
     WORKFLOW_APPLICATION_MODULE_V2,
     WORKFLOW_APPLICATION_SERVICE_V2,
     WORKFLOW_RUNTIME_MODULE_V2,
     WorkflowApplicationResolverV2,
 )
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
+from plugins.business.automation.workflow.engine import AsyncioWorkflowEngine
+from plugins.business.automation.workflow.tasks import TaskManager
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
+from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
+from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 pytestmark = pytest.mark.unit
 
@@ -77,6 +79,37 @@ async def test_workflow_resolver_uses_generation_owned_engine() -> None:
         await host.close()
 
     assert engine.close_calls == 1
+
+
+async def test_workflow_resolver_invokes_an_independent_port_implementation() -> None:
+    engine = Mock(spec=WorkflowEnginePort)
+    engine.close = AsyncMock()
+    engine.get_workflow_result.return_value = {"result": "provider-owned"}
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(workflow_runtime_factory=AsyncMock(return_value=engine))
+    )
+    try:
+        published = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=51,
+            version=51,
+        )
+        assert published.accepted
+        async with (
+            await host.acquire() as generation,
+            OperationContextV2(
+                generation=generation,
+                operation_id="workflow-result",
+                scope=ScopeV2(kind=ScopeKindV2.PROJECT, tenant_id="tenant-a", project_id="a"),
+            ) as operation,
+        ):
+            runtime = operation.require(WORKFLOW_APPLICATION_SERVICE_V2).resolve(operation)
+            assert await runtime.engine.get_workflow_result("run-a") == {"result": "provider-owned"}
+            engine.get_workflow_result.assert_awaited_once_with("run-a")
+    finally:
+        await host.close()
+    engine.close.assert_awaited_once()
 
 
 async def test_workflow_runtime_disposes_only_after_generation_lease_drains() -> None:

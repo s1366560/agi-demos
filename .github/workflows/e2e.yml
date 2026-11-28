@@ -58,6 +58,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
+      registry:
+        image: registry:2
+        ports:
+          - 5095:5000
       postgres:
         image: pgvector/pgvector:pg16
         env:
@@ -114,6 +118,7 @@ jobs:
       OPENAI_BASE_URL: http://localhost:8010/v1
       LLM_CACHE_ENABLED: false
       LLM_MAX_RETRIES: 0
+      PLUGIN_WORKER_ALLOWED_REGISTRIES: '["http://127.0.0.1:5095"]'
       AGENT_RUNTIME_MODE: local
       AGENT_MEMORY_RUNTIME_MODE: disabled
       AGENT_MAX_STEPS: 4
@@ -183,11 +188,29 @@ jobs:
       - name: Build lightweight authenticated Sandbox fixture
         run: |
           docker build \
-            --file sandbox-mcp-server/Dockerfile.e2e \
+            --file plugins/business/environments/sandbox-mcp-server/Dockerfile.e2e \
             --tag sandbox-mcp-server:lite \
-            sandbox-mcp-server
+            plugins/business/environments/sandbox-mcp-server
           mkdir -p /tmp/memstack-e2e-meta
           chmod 0777 /tmp/memstack-e2e-meta
+
+      - name: Publish and sign the Agent loop used by both runtime checks
+        run: |
+          set -euo pipefail
+          publisher=$(mktemp -d "$RUNNER_TEMP/agent-publisher.XXXXXX")
+          openssl genpkey -algorithm ED25519 -out "$publisher/key"
+          openssl pkey -in "$publisher/key" -pubout -out "$publisher/public.pem"
+          image=127.0.0.1:5095/e2e/agent
+          docker build -t "$image:ci" plugins/business/agent
+          docker push "$image:ci"
+          pinned=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image:ci")
+          PYTHONPATH=sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard_packages \
+            --package agent --agent-image "$pinned" --key "$publisher/key" --out "$publisher/archives"
+          echo "PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES=[\"$publisher/public.pem\"]" >> "$GITHUB_ENV"
+          echo "E2E_AGENT_PACKAGE=$publisher/archives/memstack-agent.mspkg" >> "$GITHUB_ENV"
+          PYTHONPATH=sdk/memstack-plugin-sdk/src uv run python -m scripts.build_e2e_notes \
+            --key "$publisher/key" --out "$publisher/notes"
+          echo "E2E_NOTES_PACKAGES=$publisher/notes" >> "$GITHUB_ENV"
 
       - name: Initialize schema and verify migration head
         run: |

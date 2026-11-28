@@ -39,6 +39,8 @@ def test_exact_values_reuse_compilation_without_sharing_mappings(inputs):
         second.entries[0].config["changed_again"] = True
         assert "changed_again" not in cache.compose(**inputs).entries[0].config
         assert compile_profile.call_count == 1
+    independent = ProfileCompositionCacheV2().compose(**inputs)
+    assert "changed_by_consumer" not in independent.entries[0].config
 
 
 @pytest.mark.parametrize("value", ["source", "bundle", "desired"])

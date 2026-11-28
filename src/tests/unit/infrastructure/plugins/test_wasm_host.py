@@ -138,3 +138,13 @@ async def test_async_guest_execution_does_not_block_other_coroutines():
     await asyncio.sleep(0.01)
     assert not finished.is_set()
     await asyncio.wait_for(task, 1)
+
+
+def test_preparation_rejects_signed_guest_with_failing_start_function():
+    from wasmtime import wat2wasm
+
+    guest = wat2wasm(
+        '(module (func $init unreachable) (start $init) (memory (export "memory") 2) (func (export "invoke") (param i32) (result i32) i32.const 0))'
+    )
+    with pytest.raises(WasmHostError, match="cannot initialize"):
+        WasmToolHost("plugin", guest, expected_abi="invoke")

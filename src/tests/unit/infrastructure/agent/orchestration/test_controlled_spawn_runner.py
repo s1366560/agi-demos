@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.model.agent.agent_role import AgentRole
 from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import (
@@ -28,7 +29,6 @@ from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.orchestration.session_registry import AgentSessionRegistry
 from src.infrastructure.agent.orchestration.spawn_manager import SpawnManager
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
@@ -268,7 +268,7 @@ async def _spawn_and_run(
         return status or "failed"
 
     async def executor(request: Any) -> None:
-        import src.infrastructure.agent.processor.processor as processor_module
+        import plugins.business.agent.engine.processor.processor as processor_module
 
         original = processor_module.LLMStream.generate
         processor_module.LLMStream.generate = fake_generate  # type: ignore[method-assign]

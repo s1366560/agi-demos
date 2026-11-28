@@ -1,0 +1,20 @@
+@import 'tailwindcss' source(none);
+@variant dark (&:where(.dark, .dark *));
+@source '../web/project/MemoryList.tsx';
+@source '../web/project/NewMemory.tsx';
+@source '../web/project/MemoryDetailView.tsx';
+@source '../web/project/EditMemoryModal.tsx';
+@source '../../../../../sdk/memstack-plugin-sdk/ui/Pagination.tsx';
+@source '../../../../../web/src/components/common/AppModal.tsx';
+@theme {
+  --color-surface-dark: #121212;
+  --color-background-dark: #0a0a0a;
+  --color-primary: #262626;
+  --color-primary-light: #525252;
+  --color-success: #35d399;
+  --color-error: #ff6978;
+}
+.dark {
+  --color-primary: #f2f2f2;
+  --color-primary-light: #d9d9d9;
+}

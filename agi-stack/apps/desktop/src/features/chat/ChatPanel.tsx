@@ -1,3 +1,4 @@
+import { ChatDraftInput } from '@business/agent/ui/desktop/chat/ChatDraftInput';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
 import { ConversationToolbarItem } from './ConversationToolbar';
 import { ExecutionTargetBadge } from '../session/ExecutionTargetBadge';
@@ -21,7 +22,6 @@ import {
   Heading,
   ScrollArea,
   Text,
-  TextArea,
 } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -172,18 +172,18 @@ import {
 import {
   latestAgentSuggestions,
   timelineItemsForDisplay,
-} from './chatTimelineModel';
+} from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import { TaskChecklist } from './TaskChecklist';
 import { todoChecklistFromTimeline } from './todoChecklistModel';
-import { isConversationExportItem } from './conversationExportModel';
+import { isConversationExportItem } from '@business/agent/ui/desktop/chat/conversationExportModel';
 import {
   conversationComparisonAvailable,
   conversationComparisonScope,
-} from './conversationComparisonModel';
+} from '@business/agent/ui/desktop/chat/conversationComparisonModel';
 import {
   computeTimelineTurns,
   timelineTurnForMember,
-} from './timelineTurnCollapseModel';
+} from '@business/agent/ui/desktop/chat/timelineTurnCollapseModel';
 import { useComposerFileDrop } from './useComposerFileDrop';
 import { useComposerFileUpload } from './useComposerFileUpload';
 import { useTimelineTurnCollapse } from './useTimelineTurnCollapse';
@@ -2846,9 +2846,8 @@ function ChatComposer({
             ))}
           </div>
         ) : null}
-        <TextArea
+        <ChatDraftInput
           ref={composerInputRef}
-          className="chat-composer-input"
           value={input}
           disabled={disabled}
           onChange={(event) => setInput(event.target.value)}

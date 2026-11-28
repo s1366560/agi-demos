@@ -187,7 +187,7 @@ def test_agent_data_planes_bind_generation_redis_factory_without_core_static_rea
         assert "redis_runtime_factory=agent_worker_redis_runtime_factory_v2" in source
 
     for relative_path in (
-        "src/infrastructure/agent/core/project_react_agent.py",
+        "plugins/business/agent/engine/react/project_react_agent.py",
         "src/infrastructure/plugins/v2/agent_orchestration_runtime.py",
     ):
         source = (_ROOT / relative_path).read_text(encoding="utf-8")

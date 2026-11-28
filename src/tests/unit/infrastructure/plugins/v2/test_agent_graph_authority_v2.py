@@ -144,7 +144,7 @@ def test_agent_data_plane_admissions_bind_generation_graph_factories() -> None:
         assert "get_agent_graph_service" not in source, relative_path
 
     project_agent_source = (
-        _ROOT / "src/infrastructure/agent/core/project_react_agent.py"
+        _ROOT / "plugins/business/agent/engine/react/project_react_agent.py"
     ).read_text(encoding="utf-8")
     assert "current_agent_worker_runtime_services_v2" in project_agent_source
     assert "get_or_create_agent_graph_service" not in project_agent_source

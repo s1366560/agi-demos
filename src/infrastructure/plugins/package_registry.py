@@ -6,7 +6,9 @@ import hashlib
 import io
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -178,3 +180,25 @@ async def _read_bounded_stream(
 def _raise_for_status(response: httpx.Response, label: str) -> None:
     if response.status_code >= 400:
         raise PluginRegistryError(f"{label} fetch returned {response.status_code}")
+
+
+def load_plugin_trust_keys(key_files: Sequence[Path]) -> tuple[str, ...]:
+    """Load canonical Ed25519 trust roots shared by the API and agent workers."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    keys: list[str] = []
+    for path in key_files:
+        try:
+            pem = path.read_text(encoding="utf-8")
+            key = serialization.load_pem_public_key(pem.encode("utf-8"))
+        except (OSError, ValueError, UnicodeError) as error:
+            raise ValueError("plugin trust public-key file is unreadable or invalid") from error
+        if not isinstance(key, Ed25519PublicKey):
+            raise ValueError("plugin trust public key must be Ed25519")
+        canonical = key.public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode("ascii")
+        if canonical not in keys:
+            keys.append(canonical)
+    return tuple(keys)

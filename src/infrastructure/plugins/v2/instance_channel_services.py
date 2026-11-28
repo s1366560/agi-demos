@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.instance_channel_service import InstanceChannelService
+from plugins.business.environments.backend.instance_channel_service import InstanceChannelService
 from src.domain.ports.repositories.instance_repository import InstanceRepository
 from src.infrastructure.adapters.secondary.persistence.sql_instance_channel_repository import (
     SqlInstanceChannelRepository,

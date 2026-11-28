@@ -1,0 +1,19 @@
+@import 'tailwindcss' source(none);
+@source '../web/project/CronJobs.tsx';
+@source '../web/components/cron/CronJobForm.tsx';
+
+/* The isolated document owns the same light canvas as its Ant Design controls. */
+html,
+body {
+  color-scheme: light;
+  background-color: #fff;
+  color: #1f1f1f;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.ant-empty .ant-empty-description {
+  color: #595959;
+}

@@ -105,7 +105,7 @@ redis:
       rackAware: true
 
 neo4j:
-  enabled: true
+  enabled: false
   official:
     clusterName: memstack-neo4j
     acceptLicenseAgreement: "yes"
@@ -120,7 +120,7 @@ neo4j:
     existingSecret: memstack-neo4j-auth
 
 minio:
-  enabled: true
+  enabled: false
 
 cnpg-operator:
   replicaCount: 2

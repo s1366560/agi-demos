@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
+    SANDBOX_HTTP_SERVICE_REGISTRY_MODULE_V2,
+)
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.plugins.v2 import builtin_project_sandbox_http_routes as subject
@@ -16,9 +19,6 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
-    SANDBOX_HTTP_SERVICE_REGISTRY_MODULE_V2,
-)
 
 pytestmark = pytest.mark.unit
 

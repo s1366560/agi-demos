@@ -10,6 +10,8 @@ are explicitly linked from the maintained map.
 
 ## Current Maintained Map
 
+- [独立业务包、最小宿主与设备执行](independent-business-packages.md) — package installation, scoped execution, rollout and remaining business migrations.
+
 - [ARCHITECTURE.md](ARCHITECTURE.md) - current backend/frontend/runtime architecture.
 - [CROSS_RUNTIME_REMEDIATION_PLAN.md](CROSS_RUNTIME_REMEDIATION_PLAN.md) - current Desktop/Rust/Python/Web repair and parity plan.
 

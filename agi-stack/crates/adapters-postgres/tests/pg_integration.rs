@@ -23,8 +23,6 @@ mod attachments;
 mod audit;
 #[path = "pg_integration/backend_stores.rs"]
 mod backend_stores;
-#[path = "pg_integration/billing.rs"]
-mod billing;
 #[path = "pg_integration/channel.rs"]
 mod channel;
 #[path = "pg_integration/conversation_events.rs"]

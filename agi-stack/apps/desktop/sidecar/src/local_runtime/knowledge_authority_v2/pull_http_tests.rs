@@ -187,6 +187,7 @@ pub(super) async fn pull(
 ) -> (StatusCode, Value) {
     request(state, "/api/v1/knowledge/sync-pull", json!({"scope":scope})).await
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn trusted_pull_retries_same_cursor_after_malformed_or_failed_page_without_echo() {
     let directory = TestDirectory::new();

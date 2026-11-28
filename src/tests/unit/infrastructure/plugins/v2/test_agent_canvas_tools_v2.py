@@ -10,12 +10,12 @@ import pytest
 
 import src.infrastructure.agent.canvas as canvas_package
 import src.infrastructure.agent.canvas.tools as canvas_tools_module
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
+    _resolve_current_tools_from_runtime_v2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.canvas.tools import make_canvas_tools
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
-    _resolve_current_tools_from_runtime_v2,
-)
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.plugins.v2.agent_canvas_tools import (

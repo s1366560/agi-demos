@@ -8,15 +8,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentObserveEvent
-from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.events.converter import EventConverter
-from src.infrastructure.agent.processor.native_control import await_native_control, trusted_control
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.native_control import (
+    await_native_control,
+    trusted_control,
+)
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentObserveEvent
+from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
+from src.infrastructure.agent.events.converter import EventConverter
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.result import ToolControlOutcome, ToolResult
@@ -182,9 +185,9 @@ def test_converted_todowrite_exposes_all_declared_terminal_statuses_to_model():
 
 
 async def test_structured_handoff_skips_goal_gate_and_preserves_reason():
+    from plugins.business.agent.engine.processor.goal_evaluator import GoalCheckResult
+    from plugins.business.agent.engine.processor.processor import ProcessorResult
     from src.domain.events.agent_events import AgentCompleteEvent, AgentErrorEvent
-    from src.infrastructure.agent.processor.goal_evaluator import GoalCheckResult
-    from src.infrastructure.agent.processor.processor import ProcessorResult
 
     processor, _part, _definition = processor_for(control_result(), False)
     evaluator = processor._goal_evaluator

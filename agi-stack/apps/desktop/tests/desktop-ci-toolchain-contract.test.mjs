@@ -118,7 +118,7 @@ test('all JavaScript projects and delivery paths use one integrity-pinned pnpm t
   assert.match(rootMakefile, /^PNPM\s+\?=\s+corepack pnpm$/mu);
   assert.match(rootMakefile, /cd web && \$\(PNPM\) install --frozen-lockfile/u);
   assert.doesNotMatch(webDockerfile, /npm install -g pnpm/u);
-  assert.match(webDockerfile, /RUN corepack enable && corepack pnpm install --frozen-lockfile/u);
+  assert.match(webDockerfile, /corepack enable && corepack pnpm install --frozen-lockfile/u);
   assert.match(webDockerfile, /RUN corepack pnpm run build/u);
   assert.match(makefile, /^PNPM\s+\?=\s+corepack pnpm$/mu);
 

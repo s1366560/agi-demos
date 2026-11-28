@@ -1,0 +1,692 @@
+"""Workflow engine initialization for startup."""
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from functools import partial
+from typing import Any, cast
+
+from sqlalchemy import select
+
+from plugins.business.automation.workflow.contract import WorkflowHandlerRegistry
+from plugins.business.automation.workflow.engine import AsyncioWorkflowEngine
+from plugins.business.automation.workflow.tasks import TaskManager
+from src.application.services import graph_projection_jobs
+from src.domain.model.knowledge_sync.contracts import (
+    GraphSyncContent,
+    GraphSyncEntity,
+    GraphSyncRelationship,
+    KnowledgeSyncError,
+)
+from src.domain.model.memory.processing import MemoryProcessingSource
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
+    KnowledgeSyncTombstoneModel,
+)
+from src.infrastructure.adapters.secondary.persistence.memory_processing import (
+    update_memory_processing_status,
+)
+from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
+    canonical_graph_tenant,
+    derived_graph_write,
+    graph_write_lease_kind,
+    legacy_graph_write,
+    require_processing_source,
+)
+from src.infrastructure.adapters.secondary.persistence.models import Memory, TaskLog
+from src.infrastructure.adapters.secondary.persistence.sql_knowledge_graph_sync_repository import (
+    SqlKnowledgeGraphSyncRepository,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+logger = logging.getLogger(__name__)
+
+GraphWorkflowHandler = Callable[[dict[str, Any], object], Awaitable[dict[str, object]]]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DerivedProjectionDraft:
+    """One pipeline-derived projection bound for the sync journal."""
+
+    tenant_id: str
+    project_id: str
+    memory_id: str
+    author_id: str
+    source_revision: int
+    entities: tuple[GraphSyncEntity, ...]
+    relationships: tuple[GraphSyncRelationship, ...]
+
+
+def _derived_projection_draft(
+    result: object,
+    *,
+    tenant_id: str,
+    project_id: str,
+    memory_id: str,
+    author_id: str,
+    source_revision: int,
+) -> DerivedProjectionDraft | None:
+    """Map an extraction result into the portable positional projection form.
+
+    Entity identity is positional: relationships resolve their endpoints to
+    indexes inside this result's entity list. Edges pointing at entities
+    outside the extraction result cannot be expressed and are skipped. A
+    structurally unjournalable shape skips the enqueue entirely; it never
+    blocks the primary processing state because the record is rebuildable.
+    """
+    nodes = list(getattr(result, "nodes", []) or [])
+    edges = list(getattr(result, "edges", []) or [])
+    try:
+        entities = tuple(GraphSyncEntity(name=node.name, kind=node.entity_type) for node in nodes)
+    except (KnowledgeSyncError, AttributeError, TypeError):
+        logger.warning("derived projection has an invalid entity shape; sync enqueue skipped")
+        return None
+    positions = {getattr(node, "uuid", None): position for position, node in enumerate(nodes)}
+    relationships: list[GraphSyncRelationship] = []
+    try:
+        for edge in edges:
+            source = positions.get(getattr(edge, "source_uuid", None))
+            target = positions.get(getattr(edge, "target_uuid", None))
+            if source is None or target is None:
+                continue
+            relationships.append(
+                GraphSyncRelationship(
+                    source_index=source,
+                    target_index=target,
+                    relation_type=edge.relationship_type,
+                    fact=edge.fact or edge.relationship_type,
+                    score=edge.weight,
+                )
+            )
+        # Validate the portable shape now so the journal write cannot fail on
+        # input later; the allocated journal sequence is filled in at enqueue.
+        _ = GraphSyncContent(
+            source_revision=source_revision,
+            change_sequence=1,
+            audit_attempt=1,
+            entities=entities,
+            relationships=tuple(relationships),
+        )
+    except (KnowledgeSyncError, AttributeError, TypeError):
+        logger.warning("derived projection has an invalid portable shape; sync enqueue skipped")
+        return None
+    return DerivedProjectionDraft(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        memory_id=memory_id,
+        author_id=author_id,
+        source_revision=source_revision,
+        entities=entities,
+        relationships=tuple(relationships),
+    )
+
+
+async def _update_episode_processing_records(
+    *,
+    task_id: str | None,
+    memory_id: str | None,
+    status: str,
+    progress: int,
+    message: str,
+    result: dict[str, Any] | None = None,
+    error_message: str | None = None,
+    processing_source: MemoryProcessingSource | None = None,
+    derived: DerivedProjectionDraft | None = None,
+) -> bool:
+    """Persist task and memory processing state for the episode workflow.
+
+    When a derived projection draft is supplied, its sync-journal write rides
+    the same transaction, so the durable extraction state and the journaled
+    record commit or roll back together. Neo4j never participates here.
+    """
+    if not task_id and not memory_id:
+        return True
+
+    now = datetime.now(UTC)
+    async with async_session_factory() as session, session.begin():
+        if memory_id and (
+            processing_source is None
+            or processing_source.memory_id != memory_id
+            or not await update_memory_processing_status(session, processing_source, status)
+        ):
+            return False
+        if task_id:
+            task_result = await session.execute(
+                refresh_select_statement(select(TaskLog).where(TaskLog.id == task_id))
+            )
+            task = task_result.scalar_one_or_none()
+            if task is not None:
+                task.status = status
+                task.progress = progress
+                task.message = message
+                task.error_message = error_message
+                if result is not None:
+                    task.result = result
+                if status == "PROCESSING" and task.started_at is None:
+                    task.started_at = now
+                if status in {"COMPLETED", "FAILED"}:
+                    task.completed_at = now
+        if derived is not None:
+            _ = await SqlKnowledgeGraphSyncRepository(session).enqueue_derived(
+                tenant_id=derived.tenant_id,
+                project_id=derived.project_id,
+                memory_id=derived.memory_id,
+                author_id=derived.author_id,
+                source_revision=derived.source_revision,
+                entities=derived.entities,
+                relationships=derived.relationships,
+            )
+
+        return True
+
+
+def _episode_processing_result(result: object, episode_uuid: str) -> dict[str, object]:
+    """Build a compact, JSON-safe result payload for TaskLog consumers."""
+    nodes = list(getattr(result, "nodes", []) or [])
+    edges = list(getattr(result, "edges", []) or [])
+    episodic_edges = list(getattr(result, "episodic_edges", []) or [])
+
+    return {
+        "episode_uuid": episode_uuid,
+        "entities": len(nodes),
+        "relationships": len(edges),
+        "mentions": len(episodic_edges),
+    }
+
+
+def _read_optional_str(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+async def _run_episode_processing_workflow(
+    payload: dict[str, Any],
+    graph_service: object,
+) -> dict[str, object]:
+    work = await _process_episode_and_checkpoint(payload, graph_service)
+    if isinstance(work, graph_projection_jobs.ExtractionAdmission):
+        return await graph_projection_jobs.deliver(async_session_factory, work.task_id)
+    return work
+
+
+async def _capture_graph(
+    checkpoint: graph_projection_jobs.ExtractionAdmission,
+    source: MemoryProcessingSource,
+    processor: Callable[..., object],
+    *,
+    episode_uuid: str,
+    **kwargs: object,
+) -> graph_projection_jobs.ExtractionAdmission:
+    if checkpoint.claimed:
+        try:
+            extracted = await cast(
+                "Awaitable[object]", processor(episode_uuid=episode_uuid, **kwargs)
+            )
+            await graph_projection_jobs.captured(
+                async_session_factory,
+                source,
+                graph_projection_jobs.extraction_input(extracted),
+                _episode_processing_result(extracted, episode_uuid),
+            )
+        except (Exception, asyncio.CancelledError):
+            await graph_projection_jobs.uncertain(async_session_factory, checkpoint.task_id)
+            raise
+    return checkpoint
+
+
+async def _process_episode_and_checkpoint(
+    payload: dict[str, Any], graph_service: object
+) -> dict[str, object] | graph_projection_jobs.ExtractionAdmission:
+    """Release the graph lease before a remote conversion can wait for a fresh SQL fence."""
+    task_id = _read_optional_str(payload, "task_id")
+    memory_id = _read_optional_str(payload, "memory_id")
+    processing_source = MemoryProcessingSource.from_payload(payload)
+    episode_uuid = _read_optional_str(payload, "uuid")
+    content = _read_optional_str(payload, "content")
+    project_id = _read_optional_str(payload, "project_id")
+    tenant_id = _read_optional_str(payload, "tenant_id")
+    user_id = _read_optional_str(payload, "user_id")
+    excluded_entity_types = payload.get("excluded_entity_types")
+
+    if not episode_uuid or not content:
+        raise ValueError("episode_processing workflow requires uuid and content")
+
+    processor = getattr(graph_service, "process_episode", None)
+    if not callable(processor):
+        raise RuntimeError("Graph service does not support episode processing")
+
+    admitted = False
+    try:
+        lease = (
+            await graph_write_lease_kind(async_session_factory, project_id=project_id)
+            if project_id
+            else "legacy"
+        )
+        admission_factory = derived_graph_write if lease == "derived" else legacy_graph_write
+        async with admission_factory(
+            async_session_factory,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            memory_id=memory_id,
+        ) as admission:
+            memory = await require_processing_source(
+                admission,
+                processing_source,
+                episode_uuid=episode_uuid,
+                content=content,
+            )
+            tenant_id = await canonical_graph_tenant(admission, cast("str", project_id))
+            if lease == "derived" and processing_source:
+                checkpoint = await graph_projection_jobs.select_for_source(
+                    async_session_factory,
+                    admission,
+                    tenant=tenant_id,
+                    source=processing_source,
+                    author=memory.author_id,
+                )
+                if checkpoint:
+                    admitted = True
+                    return await _capture_graph(
+                        checkpoint,
+                        processing_source,
+                        processor,
+                        episode_uuid=episode_uuid,
+                        content=content,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        excluded_entity_types=excluded_entity_types
+                        if isinstance(excluded_entity_types, list)
+                        else None,
+                    )
+            applied = await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=memory_id,
+                processing_source=processing_source,
+                status="PROCESSING",
+                progress=10,
+                message="Extracting entities and relationships",
+            )
+            if not applied:
+                raise KnowledgeSyncError("knowledge_sync_write_conflict")
+            admitted = True
+            try:
+                result = await cast("Any", processor)(
+                    episode_uuid=episode_uuid,
+                    content=content,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    excluded_entity_types=cast(
+                        "list[str] | None",
+                        excluded_entity_types if isinstance(excluded_entity_types, list) else None,
+                    ),
+                )
+                result_payload = _episode_processing_result(result, episode_uuid)
+                derived = _derived_projection_draft(
+                    result,
+                    tenant_id=tenant_id,
+                    project_id=cast("str", project_id),
+                    memory_id=memory.id,
+                    author_id=memory.author_id,
+                    source_revision=memory.version,
+                )
+                applied = await _update_episode_processing_records(
+                    task_id=task_id,
+                    memory_id=memory_id,
+                    processing_source=processing_source,
+                    status="COMPLETED",
+                    progress=100,
+                    message="Graph processing complete",
+                    result=result_payload,
+                    derived=derived,
+                )
+                if not applied:
+                    raise KnowledgeSyncError("knowledge_sync_write_conflict")
+                return result_payload
+            except (Exception, asyncio.CancelledError) as exc:
+                applied = await _update_episode_processing_records(
+                    task_id=task_id,
+                    memory_id=memory_id,
+                    processing_source=processing_source,
+                    status="FAILED",
+                    progress=100,
+                    message="Graph processing failed",
+                    error_message=str(exc) or "Graph processing cancelled",
+                )
+                if not applied:
+                    _ = await _update_episode_processing_records(
+                        task_id=task_id,
+                        memory_id=None,
+                        status="FAILED",
+                        progress=100,
+                        message="Graph processing source rejected",
+                        error_message=str(exc),
+                    )
+                raise
+    except (Exception, asyncio.CancelledError) as exc:
+        if not admitted and not isinstance(exc, graph_projection_jobs.ExtractionAlreadyAdmitted):
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="FAILED",
+                progress=100,
+                message="Graph processing source rejected",
+                error_message=str(exc),
+            )
+        raise
+
+
+async def _rebuild_communities_for_project(
+    graph_service: object,
+    project_id: str,
+) -> dict[str, object]:
+    neo4j_client = getattr(graph_service, "_neo4j_client", None)
+    if neo4j_client is None:
+        raise RuntimeError("Graph service does not expose a Neo4j client")
+
+    from src.infrastructure.graph.schemas import EntityNode
+
+    await neo4j_client.execute_query(
+        """
+        MATCH (c:Community)
+        WHERE c.project_id = $project_id OR c.group_id = $project_id
+        DETACH DELETE c
+        """,
+        project_id=project_id,
+    )
+
+    entity_result = await neo4j_client.execute_query(
+        """
+        MATCH (e:Entity)
+        WHERE e.project_id = $project_id
+        RETURN e.uuid as uuid, e.name as name, e.entity_type as entity_type
+        """,
+        project_id=project_id,
+    )
+
+    entities = [
+        EntityNode(
+            uuid=record["uuid"],
+            name=record["name"],
+            entity_type=record.get("entity_type", "Entity"),
+            project_id=project_id,
+        )
+        for record in entity_result.records
+    ]
+
+    communities_count = 0
+    community_updater = getattr(graph_service, "community_updater", None)
+    if community_updater is not None:
+        communities = await community_updater.update_communities_for_entities(
+            entities=entities,
+            project_id=project_id,
+            regenerate_all=True,
+        )
+        communities_count = len(communities) if communities else 0
+
+    return {
+        "project_id": project_id,
+        "communities": communities_count,
+        "entities": len(entities),
+    }
+
+
+async def _run_rebuild_communities_workflow(
+    payload: dict[str, Any],
+    graph_service: object,
+) -> dict[str, object]:
+    task_id = _read_optional_str(payload, "task_id")
+    project_id = _read_optional_str(payload, "project_id") or _read_optional_str(
+        payload, "task_group_id"
+    )
+    if not project_id:
+        raise ValueError("rebuild_communities workflow requires project_id")
+
+    await _update_episode_processing_records(
+        task_id=task_id,
+        memory_id=None,
+        status="PROCESSING",
+        progress=10,
+        message="Rebuilding graph communities",
+    )
+
+    try:
+        async with legacy_graph_write(
+            async_session_factory,
+            project_id=project_id,
+            tenant_id=_read_optional_str(payload, "tenant_id"),
+        ):
+            result = await _rebuild_communities_for_project(graph_service, project_id)
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="COMPLETED",
+                progress=100,
+                message="Community rebuild complete",
+                result=result,
+            )
+            return result
+
+    except (Exception, asyncio.CancelledError) as exc:
+        await _update_episode_processing_records(
+            task_id=task_id,
+            memory_id=None,
+            status="FAILED",
+            progress=100,
+            message="Community rebuild failed",
+            error_message=str(exc) or "Community rebuild cancelled",
+        )
+        raise
+
+
+async def _load_incremental_refresh_episodes(
+    graph_service: object,
+    *,
+    project_id: str | None,
+    episode_uuids: list[str] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    neo4j_client = getattr(graph_service, "_neo4j_client", None)
+    if neo4j_client is None:
+        raise RuntimeError("Graph service does not expose a Neo4j client")
+
+    if episode_uuids:
+        result = await neo4j_client.execute_query(
+            """
+            MATCH (ep:Episodic)
+            WHERE ep.uuid IN $episode_uuids AND ep.project_id = $project_id
+            RETURN ep.uuid as uuid, ep.content as content, ep.project_id as project_id,
+                   ep.tenant_id as tenant_id, ep.user_id as user_id, ep.memory_id as memory_id
+            LIMIT $limit
+            """,
+            episode_uuids=episode_uuids,
+            project_id=project_id,
+            limit=limit,
+        )
+    else:
+        result = await neo4j_client.execute_query(
+            """
+            MATCH (ep:Episodic)
+            WHERE ep.project_id = $project_id
+            RETURN ep.uuid as uuid, ep.content as content, ep.project_id as project_id,
+                   ep.tenant_id as tenant_id, ep.user_id as user_id, ep.memory_id as memory_id
+            ORDER BY ep.created_at DESC
+            LIMIT $limit
+            """,
+            project_id=project_id,
+            limit=limit,
+        )
+
+    return [dict(record) for record in result.records]
+
+
+async def _run_incremental_refresh_workflow(
+    payload: dict[str, Any],
+    graph_service: object,
+) -> dict[str, object]:
+    task_id = _read_optional_str(payload, "task_id")
+    project_id = _read_optional_str(payload, "project_id")
+    tenant_id = _read_optional_str(payload, "tenant_id")
+    user_id = _read_optional_str(payload, "user_id")
+    raw_episode_uuids = payload.get("episode_uuids")
+    episode_uuids = (
+        [item for item in raw_episode_uuids if isinstance(item, str)]
+        if isinstance(raw_episode_uuids, list)
+        else None
+    )
+
+    processor = getattr(graph_service, "process_episode", None)
+    if not callable(processor):
+        raise RuntimeError("Graph service does not support episode processing")
+
+    await _update_episode_processing_records(
+        task_id=task_id,
+        memory_id=None,
+        status="PROCESSING",
+        progress=10,
+        message="Refreshing recent graph episodes",
+    )
+
+    try:
+        async with legacy_graph_write(
+            async_session_factory,
+            project_id=project_id,
+            tenant_id=tenant_id,
+        ) as admission:
+            tenant_id = await canonical_graph_tenant(admission, cast("str", project_id))
+            episodes = await _load_incremental_refresh_episodes(
+                graph_service,
+                project_id=project_id,
+                episode_uuids=episode_uuids,
+                limit=100,
+            )
+            processed = 0
+            skipped = 0
+            for episode in episodes:
+                episode_uuid = episode.get("uuid")
+                content = episode.get("content")
+                if not isinstance(episode_uuid, str) or not isinstance(content, str) or not content:
+                    skipped += 1
+                    continue
+                if episode.get("project_id") != project_id or episode.get("tenant_id") != tenant_id:
+                    raise KnowledgeSyncError("knowledge_sync_forbidden")
+                source_id = episode.get("memory_id") or episode_uuid
+                memory = await admission.get(Memory, source_id)
+                if memory is not None:
+                    if memory.project_id != project_id:
+                        raise KnowledgeSyncError("knowledge_sync_forbidden")
+                    content = memory.content
+                elif episode.get("memory_id") or await admission.scalar(
+                    select(KnowledgeSyncTombstoneModel.memory_id).where(
+                        KnowledgeSyncTombstoneModel.memory_id == source_id
+                    )
+                ):
+                    raise KnowledgeSyncError("knowledge_sync_write_conflict")
+                await cast("Any", processor)(
+                    episode_uuid=episode_uuid,
+                    content=content,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=episode.get("user_id") or user_id,
+                    excluded_entity_types=None,
+                )
+                processed += 1
+
+            communities_result: dict[str, object] | None = None
+            if payload.get("rebuild_communities") and project_id:
+                communities_result = await _rebuild_communities_for_project(
+                    graph_service, project_id
+                )
+
+            result: dict[str, object] = {
+                "project_id": project_id,
+                "processed": processed,
+                "skipped": skipped,
+                "communities": communities_result,
+            }
+            await _update_episode_processing_records(
+                task_id=task_id,
+                memory_id=None,
+                status="COMPLETED",
+                progress=100,
+                message="Incremental refresh complete",
+                result=result,
+            )
+            return result
+
+    except (Exception, asyncio.CancelledError) as exc:
+        await _update_episode_processing_records(
+            task_id=task_id,
+            memory_id=None,
+            status="FAILED",
+            progress=100,
+            message="Incremental refresh failed",
+            error_message=str(exc) or "Incremental refresh cancelled",
+        )
+        raise
+
+
+async def _run_with_graph_runtime_v2(
+    handler: GraphWorkflowHandler,
+    payload: dict[str, Any],
+) -> dict[str, object]:
+    """Run one background workflow against its own immutable generation lease."""
+    from src.infrastructure.adapters.primary.web.startup.workflow_graph_authority import (
+        current_workflow_graph,
+    )
+
+    authority = current_workflow_graph()
+    project_id = payload.get("project_id") or payload.get("task_group_id")
+    expected = authority.request_scope
+    if not project_id or (expected.project_id is not None and expected.project_id != project_id):
+        raise RuntimeV2Error(
+            "workflow_project_scope_mismatch", "Workflow project differs from admission"
+        )
+    scoped_payload = {**payload, "project_id": project_id}
+    if expected.tenant_id is not None:
+        if payload.get("tenant_id") not in (None, "", expected.tenant_id):
+            raise RuntimeV2Error(
+                "workflow_tenant_scope_mismatch", "Workflow tenant differs from admission"
+            )
+        scoped_payload["tenant_id"] = expected.tenant_id
+    async with authority.runtime.project_graph(scoped_payload, actor_id=authority.actor_id) as (
+        scope,
+        graph,
+    ):
+        return await handler({**scoped_payload, "tenant_id": scope.tenant_id}, graph)
+
+
+def register_workflow_handlers_v2(
+    workflow_engine: WorkflowHandlerRegistry,
+) -> None:
+    """Register the builtin handlers selected by the explicit V2 workflow module."""
+    workflow_engine.register_handler(
+        "episode_processing",
+        partial(_run_with_graph_runtime_v2, _run_episode_processing_workflow),
+        accepts_input=lambda payload: MemoryProcessingSource.from_payload(payload) is not None,
+    )
+    workflow_engine.register_handler(
+        "incremental_refresh",
+        partial(_run_with_graph_runtime_v2, _run_incremental_refresh_workflow),
+    )
+    workflow_engine.register_handler(
+        "rebuild_communities",
+        partial(_run_with_graph_runtime_v2, _run_rebuild_communities_workflow),
+    )
+    logger.info(
+        "Registered generation-leased workflow handlers: episode_processing, "
+        "incremental_refresh, rebuild_communities"
+    )
+
+
+def build_asyncio_workflow_engine_v2(*, manager: TaskManager) -> AsyncioWorkflowEngine:
+    """Build the local workflow engine activated by the V2 Provider effect."""
+    logger.info("Initializing Asyncio Workflow Engine...")
+    workflow_engine = AsyncioWorkflowEngine(manager=manager)
+    register_workflow_handlers_v2(workflow_engine)
+    logger.info("Asyncio Workflow Engine initialized")
+    return workflow_engine

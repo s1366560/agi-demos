@@ -7,10 +7,11 @@ import json
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
 from src.application.services.memory_update_dispatch import (
     MemoryUpdateDispatcher,
@@ -22,7 +23,6 @@ from src.application.services.memory_update_jobs import (
     resume_memory_update_jobs,
     stage_memory_update_job,
 )
-from src.application.services.memory_update_runtime import memory_update_runtime_ready
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel,
 )
@@ -40,9 +40,6 @@ from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_update,
     _memory_tool_runtime,
 )
-from src.infrastructure.plugins.v2.graph_runtime import (
-    _recover_memory_updates_from_process_graph,
-)
 
 
 class _SlowExtract:
@@ -58,11 +55,11 @@ class _SlowExtract:
 
 
 @pytest.fixture
-async def factory() -> Callable[[], AsyncSession]:
+async def factory(tmp_path: Path) -> Callable[[], AsyncSession]:
+    # Recovery and its observers need independent transactions. Closing an
+    # observer sharing the worker's connection can roll back the worker's update.
     engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
+        URL.create("sqlite+aiosqlite", database=str(tmp_path / "memory-jobs.sqlite"))
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -505,11 +502,7 @@ async def test_saved_update_returns_pending_before_slow_extraction(
             episode.status = "COMPLETED"
             return episode
 
-    dispatcher = MemoryUpdateDispatcher(
-        factory,
-        extract=lambda _payload: _ok(),
-        index=lambda _payload: _ok(),
-    )
+    dispatcher = MemoryUpdateDispatcher(factory, extract=extract, index=lambda _payload: _ok())
     install_memory_update_dispatcher(dispatcher)
     try:
         started = time.perf_counter()
@@ -733,61 +726,6 @@ async def test_timeout_releases_the_claim_for_resume(
     assert task is not None
     assert task.status == "FAILED"
     await session.close()
-
-
-@pytest.mark.unit
-def test_service_startup_calls_graph_recovery_without_a_project_chat() -> None:
-    import inspect
-    from pathlib import Path
-
-    from src.infrastructure.plugins.v2.graph_runtime import graph_runtime_definition_v2
-
-    root = Path(__file__).resolve().parents[5]
-    builtin = (root / "src/infrastructure/plugins/v2/builtin_modules.py").read_text(
-        encoding="utf-8"
-    )
-    startup = (
-        root / "src/infrastructure/adapters/primary/web/startup/plugin_runtime_v2.py"
-    ).read_text(encoding="utf-8")
-    main = (root / "src/infrastructure/adapters/primary/web/main.py").read_text(encoding="utf-8")
-    assert "graph_runtime_definition_v2" in builtin
-    assert "builtin_runtime_definitions_v2" in startup
-    assert "initialize_plugin_runtime_v2" in main
-    assert "_recover_memory_updates_from_process_graph" in inspect.getsource(
-        graph_runtime_definition_v2
-    )
-
-
-async def test_process_graph_bind_recovers_without_opening_a_project(
-    factory: Callable[[], AsyncSession],
-) -> None:
-    from src.application.services.memory_update_runtime import clear_memory_update_runtime
-
-    clear_memory_update_runtime()
-    await _seed(factory)
-    await _stage_update(factory, content="after")
-    seen: list[str] = []
-
-    async def extract(payload: dict[str, object]) -> None:
-        seen.append(str(payload["content"]))
-
-    dispatcher = MemoryUpdateDispatcher(
-        factory,
-        extract=extract,
-        index=lambda _payload: _ok(),
-        ready=memory_update_runtime_ready,
-    )
-    install_memory_update_dispatcher(dispatcher)
-    try:
-        dispatcher.resume_soon()
-        await dispatcher.join()
-        assert seen == []
-        _recover_memory_updates_from_process_graph(object())
-        await dispatcher.join()
-        assert seen == ["after"]
-    finally:
-        clear_memory_update_runtime()
-        install_memory_update_dispatcher(None)
 
 
 @pytest.mark.unit

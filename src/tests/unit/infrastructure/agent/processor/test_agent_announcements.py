@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import SessionProcessor
 from src.domain.events.agent_events import AgentMessageReceivedEvent
 from src.domain.ports.services.agent_message_bus_port import AgentMessage, AgentMessageType
-from src.infrastructure.agent.processor.processor import SessionProcessor
 
 
 @pytest.mark.unit

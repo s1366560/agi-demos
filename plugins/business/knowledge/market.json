@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Knowledge",
+    "zh": "知识库"
+  },
+  "description": {
+    "en": "Search project memories, explore the graph, and query an authorized device.",
+    "zh": "搜索项目记忆、查看图谱，并在已授权设备上检索。"
+  },
+  "icon": "book-open"
+}

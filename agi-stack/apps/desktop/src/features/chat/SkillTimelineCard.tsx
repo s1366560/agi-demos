@@ -9,7 +9,7 @@ import {
 } from '@radix-ui/react-icons';
 
 import { useI18n } from '../../i18n';
-import { formatToolCallDuration } from './chatTimelineModel';
+import { formatToolCallDuration } from '@business/agent/ui/desktop/chat/chatTimelineModel';
 import type {
   SkillTimelineGroup,
   SkillTimelineStatus,

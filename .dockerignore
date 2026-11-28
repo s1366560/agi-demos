@@ -6,6 +6,7 @@
 .auto-claude
 
 # Credentials and developer-specific configuration
+.memstack/standard
 .env
 .env.*
 !.env.example

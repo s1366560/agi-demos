@@ -40,7 +40,7 @@ function requestedAssetPath(requestUrl: string): string {
     url.password ||
     url.port ||
     url.search ||
-    url.hash
+    (url.hash && url.pathname !== '/index.html' && url.pathname !== '/')
   ) {
     throw new RendererProtocolError(403, 'renderer URL is outside the application origin');
   }

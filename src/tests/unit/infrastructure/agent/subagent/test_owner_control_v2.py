@@ -2,9 +2,9 @@
 
 from unittest.mock import MagicMock
 
+from plugins.business.agent.engine.processor import factory as factory_module
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
 from src.domain.model.agent.subagent import SubAgent
-from src.infrastructure.agent.processor import factory as factory_module
-from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.subagent.context_bridge import SubAgentContext
 from src.infrastructure.agent.subagent.process import SubAgentProcess
 

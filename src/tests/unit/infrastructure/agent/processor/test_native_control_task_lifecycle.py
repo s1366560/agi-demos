@@ -11,16 +11,16 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.domain.events.agent_events import AgentObserveEvent
-from src.infrastructure.adapters.secondary.persistence.models import AgentTaskModel, Conversation
-from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
-from src.infrastructure.agent.processor.run_context import RunContext, bind_run_context
+from plugins.business.agent.engine.processor.run_context import RunContext, bind_run_context
+from src.domain.events.agent_events import AgentObserveEvent
+from src.infrastructure.adapters.secondary.persistence.models import AgentTaskModel, Conversation
+from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
+from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.result import ToolControlOutcome, ToolResult

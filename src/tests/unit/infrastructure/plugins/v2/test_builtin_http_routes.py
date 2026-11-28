@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import httpx
 import pytest
 from fastapi import Depends, FastAPI
@@ -56,6 +58,36 @@ def test_shadow_graph_mounts_frozen_generation_route_contributions() -> None:
 
     assert graph.table.definitions == (route,)
     assert ("/api/v2/dynamic", "dynamic-route", ("GET",)) in graph.route_signatures
+
+
+@pytest.mark.unit
+def test_new_generation_uses_its_own_route_metadata_and_handler() -> None:
+    def make_handler(version: str):
+        def read_version() -> str:
+            return version
+
+        return read_version
+
+    route = RouteDefinitionV2(
+        owner_entry_id="version",
+        path="/version",
+        methods=("GET",),
+        endpoint=make_handler("old"),
+        name="version",
+        summary="Initial behavior",
+    )
+    updated = replace(route, summary="Updated behavior", endpoint=make_handler("new"))
+    for definition, expected in ((route, "old"), (updated, "new")):
+        graph = build_builtin_route_graph_v2(
+            workspace_core_settings=None, route_definitions=(definition,)
+        )
+        descriptor = PluginGenerationDescriptorV2(profile_id="version", generation=1, digest="d")
+        schema = graph.table.openapi_snapshot(descriptor).schema
+        assert schema["paths"]["/version"]["get"]["summary"] == definition.summary
+        host = FastAPI()
+        host.mount("/", graph.table)
+        with TestClient(host) as client:
+            assert client.get("/version").json() == expected
 
 
 @pytest.mark.unit

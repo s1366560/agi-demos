@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.run_context import RunContext
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -302,7 +302,7 @@ async def test_http_middleware_pins_one_generation_until_response_finishes() -> 
         messages.append(message)
 
     await middleware(
-        {"type": "http", "method": "GET", "path": "/health", "state": {}},
+        {"type": "http", "method": "GET", "path": "/api/v1/projects", "state": {}},
         receive,
         send,
     )

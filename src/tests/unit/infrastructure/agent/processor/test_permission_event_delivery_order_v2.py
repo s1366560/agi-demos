@@ -5,6 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.events.agent_events import (
     AgentObserveEvent,
     AgentPermissionAskedEvent,
@@ -15,11 +20,6 @@ from src.infrastructure.agent.hitl.coordinator import (
     HITLCoordinator,
     ResolveResult,
     resolve_by_request_id,
-)
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
 )
 
 

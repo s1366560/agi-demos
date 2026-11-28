@@ -5,18 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#080c12" />
     <!--
-      script-src 'self' is inherited by the opaque-origin plugin renderer srcdoc
-      iframes (CSP initialization copies the embedder's policy list into
-      about:srcdoc documents). The two sha256 source expressions pin the exact
-      inline bootstrap scripts of the builtin plugin renderer modules so their
-      sandbox bridges can run without granting 'unsafe-inline' to the shell.
-      Keep in sync with src/plugins/desktopConversationRendererModuleV2.ts and
-      src/plugins/desktopToolResultRendererModuleV2.ts (enforced by
-      tests/desktop-renderer-csp-hash-v2.test.mjs).
+      Opaque-origin srcdoc frames inherit this CSP. The hashes admit only the
+      host-owned bootstraps for conversation results, tool results and signed
+      package actions. tests/desktop-renderer-csp-hash-v2.test.mjs verifies
+      the exact script bytes used by each document builder.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' blob: https: http://127.0.0.1:* http://localhost:*; img-src 'self' blob: data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; script-src 'self' 'sha256-jaO7hFDfdjXzq8vHHc4PezUMZXZHq42ua3bm7MZy7jQ=' 'sha256-Ld13Wx9ubp8tdlKauYzcazdh+4nLB1hgou+GLzjHQFc='; style-src 'self' 'unsafe-inline'"
+      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; font-src 'self' data:; frame-src 'self' blob: https: http://127.0.0.1:* http://localhost:*; img-src 'self' blob: data:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; script-src 'self' 'sha256-jaO7hFDfdjXzq8vHHc4PezUMZXZHq42ua3bm7MZy7jQ=' 'sha256-Ld13Wx9ubp8tdlKauYzcazdh+4nLB1hgou+GLzjHQFc=' 'sha256-D5KLFnAtG9ZopiYM1vEUUvmuDSNQNCOioNvLfoSc7LU='; style-src 'self' 'unsafe-inline'"
     />
     <title>agi-stack Desktop</title>
     <script src="/theme-init.js"></script>
@@ -74,6 +70,6 @@
     <div id="root">
       <div class="boot-fallback">Loading agi-stack Desktop...</div>
     </div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/packageHost/main.tsx"></script>
   </body>
 </html>

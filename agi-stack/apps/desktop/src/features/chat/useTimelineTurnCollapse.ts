@@ -5,7 +5,7 @@ import {
   readCollapsedTimelineTurnIds,
   writeCollapsedTimelineTurnIds,
   type TimelineTurnCollapseScope,
-} from './timelineTurnCollapseModel';
+} from '@business/agent/ui/desktop/chat/timelineTurnCollapseModel';
 
 type CollapseSnapshot = {
   storageKey: string;

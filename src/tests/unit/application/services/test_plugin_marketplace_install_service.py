@@ -253,10 +253,13 @@ async def initialized_marketplace_scope(db_session):
     from src.application.services.scoped_profile_initialization_service_v2 import (
         ScopedProfileInitializationServiceV2,
     )
+
     root = ScopeV2(kind=ScopeKindV2.ROOT)
     await PlatformPluginDesiredBundleSetRepositoryV2(db_session).record_desired_set(
-        scope=root, desired_set=production_bundle_sources_v2().desired_set,
-        expected_revision=None, actor_id="setup",
+        scope=root,
+        desired_set=production_bundle_sources_v2().desired_set,
+        expected_revision=None,
+        actor_id="setup",
     )
     await db_session.commit()
     await ScopedProfileInitializationServiceV2(
@@ -274,6 +277,7 @@ async def _install(db: AsyncSession):
         _desired_service(db),
         FakeArtifactClient(archive),
         trusted_public_keys=(public_key_pem,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
     decision = await service.request_install(
         request=_request(bundle, archive, public_key_pem),
@@ -315,6 +319,7 @@ async def test_marketplace_reinstall_is_idempotent(db_session: AsyncSession) -> 
         _desired_service(db_session),
         FakeArtifactClient(archive),
         trusted_public_keys=(public_key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     repeated = await service.request_install(
@@ -343,6 +348,7 @@ async def test_marketplace_same_version_cannot_replace_immutable_bundle(
         _desired_service(db_session),
         FakeArtifactClient(replacement_archive),
         trusted_public_keys=(public_key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     decision = await service.request_install(
@@ -377,6 +383,7 @@ async def test_marketplace_install_without_signature_material_resolves_from_cata
         _desired_service(db_session),
         FakeArtifactClient(archive),
         trusted_public_keys=(public_key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     resolved = await service.request_install(
@@ -410,6 +417,7 @@ async def test_marketplace_install_without_material_requires_catalog_entry(
         _desired_service(db_session),
         FakeArtifactClient(archive),
         trusted_public_keys=(public_key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     decision = await service.request_install(
@@ -438,6 +446,7 @@ async def test_marketplace_install_rejects_signature_digest_drift_from_catalog(
         _desired_service(db_session),
         FakeArtifactClient(archive),
         trusted_public_keys=(public_key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     resolved = await service.request_install(
@@ -482,6 +491,7 @@ async def test_marketplace_install_quarantines_untrusted_v2_bundle(
         _desired_service(db_session),
         FakeArtifactClient(archive, layer_digest=layer_digest),
         trusted_public_keys=trusted_keys,
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
 
     decision = await service.request_install(
@@ -552,13 +562,24 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
     assert decision.status == "approved"
     # Explicit ROOT publication coverage is separate from tenant marketplace installation.
     from src.domain.model.plugins.generated_v2 import BundleReferenceV2
-    await _desired_service(db_session).install(scope=ScopeV2(kind=ScopeKindV2.ROOT),
-        bundle=BundleReferenceV2(bundle_id=_bundle.bundle_id, version=_bundle.version,
-            digest=_bundle.digest, source=f"marketplace://{_bundle.bundle_id}/{_bundle.version}"),
-        actor_id="platform-test")
+
+    await _desired_service(db_session).install(
+        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        bundle=BundleReferenceV2(
+            bundle_id=_bundle.bundle_id,
+            version=_bundle.version,
+            digest=_bundle.digest,
+            source=f"marketplace://{_bundle.bundle_id}/{_bundle.version}",
+        ),
+        actor_id="platform-test",
+    )
     await PlatformPluginGovernanceRepository(db_session).grant_permission(
-        plugin_id=_bundle.bundle_id, permission="tools.execute", scope_type="root",
-        scope_id="global", granted_by="platform-test")
+        plugin_id=_bundle.bundle_id,
+        permission="tools.execute",
+        scope_type="root",
+        scope_id="global",
+        granted_by="platform-test",
+    )
     if stored_source:
         from src.infrastructure.plugins.v2.layer_composer import (
             desired_bundle_set_digest_v2,
@@ -648,3 +669,81 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
         assert readiness.status.value == "ready"
     finally:
         await shutdown_plugin_runtime_v2(app)
+
+
+async def test_unlisted_registry_rejected_before_fetch(db_session):
+    from unittest.mock import AsyncMock
+
+    signer = Ed25519PrivateKey.generate()
+    bundle, archive = _signed_bundle(signer)
+    key = _public_key_pem(signer)
+    client = AsyncMock(spec=FakeArtifactClient)
+    service = PluginMarketplaceInstallService(
+        PlatformPluginGovernanceRepository(db_session),
+        _desired_service(db_session),
+        client,
+        trusted_public_keys=(key,),
+        allowed_registries=frozenset(),
+    )
+    decision = await service.request_install(request=_request(bundle, archive, key))
+    assert decision.status == "quarantined"
+    assert "registry is not permitted" in decision.reason
+    client.fetch.assert_not_awaited()
+
+
+async def test_reinstall_preserves_scan_evidence_and_blocks_failed_release(db_session):
+    signer = Ed25519PrivateKey.generate()
+    bundle, archive = _signed_bundle(signer)
+    key = _public_key_pem(signer)
+    repository = PlatformPluginGovernanceRepository(db_session)
+    service = PluginMarketplaceInstallService(
+        repository,
+        _desired_service(db_session),
+        FakeArtifactClient(archive),
+        trusted_public_keys=(key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
+    )
+    request = _request(bundle, archive, key)
+    assert (await service.request_install(request=request)).status == "approved"
+    package = await repository.get_package_version(request.plugin_id, request.version)
+    package.security_scan_status = "passed"
+    await db_session.flush()
+    assert (await service.request_install(request=request)).status == "approved"
+    await db_session.refresh(package)
+    assert package.security_scan_status == "passed"
+    package.security_scan_status = "failed"
+    await db_session.flush()
+    assert (await service.request_install(request=request)).status == "quarantined"
+
+
+async def test_scan_withdrawal_during_registry_download_blocks_installation(db_session):
+    from sqlalchemy import update
+
+    from src.infrastructure.adapters.secondary.persistence.models import PlatformPluginPackageModel
+
+    _, bundle, archive, key = await _install(db_session)
+    request = _request(bundle, archive, key)
+
+    class WithdrawDuringDownload(FakeArtifactClient):
+        async def fetch(self, **kwargs):
+            await db_session.execute(
+                update(PlatformPluginPackageModel)
+                .where(
+                    PlatformPluginPackageModel.plugin_id == request.plugin_id,
+                    PlatformPluginPackageModel.version == request.version,
+                )
+                .values(security_scan_status="failed")
+                .execution_options(synchronize_session=False)
+            )
+            return await super().fetch(**kwargs)
+
+    service = PluginMarketplaceInstallService(
+        PlatformPluginGovernanceRepository(db_session),
+        _desired_service(db_session),
+        WithdrawDuringDownload(archive),
+        trusted_public_keys=(key,),
+        allowed_registries=frozenset({request.artifact.registry}),
+    )
+    decision = await service.request_install(request=request)
+    assert decision.status == "quarantined"
+    assert "failed security scanning" in decision.reason

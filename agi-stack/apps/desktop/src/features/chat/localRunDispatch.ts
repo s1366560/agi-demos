@@ -8,8 +8,6 @@ import type { LocalExecutionWire } from './executionPlacementModel';
 export type LocalRunSync = 'synced' | 'pending' | 'failed' | 'conflict';
 
 export type LocalRunDispatchInput = {
-  apiBaseUrl: string;
-  apiKey: string;
   userId: string;
   tenantId: string;
   conversationId: string;
@@ -80,8 +78,6 @@ export function localRunCloudFields(input: LocalRunDispatchInput): Record<string
     idempotency_key: input.idempotencyKey.trim(),
     message: input.message,
     local_root_label: input.wire.local_root_label,
-    api_base_url: input.apiBaseUrl.trim(),
-    authorization: `Bearer ${input.apiKey.trim()}`,
     execution_target: 'local',
   };
 }
@@ -90,7 +86,7 @@ export async function dispatchDesktopLocalRun(
   input: LocalRunDispatchInput,
   invoke: Invoke,
 ): Promise<LocalRunDispatchReport> {
-  if (!input.apiKey.trim() || !input.apiBaseUrl.trim() || !input.userId.trim()) {
+  if (!input.userId.trim() || !input.tenantId.trim()) {
     return report('failed', null, 'failed', false, false);
   }
   const cloud = localRunCloudFields(input);
@@ -115,6 +111,13 @@ export async function dispatchDesktopLocalRun(
   } finally {
     publishActive(input.conversationId, null);
   }
+}
+
+export function localRunFailureMessageKey(result: Pick<LocalRunDispatchReport, 'sync' | 'status'>) {
+  if (result.sync === 'conflict') return 'executionPlacement.localUploadConflict';
+  if (result.sync === 'failed') return 'executionPlacement.localUploadFailed';
+  if (result.status === 'failed') return 'executionPlacement.localTurnFailed';
+  return null;
 }
 
 function normalizeReport(raw: unknown): LocalRunDispatchReport {

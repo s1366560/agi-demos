@@ -7,6 +7,7 @@ use tower::ServiceExt;
 use super::*;
 use crate::local_runtime::local_router_with_generation_required;
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn sync_link_and_outbox_use_admitted_authority_without_claiming_remote_success() {
     let directory = TestDirectory::new();
@@ -138,6 +139,7 @@ async fn sync_link_and_outbox_use_admitted_authority_without_claiming_remote_suc
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn executable_catalog_negative_routes_enforce_closed_release() {
     let probes: Vec<Value> =
@@ -244,6 +246,7 @@ fn request_scope(state: &LocalRuntimeState) -> KnowledgeOperationScopeV2 {
     operation_scope(&authenticated(state), &lease)
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn http_routes_require_session_generation_and_joint_release() {
     let directory = TestDirectory::new();
@@ -289,6 +292,7 @@ async fn http_routes_require_session_generation_and_joint_release() {
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn http_crud_uses_durable_receipts_revisions_and_scoped_change_queries() {
     let directory = TestDirectory::new();
@@ -438,6 +442,7 @@ async fn http_crud_uses_durable_receipts_revisions_and_scoped_change_queries() {
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn raw_metadata_commands_require_an_explicit_object_before_any_write() {
     let directory = TestDirectory::new();

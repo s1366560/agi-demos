@@ -22,7 +22,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    println!("agistack-gateway listening on http://{addr}");
+    println!(
+        "agistack-gateway listening on http://{}",
+        listener.local_addr()?
+    );
     println!(
         "  strangled -> Rust   {rust}   ({})",
         strangled_rule_summary()

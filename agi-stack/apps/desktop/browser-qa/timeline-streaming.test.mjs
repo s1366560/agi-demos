@@ -15,6 +15,15 @@ const fixture = readFileSync(new URL('timeline-streaming.fixture.tsx', import.me
 const bundle = await esbuild.build({
   stdin: { resolveDir: join(sourceRoot, 'src'), loader: 'tsx', contents: fixture },
   jsx: 'automatic',
+  alias: {
+    '@desktop': join(sourceRoot, 'src'),
+    ...Object.fromEntries(
+      ['react', 'react-dom', '@radix-ui/themes', '@radix-ui/react-icons'].map((name) => [
+        name,
+        join(sourceRoot, 'node_modules', name),
+      ]),
+    ),
+  },
   bundle: true,
   write: false,
   outfile: 'timeline-fixture.js',

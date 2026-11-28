@@ -158,10 +158,8 @@ async def _register_job_unlocked(
     *job_id*.
     """
     from apscheduler import ConflictPolicy
-    from apscheduler.triggers.cron import CronTrigger
-    from apscheduler.triggers.date import DateTrigger
-    from apscheduler.triggers.interval import IntervalTrigger
 
+    from plugins.business.automation.triggers import build_trigger
     from src.domain.model.cron.value_objects import CronSchedule, ScheduleType
     from src.infrastructure.scheduler.job_executor import execute_cron_job
 
@@ -183,28 +181,7 @@ async def _register_job_unlocked(
             f"Invalid schedule config for job {job_id} ({schedule_type})"
         ) from exc
 
-    schedule_type = schedule.kind.value
-    schedule_config = schedule.config
-
-    trigger: CronTrigger | IntervalTrigger | DateTrigger
-    tz = schedule_config.get("timezone") or timezone
-
-    if schedule_type == "cron":
-        trigger = CronTrigger.from_crontab(
-            schedule_config["expr"],
-            timezone=tz,
-        )
-    elif schedule_type == "every":
-        trigger = IntervalTrigger(
-            seconds=int(schedule_config["interval_seconds"]),
-        )
-    elif schedule_type == "at":
-        trigger = DateTrigger(
-            run_time=schedule_config["run_at"],
-        )
-    else:
-        logger.error("Unknown schedule type %s for job %s", schedule_type, job_id)
-        raise CronScheduleRejected(f"Unknown schedule type {schedule_type} for job {job_id}")
+    trigger = build_trigger(schedule.kind.value, schedule.config, timezone=timezone)
 
     _ = await scheduler.add_schedule(
         execute_cron_job,

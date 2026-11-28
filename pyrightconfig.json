@@ -1,6 +1,10 @@
 {
   "include": [
     "src",
+    "plugins/business/agent/engine",
+    "plugins/business/*/backend",
+    "plugins/business/automation/workflow",
+    "plugins/adapters/channels/*/backend",
     "sdk",
     "scripts"
   ],
@@ -65,7 +69,7 @@
     "src/infrastructure/agent/pool/ha/failure_recovery.py",
     "src/infrastructure/agent/pool/integration/session_adapter.py",
     "src/infrastructure/agent/pool/orchestrator.py",
-    "src/infrastructure/agent/processor/hitl_tool_handler.py",
+    "plugins/business/agent/engine/processor/hitl_tool_handler.py",
     "src/infrastructure/agent/tools/env_var_tools.py",
     "src/infrastructure/agent/tools/sandbox_tool_wrapper.py",
     "src/infrastructure/agent/workspace/workspace_inbox_loop.py",
@@ -91,7 +95,8 @@
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": [
-    "."
+    ".",
+    "sdk/memstack-plugin-sdk/src"
   ],
   "typeCheckingMode": "strict",
   "useLibraryCodeForTypes": true,

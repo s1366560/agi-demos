@@ -8,7 +8,7 @@ import {
 import type {
   TemplatesRouteClient,
   TemplatesRouteDetail,
-} from '../features/settings-routes/templatesRouteClient';
+} from '@business/environments/ui/desktop/settings-routes/templatesRouteClient';
 import type {
   DesktopRuntimeConfig,
   ManagedSubAgent,

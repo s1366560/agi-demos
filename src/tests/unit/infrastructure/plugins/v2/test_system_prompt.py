@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor import ToolDefinition
+from plugins.business.agent.engine.react.react_agent_prompt_mixin import PromptMixin
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
-from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.prompts.manager import SystemPromptManager
 from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2

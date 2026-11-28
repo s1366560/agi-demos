@@ -33,7 +33,7 @@ import type {
   CloudMemoryCommand,
   CloudMemoryOptions,
   CloudMemoryResponse,
-} from '../features/project-knowledge/cloudMemoryClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import {
   prepareCloudMemoryCommand,
   prepareCloudMemoryOptions,
@@ -51,8 +51,8 @@ import type {
   ProjectMemoriesClient,
   ProjectMemoriesSnapshot,
   ProjectMemoriesPageOptions,
-} from '../features/project-knowledge/projectMemoriesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import type {
   NativeKnowledgeClient,
@@ -70,7 +70,7 @@ import {
   requireNativeKnowledgeScope,
 } from '../features/project-knowledge/nativeKnowledgeValidation';
 import { prepareNativeKnowledgeScopeObservationOptions } from '../features/project-knowledge/nativeKnowledgeScopeObservation';
-import { projectKnowledgeError } from '../features/project-knowledge/projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopProjectMemoriesObserveScopeInputV2 } from './desktopProjectMemoriesOperationContractV2';
 import { createDesktopProjectMemoriesHttpAuthorityV2 } from './desktopProjectMemoriesHttpProjectionV2';
 import {

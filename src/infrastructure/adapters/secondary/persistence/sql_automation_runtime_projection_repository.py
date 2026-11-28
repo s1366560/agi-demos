@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.automation_runtime_projection_service import (
+from plugins.business.automation.backend.automation_runtime_projection_service import (
     AutomationRuntimeIdentity,
     AutomationRuntimeProjection,
     AutomationRuntimeProjectionConflictError,

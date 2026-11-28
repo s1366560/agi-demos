@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from plugins.business.agent.engine.processor import ProcessorConfig, SessionProcessor
 from src.application.services.agent import runtime_model_route
 from src.application.services.approved_run_tool_permission_v2 import prepare_approved_run_guard_v2
 from src.application.services.chat_run_tool_permission_v2 import prepare_chat_run_guard_v2
@@ -31,7 +32,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
 )
 from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import create_sandbox_mcp_tool

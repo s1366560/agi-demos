@@ -1,21 +1,23 @@
 """Tenant-bound builtins with leased process-owned Sandbox infrastructure."""
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SANDBOX_RUNTIME_MODULE_V2,
+    SANDBOX_RUNTIME_SERVICE_V2,
+    SandboxRuntimeServiceV2,
+    sandbox_runtime_definition_v2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 
 from .agent_worker_runtime import agent_worker_graph_runtime_factory_v2
 from .boundary import GenerationHostV2
 from .builtin_modules import builtin_runtime_definitions_v2
 from .runtime import ContextV2, EffectResultV2, PluginDefinitionV2, RuntimeV2Error
-from .sandbox_runtime import (
-    SANDBOX_RUNTIME_MODULE_V2,
-    SANDBOX_RUNTIME_SERVICE_V2,
-    SandboxRuntimeServiceV2,
-    sandbox_runtime_definition_v2,
-)
 from .scope import validate_scope_v2
 from .workspace_core_runtime import (
     WORKSPACE_CORE_RUNTIME_MODULE_V2,
@@ -86,6 +88,7 @@ def scoped_builtin_runtime_definitions_v2(
     *,
     sandbox_owner_host: GenerationHostV2,
     redis_client: object | None,
+    billing_schema_sessions: Callable[[], AsyncSession] | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Build definitions for one validated tenant; profile closure selects actual entries.
 
@@ -96,6 +99,7 @@ def scoped_builtin_runtime_definitions_v2(
     if canonical.tenant_id is None:
         raise RuntimeV2Error("scope_tenant_required", "scoped builtins require a tenant")
     definitions = builtin_runtime_definitions_v2(
+        billing_schema_sessions=billing_schema_sessions,
         graph_runtime_factory=agent_worker_graph_runtime_factory_v2(canonical.tenant_id),
         sandbox_redis_client=redis_client,
     )

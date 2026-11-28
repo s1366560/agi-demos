@@ -10,7 +10,7 @@ import {
   TENANT_BILLING_LOCAL_REASON,
   TENANT_BILLING_ROUTE_ID,
   type TenantBillingClient,
-} from './tenantBillingClient';
+} from '@business/billing/ui/desktop/tenant-admin/tenantBillingClient';
 import {
   TENANT_GOVERNANCE_LOCAL_REASON,
   TENANT_GOVERNANCE_ROUTE_ID,

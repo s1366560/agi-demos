@@ -1,7 +1,7 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import type { ProjectAgentLogsSnapshot } from '../features/project-agent/projectAgentLogsClient';
-import type { ProjectAgentScope } from '../features/project-agent/projectAgentClient';
+import type { ProjectAgentLogsSnapshot } from '@business/agent/ui/desktop/project-agent/projectAgentLogsClient';
+import type { ProjectAgentScope } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectAgentLogsOperationInputV2 = Readonly<{

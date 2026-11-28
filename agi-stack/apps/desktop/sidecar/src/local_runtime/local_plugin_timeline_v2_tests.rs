@@ -1,5 +1,6 @@
 use super::*;
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn child_read_observer_rejects_late_results_after_native_signout_or_scope_switch() {
     use agistack_core::agent::ReActObserver;

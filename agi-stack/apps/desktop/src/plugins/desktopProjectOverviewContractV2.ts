@@ -7,14 +7,14 @@ import type {
   CloudProjectOverviewStats,
   ProjectOverviewReadResult,
   ProjectOverviewScope,
-} from '../features/project/projectOverviewClient';
+} from '@business/workspace/ui/desktop/project/projectOverviewClient';
 import type {
   LocalConversationStatusSummary,
   LocalProjectOverviewCapability,
   LocalProjectOverviewKnowledgeItem,
   LocalProjectOverviewProject,
   LocalProjectOverviewSnapshot,
-} from '../features/project/projectOverviewLocalClient';
+} from '@business/workspace/ui/desktop/project/projectOverviewLocalClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 
 const RESULT_KEYS_V2 = new Set(['kind', 'snapshot']);

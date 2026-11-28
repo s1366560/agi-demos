@@ -3,10 +3,13 @@
 Last checked against code: 2026-06-22
 
 ## Purpose
-~80 repository implementations + unified ORM model definitions. All PostgreSQL persistence.
+~80 repository implementations + unified ORM model definitions. The process
+relational driver is PostgreSQL in the cloud and embedded SQLite for a desktop
+or local host (`relational_store.py`). Plugins use the session factory.
 
 ## Key Files
 - `models.py` (~3824 lines) -- ALL SQLAlchemy ORM models (single file)
+- `relational_store.py` -- postgres/sqlite driver selection and sqlite schema bootstrap
 - `database.py` -- `async_session_factory`, `get_db` dependency
 - `sql_*.py` (~80 files) -- one repository per domain entity
 - `../common/base_repository.py` (~593 lines) -- generic CRUD base class
@@ -52,4 +55,6 @@ Domain and DB field names sometimes differ:
 - `_eager_load_options()` default is empty -- N+1 queries if relationships accessed without it
 - `find_by_id` returns `Optional[T]` -- always handle None case
 - Soft deletes: some models have `deleted_at` column, some do hard delete -- check per entity
+- Partial unique indexes need both `postgresql_where` and `sqlite_where`. The sqlite driver creates tables from metadata, and a PostgreSQL-only predicate becomes an unconditional unique index.
+- The sqlite driver enables `PRAGMA foreign_keys=ON` on each connection. `ON DELETE` actions are part of that driver.
 - Bulk operations: use `_session.execute(insert(...))` for performance, not `save()` in loop

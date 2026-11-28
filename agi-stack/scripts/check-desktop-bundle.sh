@@ -37,10 +37,12 @@ if [[ -n "$app_dir" ]]; then
     echo "macOS sidecar is missing or not executable: $sidecar_bin" >&2
     exit 1
   }
-  test -x "$workspace_core_bin" || {
-    echo "macOS Workspace Core helper is missing or not executable: $workspace_core_bin" >&2
-    exit 1
-  }
+  if [[ "${AGISTACK_DESKTOP_PROFILE:-}" == full ]]; then
+    test -x "$workspace_core_bin" || {
+      echo "macOS Workspace Core helper is missing or not executable: $workspace_core_bin" >&2
+      exit 1
+    }
+  fi
   test -f "$info_plist" || {
     echo "macOS bundle Info.plist is missing: $info_plist" >&2
     exit 1
@@ -73,15 +75,21 @@ if [[ -n "$app_dir" ]]; then
   done
   codesign --verify --deep --strict "$app_dir"
   codesign --verify --strict "$sidecar_bin"
-  codesign --verify --strict "$workspace_core_bin"
-  node "$ROOT/scripts/cua-packaging.mjs" "$app_dir/Contents/Resources/sidecar"
+  if [[ "${AGISTACK_DESKTOP_PROFILE:-}" == full ]]; then
+    codesign --verify --strict "$workspace_core_bin"
+    node "$ROOT/scripts/cua-packaging.mjs" "$app_dir/Contents/Resources/sidecar"
+  fi
 else
   cua_resources="$(find "$BUNDLE_ROOT" -type d -path '*/resources/sidecar' -print -quit)"
   test -n "$cua_resources" || {
     echo "desktop bundle has no unpacked CUA resources" >&2
     exit 1
   }
-  node "$ROOT/scripts/cua-packaging.mjs" "$cua_resources"
+  if [[ "${AGISTACK_DESKTOP_PROFILE:-}" == full ]]; then
+    node "$ROOT/scripts/cua-packaging.mjs" "$cua_resources"
+  else
+    test -s "$cua_resources/$EXPECTED_SIDECAR" || test -s "$cua_resources/$EXPECTED_SIDECAR.exe"
+  fi
 fi
 
 echo "DESKTOP_BUNDLE_SMOKE_OK bundle_root=$BUNDLE_ROOT"

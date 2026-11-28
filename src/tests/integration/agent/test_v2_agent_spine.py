@@ -12,6 +12,14 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
+from plugins.business.agent.engine.processor.processor import ProcessorConfig
+from plugins.business.agent.engine.processor.run_context import RunContext
+from plugins.business.agent.engine.react.react_agent import ReActAgent
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
+    _resolve_agent_capabilities_from_runtime_v2,
+    _resolve_current_tools_from_runtime_v2,
+)
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
@@ -19,16 +27,8 @@ from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.canvas.tools import make_canvas_tools
 from src.infrastructure.agent.core.llm_stream import StreamEventType
-from src.infrastructure.agent.core.react_agent import ReActAgent
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
-    _resolve_agent_capabilities_from_runtime_v2,
-    _resolve_current_tools_from_runtime_v2,
-)
 from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
-from src.infrastructure.agent.processor.factory import ProcessorFactory
-from src.infrastructure.agent.processor.processor import ProcessorConfig
-from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.agent.tools.clarification import make_clarification_tool
 from src.infrastructure.agent.tools.cron_tool import make_cron_tool
 from src.infrastructure.agent.tools.custom_tool_status import custom_tools_status
@@ -69,7 +69,10 @@ from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
 from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
     SKILL_MCP_MANAGER_SERVICE_V2,
 )
-from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_METADATA_SERVICE_V2,
+    pin_operation_context_v2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -378,6 +381,13 @@ def _spine_agent() -> ReActAgent:
 async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: PLR0915
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from unittest.mock import AsyncMock
+
+    # This turn exercises subscriber admission, not discovery of tenants in a running deployment.
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.scheduler.EvolutionScheduler._discover_tenants",
+        AsyncMock(return_value=[]),
+    )
     store = _MemorySessionEventLogStore()
     monkeypatch.setattr(store_module, "SqlSessionEventLogStoreV2", lambda: store)
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -427,7 +437,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
         )
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
 
@@ -450,6 +460,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
             host,
             operation_id="agent-spine-turn",
             scope=_SCOPE,
+            services={OPERATION_METADATA_SERVICE_V2: {"kind": "agent-turn"}},
         ) as operation:
             event_log = operation.require(SESSION_EVENT_LOG_SERVICE_V2)
             assert isinstance(event_log, SessionEventLogServiceV2)
@@ -620,7 +631,7 @@ async def test_profile_disabled_subagents_remove_delegation_and_session_tools_fr
         yield SimpleNamespace(type=StreamEventType.FINISH, data={"reason": "stop"})
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -639,6 +650,7 @@ async def test_profile_disabled_subagents_remove_delegation_and_session_tools_fr
             host,
             operation_id="agent-spine-no-subagents",
             scope=_SCOPE,
+            services={OPERATION_METADATA_SERVICE_V2: {"kind": "agent-turn"}},
         ) as operation:
             agent = _spine_agent()
             capabilities = await _resolve_agent_capabilities_from_runtime_v2(
@@ -726,7 +738,7 @@ async def test_operation_cleanup_covers_processor_error_cancellation_and_generat
             yield None
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         failing_generate,
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -778,6 +790,7 @@ async def test_operation_cleanup_covers_processor_error_cancellation_and_generat
             host,
             operation_id="processor-error",
             scope=_SCOPE,
+            services={OPERATION_METADATA_SERVICE_V2: {"kind": "agent-turn"}},
         ) as operation:
             definition = await activate(operation, "processor")
             processor = ProcessorFactory().create_for_main(
@@ -804,6 +817,7 @@ async def test_operation_cleanup_covers_processor_error_cancellation_and_generat
                 host,
                 operation_id="cancelled-operation",
                 scope=_SCOPE,
+                services={OPERATION_METADATA_SERVICE_V2: {"kind": "agent-turn"}},
             ) as operation:
                 _ = await activate(operation, "cancelled")
                 raise asyncio.CancelledError
@@ -813,6 +827,7 @@ async def test_operation_cleanup_covers_processor_error_cancellation_and_generat
                 host,
                 operation_id="closed-generator",
                 scope=_SCOPE,
+                services={OPERATION_METADATA_SERVICE_V2: {"kind": "agent-turn"}},
             ) as operation:
                 yield await activate(operation, "generator")
 

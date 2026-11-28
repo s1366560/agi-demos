@@ -22,12 +22,21 @@ from .runtime import (
 GRAPH_RUNTIME_MODULE_V2 = "builtin://memstack/graph/runtime"
 GRAPH_RUNTIME_SERVICE_V2 = "service:graph.runtime"
 
-type GraphRuntimeFactoryV2 = Callable[[], Awaitable[GraphStorePort]]
+
+@dataclass(frozen=True, kw_only=True)
+class GraphRuntimeLeaseV2:
+    """An adapter with one generation's release callback."""
+
+    graph: GraphStorePort
+    release: Callable[[], Awaitable[None]]
+
+
+type GraphRuntimeFactoryV2 = Callable[[], Awaitable[GraphStorePort | GraphRuntimeLeaseV2]]
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class GraphRuntimeServiceV2:
     """Exact graph resource state owned by one staged generation."""
 
@@ -76,7 +85,7 @@ def graph_runtime_definition_v2(
             return None
 
         try:
-            graph_service = await graph_runtime_factory()
+            resource = await graph_runtime_factory()
         except NoActiveProviderError as exc:
             if required:
                 raise RuntimeV2Error(
@@ -93,14 +102,24 @@ def graph_runtime_definition_v2(
             )
             return None
 
-        _provide_graph_runtime_v2(
-            context,
-            GraphRuntimeServiceV2(graph_service=graph_service),
-        )
-        _recover_memory_updates_from_process_graph(graph_service)
+        graph = resource.graph if isinstance(resource, GraphRuntimeLeaseV2) else resource
+        runtime = GraphRuntimeServiceV2(graph_service=graph)
 
         async def dispose() -> None:
-            await _close_graph_service_v2(graph_service)
+            if runtime.graph_service is None:
+                return
+            runtime.graph_service = None
+            runtime.unavailable_code = "graph_runtime_retired"
+            if isinstance(resource, GraphRuntimeLeaseV2):
+                await resource.release()
+            else:
+                await close_graph_service_v2(graph)
+
+        try:
+            _provide_graph_runtime_v2(context, runtime)
+        except BaseException:
+            await dispose()
+            raise
 
         return dispose
 
@@ -109,25 +128,6 @@ def graph_runtime_definition_v2(
         contract_digest=generated_contract_digest_v2(GRAPH_RUNTIME_MODULE_V2),
         apply=apply,
     )
-
-
-def _recover_memory_updates_from_process_graph(graph_service: GraphStorePort) -> None:
-    """Resume durable memory-update rows when this process binds its graph.
-
-    This runs from generation startup. It does not wait for a project chat
-    or a model call. If the dispatcher is not installed yet, the later
-    startup installer sees the binding and resumes.
-    """
-    from src.application.services.memory_update_dispatch import schedule_memory_update_recovery
-    from src.application.services.memory_update_runtime import bind_memory_update_runtime
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-
-    bind_memory_update_runtime(
-        graph_service=graph_service,
-        embedding_service=getattr(graph_service, "embedder", None),
-        session_factory=async_session_factory,
-    )
-    schedule_memory_update_recovery()
 
 
 def _provide_graph_runtime_v2(
@@ -141,9 +141,7 @@ def _provide_graph_runtime_v2(
     )
 
 
-async def _close_graph_service_v2(graph_service: object) -> None:
-    if getattr(graph_service, "_process_shared_graph_v2", False):
-        return
+async def close_graph_service_v2(graph_service: object) -> None:
     close = getattr(graph_service, "close", None)
     if callable(close):
         result = close()
@@ -165,6 +163,8 @@ __all__ = [
     "GRAPH_RUNTIME_MODULE_V2",
     "GRAPH_RUNTIME_SERVICE_V2",
     "GraphRuntimeFactoryV2",
+    "GraphRuntimeLeaseV2",
     "GraphRuntimeServiceV2",
+    "close_graph_service_v2",
     "graph_runtime_definition_v2",
 ]

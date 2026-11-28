@@ -14,7 +14,7 @@ import type {
   DeadLetterQueueRequestOptions,
   DeadLetterQueueScope,
   DeadLetterQueueStats,
-} from '../features/governance/deadLetterQueueClient';
+} from '@business/automation/ui/desktop/governance/deadLetterQueueClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopDeadLetterQueueHttpProjectionV2 } from './desktopDeadLetterQueueHttpProjectionV2';
 import {

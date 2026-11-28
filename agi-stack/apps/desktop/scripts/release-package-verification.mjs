@@ -113,13 +113,15 @@ export async function verifyMacPackageArtifacts({
       ...zipResult,
       architecture: 'universal',
       sidecar_sha256: zipResult.sidecar_sha256,
-      workspace_core_sha256: zipResult.workspace_core_sha256,
+
       zip_sidecar_sha256: zipResult.sidecar_sha256,
       dmg_sidecar_sha256: dmgResult.sidecar_sha256,
-      zip_workspace_core_sha256: zipResult.workspace_core_sha256,
-      dmg_workspace_core_sha256: dmgResult.workspace_core_sha256,
+      ...(zipResult.workspace_core_sha256 ? {
+        zip_workspace_core_sha256: zipResult.workspace_core_sha256,
+        dmg_workspace_core_sha256: dmgResult.workspace_core_sha256,
+        package_workspace_cores_identical: true,
+      } : {}),
       package_sidecars_identical: true,
-      package_workspace_cores_identical: true,
       zip_app_verified: true,
       dmg_app_verified: true,
     };
@@ -178,14 +180,19 @@ export async function verifyWindowsInstallerArtifact({
       ),
       'NSIS packaged sidecar',
     );
-    const packagedWorkspaceCorePath = requireUniquePath(
+    if (!workspaceCoreName && payloadEntries.files.some(path =>
+      pathContainsResourceDirectory(path, payloadRoot, 'workspace-core')
+    )) {
+      throw new Error('NSIS contains an undeclared Workspace Core helper');
+    }
+    const packagedWorkspaceCorePath = workspaceCoreName ? requireUniquePath(
       payloadEntries.files.filter(
         (path) =>
           basename(path) === workspaceCoreName &&
           pathContainsResourceDirectory(path, payloadRoot, 'workspace-core'),
       ),
       'NSIS packaged Workspace Core',
-    );
+    ) : null;
     const inspection = await inspectInstallerPayload({
       installerPath,
       packagedSidecarPath,
@@ -201,10 +208,10 @@ export async function verifyWindowsInstallerArtifact({
           `found ${inspection.sidecar_architecture}`,
       );
     }
-    if (!/^[a-f0-9]{64}$/u.test(inspection.workspace_core_sha256 ?? '')) {
+    if (workspaceCoreName && !/^[a-f0-9]{64}$/u.test(inspection.workspace_core_sha256 ?? '')) {
       throw new Error('NSIS packaged Workspace Core SHA-256 is invalid');
     }
-    if (inspection.workspace_core_architecture !== expectedArchitecture) {
+    if (workspaceCoreName && inspection.workspace_core_architecture !== expectedArchitecture) {
       throw new Error(
         `NSIS packaged Workspace Core architecture must be ${expectedArchitecture}; ` +
           `found ${inspection.workspace_core_architecture}`,

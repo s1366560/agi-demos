@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 
 import { X } from 'lucide-react';
 
-import { confirmAction } from '@/utils/confirmAction';
+import { confirmAction } from '../../utils/confirmAction';
 
 export type AppModalSize = 'sm' | 'md' | 'lg' | 'xl';
 export type AppModalPosition = 'center' | 'side';

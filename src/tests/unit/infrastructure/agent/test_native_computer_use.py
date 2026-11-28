@@ -12,6 +12,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.message_utils import extract_user_query
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    ProcessorState,
+    SessionProcessor,
+)
 from src.application.services import chat_run_tool_permission_v2 as chat
 from src.domain.model.artifact.artifact import Artifact, ArtifactCategory, ArtifactStatus
 from src.infrastructure.agent.core.llm_stream import StreamEventType
@@ -21,12 +27,6 @@ from src.infrastructure.agent.native_computer_use.image_messages import (
     hydrate_image_messages,
     persist_tool_attachments,
     tool_image_message,
-)
-from src.infrastructure.agent.processor.message_utils import extract_user_query
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    ProcessorState,
-    SessionProcessor,
 )
 from src.infrastructure.agent.tools import native_computer_use as native
 from src.infrastructure.agent.tools.context import ToolContext
@@ -495,7 +495,7 @@ async def test_processor_consumes_images_as_model_blocks_and_withholds_rejected_
             )
             yield SimpleNamespace(type=StreamEventType.FINISH, data={"reason": "stop"})
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.LLMStream.generate", generate)
     info = ToolInfo(
         name="computer_get_app_state",
         description="Capture",

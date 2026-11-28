@@ -66,7 +66,6 @@ RERANKER_LOG_LEVEL ?= info
 RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
 WORKSPACE_CORE_PORT ?= 4319
 WORKSPACE_CORE_SERVICE ?= memstack-workspace-core
-WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0 --port 3000
 DEV_STARTUP_TIMEOUT ?= 60
 DEV_STOP_TIMEOUT ?= 10
 DEV_PYTHON ?= .venv/bin/python
@@ -75,6 +74,11 @@ DEV_COMPOSE_WAIT_CMD ?= $(DEV_PYTHON) scripts/dev/wait_compose.py
 DEV_BUILD_CMD ?= $(DEV_PYTHON) scripts/dev/build_compose.py
 AGISTACK_DIR ?= agi-stack
 PNPM ?= corepack pnpm
+MEMSTACK_DEV_ROOT := $(CURDIR)
+include $(dir $(lastword $(MAKEFILE_LIST)))scripts/dev/profile.mk
+WEB_DEV_CMD ?= node_modules/.bin/vite --config vite.config.ts $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),--mode full) --host 0.0.0.0 --port 3000
+STANDARD_DEV = STANDARD_DIRECTORY="$(STANDARD_DIRECTORY)" uv run --locked python -m scripts.dev.standard_project
+
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -254,7 +258,33 @@ help-full: ## Show all available commands
 # Quick Start Commands (Environment Reset & Initialization)
 # =============================================================================
 
-init: ## First time setup: install deps, start infra
+ifeq ($(MEMSTACK_DEV_PROFILE),standard)
+init:
+	@$(STANDARD_DEV) init
+dev:
+	@$(STANDARD_DEV) start
+restart restart-full:
+	@$(STANDARD_DEV) restart
+stop dev-stop:
+	@$(STANDARD_DEV) stop
+logs dev-logs:
+	@$(STANDARD_DEV) logs
+reset:
+	@$(STANDARD_DEV) reset
+status:
+	@$(STANDARD_DEV) status
+else
+init: init-full
+dev: dev-all
+restart: restart-full-apps
+restart-full: restart-full-stack
+stop: dev-stop
+logs: dev-logs
+status: status-full
+reset: reset-full
+endif
+
+init-full: ## Prepare a full-stack development checkout
 	@echo " Initializing MemStack development environment..."
 	@echo ""
 	@if [ ! -f .env ]; then \
@@ -278,7 +308,7 @@ init: ## First time setup: install deps, start infra
 	@echo ""
 	@echo " Start development with: make dev"
 
-reset: ## Complete reset: stop services, clean everything, prepare for reinit
+reset-full: ## Complete reset: stop services, clean everything, prepare for reinit
 	@echo " Resetting MemStack environment..."
 	@echo ""
 	@echo "Step 1/3: Stopping all services..."
@@ -300,18 +330,16 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo " Fresh environment ready!"
 
-restart: ## Restart only this checkout's managed API/Web processes
+restart-full-apps: ## Restart only this checkout's managed API/Web processes
 	@$(MAKE) dev-app-stop
 	@$(MAKE) dev-app-start
 	@echo " Services restarted"
 
-restart-full: ## Force a full development process restart, retaining database volumes
+restart-full-stack: ## Force a full development process restart, retaining database volumes
 	@$(MAKE) stop
 	@$(MAKE) dev
 
 # Convenience aliases
-stop: dev-stop ## Stop all services (alias for dev-stop)
-logs: dev-logs ## View logs (alias for dev-logs)
 infra: dev-infra ## Start infrastructure (alias for dev-infra)
 
 reset-db: ## Reset only the database (keep Docker volumes)
@@ -363,8 +391,6 @@ update: ## Update all dependencies
 # Development
 # =============================================================================
 
-dev: dev-all ## Start all services (API + worker + infra + web)
-	@echo " Starting full development environment..."
 
 dev-prepare: dev-infra-base ## Migrate, sync bundles, and reconcile images before touching API/Web
 	@$(MAKE) db-init
@@ -382,6 +408,7 @@ dev-all: dev-prepare
 dev-app-stop: ## Stop only this checkout's managed API and Web processes
 	@$(DEV_SERVICES_CMD) stop --repo "$(CURDIR)" --timeout $(DEV_STOP_TIMEOUT)
 
+ifeq ($(MEMSTACK_DEV_PROFILE),full)
 dev-stop: dev-app-stop ## Stop managed development services without deleting infrastructure data
 	@$(COMPOSE_DEV) stop --timeout $(DEV_STOP_TIMEOUT) agent-actor-worker ray-worker ray-head $(WORKSPACE_CORE_SERVICE)
 	@echo " Development services stopped"
@@ -389,6 +416,8 @@ dev-stop: dev-app-stop ## Stop managed development services without deleting inf
 dev-logs: ## Show all service logs (follow mode)
 	@echo " Showing logs (Ctrl+C to exit)..."
 	@tail -f logs/api.log logs/web.log
+
+endif
 
 dev-backend: ## Start backend development server  (API only, foreground)
 	@echo " Starting backend API server..."
@@ -470,7 +499,7 @@ doctor: ## Report this checkout's managed services without starting, stopping, o
 		$(COMPOSE_CMD) ps $(WORKSPACE_CORE_SERVICE); \
 		exit $$status
 
-status: ## Show status of all services
+status-full: ## Show status of full-stack services
 	@echo " Service Status"
 	@echo "================"
 	@echo ""
@@ -506,19 +535,19 @@ test: test-backend test-web ## Run all tests
 
 test-backend: ## Run backend tests
 	@echo " Running backend tests..."
-	uv run pytest src/tests/ -v --tb=short
+	uv run pytest -v --tb=short
 
 test-unit: ## Run unit tests only
 	@echo " Running unit tests..."
-	uv run pytest src/tests/ -m "not integration and not performance" -v --tb=short
+	uv run pytest -m "not integration and not performance" -v --tb=short
 
 test-integration: ## Run integration tests only
 	@echo " Running integration tests..."
-	uv run pytest src/tests/ -m "integration" -v --tb=short
+	uv run pytest -m "integration" -v --tb=short
 
 test-performance: ## Run performance tests only (requires perf infra)
 	@echo " Running performance tests..."
-	uv run pytest src/tests/ -m "performance" -v --tb=short
+	uv run pytest -m "performance" -v --tb=short
 
 test-web: ## Run web tests
 	@echo " Running web tests..."
@@ -530,12 +559,12 @@ test-e2e: ## Run end-to-end tests (requires services running)
 
 test-coverage: ## Run tests with coverage report
 	@echo " Running tests with coverage..."
-	uv run pytest src/tests/ --cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=80
+	uv run pytest --cov=src --cov=plugins/business --cov=plugins/adapters --cov-report=html --cov-report=term-missing --cov-fail-under=80
 	@echo " Coverage report generated: htmlcov/index.html"
 
 test-watch: ## Run tests in watch mode
 	@echo " Running tests in watch mode..."
-	uv run pytest src/tests/ -f
+	uv run pytest -f
 
 # =============================================================================
 # Code Quality
@@ -546,8 +575,8 @@ format: format-backend format-web ## Format all code
 
 format-backend: ## Format Python code
 	@echo " Formatting Python code..."
-	uv run ruff check --fix src/ sdk/
-	uv run ruff format src/ sdk/
+	uv run ruff check --fix src/ sdk/ plugins/business plugins/adapters
+	uv run ruff format src/ sdk/ plugins/business plugins/adapters
 	@echo " Python code formatted"
 
 format-web: ## Format TypeScript code
@@ -562,8 +591,8 @@ lint-backend: plugin-v2-contract-gate ## Lint Python code
 	@echo " Linting Python code..."
 	uv run python scripts/check_refresh_select_execute.py
 	uv run python scripts/check-i18n-gettext.py
-	uv run ruff check src/ sdk/
-	uv run mypy src/ --ignore-missing-imports
+	uv run ruff check src/ sdk/ plugins/business plugins/adapters
+	uv run mypy --explicit-package-bases src/ plugins/business/*/backend plugins/business/agent/engine plugins/adapters/channels/*/backend --ignore-missing-imports
 	uv run pyright
 	@echo " Python code linted"
 
@@ -583,7 +612,7 @@ type-check: type-check-mypy type-check-pyright ## Type check all code
 
 type-check-mypy: ## Run mypy type checking
 	@echo " Running mypy..."
-	uv run mypy src/ --ignore-missing-imports
+	uv run mypy --explicit-package-bases src/ plugins/business/*/backend plugins/business/agent/engine plugins/adapters/channels/*/backend --ignore-missing-imports
 	@echo " mypy passed"
 
 type-check-pyright: ## Run pyright type checking
@@ -1019,13 +1048,14 @@ SANDBOX_PORT?=8765
 SANDBOX_DESKTOP_PORT?=6080
 SANDBOX_TERMINAL_PORT?=7681
 SANDBOX_NAME?=sandbox-mcp-server
+SANDBOX_WORKSPACE_VOLUME?=sandbox-workspace
 SANDBOX_VNC?=tigervnc
 DESKTOP_RESOLUTION?=1920x1080
 ROOT?=0
 
 sandbox-build: ## Build sandbox Docker image
 	@echo "  Building sandbox image..."
-	cd sandbox-mcp-server && docker build -t $(SANDBOX_NAME):latest .
+	cd plugins/business/environments/sandbox-mcp-server && docker build -t $(SANDBOX_NAME):latest .
 	@echo " Sandbox image built"
 
 sandbox-run: ## Start sandbox (VNC=x11vnc for fallback)
@@ -1033,11 +1063,16 @@ sandbox-run: ## Start sandbox (VNC=x11vnc for fallback)
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
 		echo "  Already running. Stop with: make sandbox-stop"; \
 	else \
+		: "$${SANDBOX_SERVICE_AUTH_TOKEN:?Set SANDBOX_SERVICE_AUTH_TOKEN for the sandbox session}"; \
+		export MCP_STATIC_TOKEN="$$SANDBOX_SERVICE_AUTH_TOKEN"; \
 		docker run -d --name $(SANDBOX_NAME) \
-			-p $(SANDBOX_PORT):8765 \
-			-p $(SANDBOX_DESKTOP_PORT):6080 \
-			-p $(SANDBOX_TERMINAL_PORT):7681 \
-			-v sandbox-workspace:/workspace \
+			-p 127.0.0.1:$(SANDBOX_PORT):8765 \
+			-p 127.0.0.1:$(SANDBOX_DESKTOP_PORT):6080 \
+			-p 127.0.0.1:$(SANDBOX_TERMINAL_PORT):7681 \
+			-v $(SANDBOX_WORKSPACE_VOLUME):/workspace \
+			--cap-drop=ALL --security-opt=no-new-privileges \
+			--security-opt=seccomp=plugins/business/environments/sandbox-mcp-server/docker/seccomp-profile.json \
+			-e SANDBOX_SERVICE_AUTH_TOKEN -e MCP_STATIC_TOKEN \
 			-e VNC_SERVER_TYPE=$(SANDBOX_VNC) \
 			-e DESKTOP_RESOLUTION=$(DESKTOP_RESOLUTION) \
 			--memory=4g --cpus=3 --shm-size=1g \
@@ -1132,7 +1167,10 @@ build-web: ## Build web frontend for production
 	cd web && $(PNPM) run build
 	@echo " Web frontend built"
 
-serve: ## Start production server
+serve: ## Serve the new standalone project using deployment-provided release inputs
+	PACKAGE_KERNEL_DATABASE_MODE=standalone PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY="$${PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY:-/run/memstack-initial}" uv run uvicorn src.host.transport.package_kernel:create_app --factory --host 0.0.0.0 --port 8000 --workers 4
+
+serve-full: ## Serve a full-stack database
 	@echo " Starting production server..."
 	uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 --workers 4
 
@@ -1142,9 +1180,9 @@ serve: ## Start production server
 
 helm-build-images: ## Build local Docker images for Docker Desktop Kubernetes
 	@echo " Building Helm validation images..."
-	docker build -t memstack-api:latest .
-	docker build -t memstack-web:latest ./web
-	docker build -t memstack-ray:latest -f Dockerfile.ray .
+	docker build -t memstack-kernel:latest -f Dockerfile.kernel .
+	$(PNPM) --dir web run build:project-packages
+	docker build -t memstack-package-web:latest -f web/Dockerfile.project-packages web
 	@echo " Helm validation images built"
 
 helm-lint: ## Lint the Helm chart

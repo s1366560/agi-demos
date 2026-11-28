@@ -166,6 +166,11 @@ async def _create_legacy_schema(test_url: URL) -> None:
                     tables=tables,
                 )
             )
+            # Signed package selections and graph jobs refer to pre-existing platform records.
+            await connection.exec_driver_sql(
+                "CREATE TABLE agent_run_authorities (id varchar PRIMARY KEY)"
+            )
+            await connection.exec_driver_sql("CREATE TABLE task_logs (id varchar PRIMARY KEY)")
             # Later knowledge migrations require the existing platform memory table.
             await connection.run_sync(
                 lambda sync_connection: Base.metadata.tables["memories"].create(sync_connection)

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.graph_application_authority_v2 import (
     GraphApplicationAuthorityV2,
@@ -466,6 +466,7 @@ async def get_entity(
 @router.get("/entities/{entity_id}/relationships")
 async def get_entity_relationships(
     entity_id: str,
+    project_id: str | None = None,
     relationship_type: str | None = Query(None, description="Filter by relationship type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
@@ -488,6 +489,8 @@ async def get_entity_relationships(
             raise HTTPException(status_code=404, detail=_("Entity not found"))
 
         entity_project_id = entity_props.get("project_id")
+        if project_id is not None and project_id != entity_project_id:
+            raise HTTPException(status_code=404, detail=_("Entity not found"))
         await _ensure_graph_project_access(entity_project_id, current_user, db)
 
         page = await graph_store.get_entity_relationships(
@@ -495,7 +498,7 @@ async def get_entity_relationships(
             relationship_type=relationship_type,
             limit=limit,
             project_id=entity_project_id,
-            is_superuser=getattr(current_user, "is_superuser", False),
+            is_superuser=project_id is None and getattr(current_user, "is_superuser", False),
         )
         relationships = []
         for r in page["relationships"]:

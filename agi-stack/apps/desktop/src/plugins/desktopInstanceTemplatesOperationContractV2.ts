@@ -4,7 +4,7 @@ import type {
   InstanceTemplateCreateInput,
   InstanceTemplatesQuery,
   InstanceTemplatesScope,
-} from '../features/instance-templates/instanceTemplatesTypes';
+} from '@business/environments/ui/desktop/instance-templates/instanceTemplatesTypes';
 export type DesktopInstanceTemplatesBaseInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
   scope: InstanceTemplatesScope;

@@ -8,16 +8,16 @@ import type {
   CloudMemoryClient,
   CloudMemoryCommand,
   CloudMemoryResponse,
-} from '../features/project-knowledge/cloudMemoryClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import {
   prepareCloudMemoryCommand,
   prepareCloudMemoryOptions,
 } from '../features/project-knowledge/cloudMemoryValidation';
-import { parseMemoryV2 } from '../features/project-knowledge/cloudMemoryProjection';
+import { parseMemoryV2 } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryProjection';
 import {
   isRecord,
   projectKnowledgeError,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectMemoriesRuntimeConfigV2,

@@ -13,7 +13,7 @@ const MODULES = Object.freeze([
 ]);
 
 function inlineScriptOf(moduleSource) {
-  const match = moduleSource.match(/<script>([\s\S]*?)<\/script>/u);
+  const match = moduleSource.match(/<script(?: nonce="[^"]+")?>([\s\S]*?)<\/script>/u);
   assert.ok(match, 'plugin renderer module must embed exactly one inline bootstrap script');
   return match[1];
 }
@@ -55,8 +55,8 @@ test('plugin renderer srcdoc CSP pins its own bootstrap script by sha256', () =>
 
 test('shell CSP admits exactly the pinned plugin renderer scripts for srcdoc inheritance', () => {
   // about:srcdoc documents initialize their CSP list from the embedder, so the
-  // shell policy must also allow the two builtin sandbox bootstrap scripts.
-  for (const modulePath of MODULES) {
+  // shell policy must allow the host-owned bootstrap for every document type.
+  for (const modulePath of [...MODULES, '../../packages/plugin-slots/src/signedSlotDocument.ts']) {
     const hash = scriptHashOf(source(modulePath));
     assert.ok(
       shellCsp.includes(`'${hash}'`),

@@ -37,9 +37,10 @@ _MAX_REVISION = (1 << 63) - 1
 class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
     """Postgres-authoritative context store with SQLite-compatible unit behavior."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, require_tenant_membership: bool = False) -> None:
         super().__init__()
         self._session = session
+        self._require_tenant_membership = require_tenant_membership
 
     @override
     async def get_accessible(self, user_id: str) -> WorkspaceContextAccess | None:
@@ -73,12 +74,13 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                 select(Project.tenant_id, Project.id, UserProject.role, UserTenant.role)
                 .select_from(UserProject)
                 .join(Project, Project.id == UserProject.project_id)
-                .outerjoin(
+                .join(
                     UserTenant,
                     and_(
                         UserTenant.user_id == UserProject.user_id,
                         UserTenant.tenant_id == Project.tenant_id,
                     ),
+                    isouter=not self._require_tenant_membership,
                 )
                 .where(UserProject.user_id == user_id)
                 .order_by(Project.tenant_id.asc(), Project.id.asc())
@@ -209,6 +211,9 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                 or existing_event.to_project_id != request.project_id
             ):
                 raise WorkspaceContextError(WorkspaceContextErrorCode.IDEMPOTENCY_CONFLICT)
+            if self._require_tenant_membership:
+                await self._require_membership(user_id, request.tenant_id)
+                await self._require_project(user_id, request.tenant_id, request.project_id)
             return WorkspaceContextSwitchOutcome(
                 context=self._snapshot_from_event(existing_event),
                 changed=False,
@@ -307,12 +312,13 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                 select(UserProject.role, UserTenant.role)
                 .select_from(UserProject)
                 .join(Project, Project.id == UserProject.project_id)
-                .outerjoin(
+                .join(
                     UserTenant,
                     and_(
                         UserTenant.user_id == UserProject.user_id,
                         UserTenant.tenant_id == Project.tenant_id,
                     ),
+                    isouter=not self._require_tenant_membership,
                 )
                 .where(
                     UserProject.user_id == user_id,

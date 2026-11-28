@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Automation",
+    "zh": "自动化"
+  },
+  "description": {
+    "en": "Edit schedules, run workflows, and browse project playbooks.",
+    "zh": "编辑定时任务、运行工作流并查阅项目剧本。"
+  },
+  "icon": "workflow"
+}

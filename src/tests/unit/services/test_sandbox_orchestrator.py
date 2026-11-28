@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.services.sandbox_orchestrator import (
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import (
     CommandResult,
     DesktopConfig,
     DesktopStatus,
@@ -201,7 +201,7 @@ class TestSandboxOrchestrator:
 
     def test_register_sandbox_type_log_omits_sandbox_id(self, orchestrator, caplog):
         """Test sandbox type registration debug log omits raw sandbox IDs."""
-        caplog.set_level(logging.DEBUG, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.DEBUG, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         orchestrator.register_sandbox_type("secret-sandbox-id", "local")
 
@@ -211,7 +211,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
         ]
         assert len(target_records) == 1
         message = target_records[0].getMessage()
@@ -349,7 +349,7 @@ class TestSandboxOrchestrator:
     async def test_stop_desktop_error(self, orchestrator, mock_adapter, caplog):
         """Test desktop stop with error logs without raw sandbox IDs or exception text."""
         mock_adapter.call_tool.side_effect = RuntimeError("desktop stop secret token")
-        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.ERROR, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         result = await orchestrator.stop_desktop("sb-123")
 
@@ -357,7 +357,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.ERROR
         ]
         assert len(target_records) == 1
@@ -476,7 +476,7 @@ class TestSandboxOrchestrator:
             ],
             "is_error": False,
         }
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         status = await orchestrator.start_terminal("sb-123")
 
@@ -484,7 +484,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.WARNING
         ]
         assert len(target_records) == 1
@@ -503,7 +503,7 @@ class TestSandboxOrchestrator:
     ):
         """Test terminal start failure logs without raw sandbox IDs or exception text."""
         mock_adapter.call_tool.side_effect = RuntimeError("terminal start secret token")
-        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.ERROR, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         with pytest.raises(RuntimeError):
             await orchestrator.start_terminal("sb-123")
@@ -511,7 +511,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.ERROR
         ]
         assert len(target_records) == 1
@@ -547,7 +547,7 @@ class TestSandboxOrchestrator:
     ):
         """Test terminal stop failure logs without raw sandbox IDs or exception text."""
         mock_adapter.call_tool.side_effect = RuntimeError("terminal stop secret token")
-        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.ERROR, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         result = await orchestrator.stop_terminal("sb-123")
 
@@ -555,7 +555,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.ERROR
         ]
         assert len(target_records) == 1
@@ -724,7 +724,7 @@ class TestSandboxOrchestrator:
             "is_error": True,
             "error": "desktop status leaked secret desktop-empty-secret-9753",
         }
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         status = orchestrator._parse_desktop_result(result)
 
@@ -733,7 +733,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.WARNING
         ]
         assert len(target_records) == 1
@@ -762,7 +762,7 @@ class TestSandboxOrchestrator:
             "content": [{"text": secret_content}],
             "is_error": False,
         }
-        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.ERROR, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         status = orchestrator._parse_desktop_result(result)
 
@@ -771,7 +771,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.ERROR
         ]
         assert len(target_records) == 1
@@ -827,7 +827,7 @@ class TestSandboxOrchestrator:
             "content": [{"text": secret_content}],
             "is_error": False,
         }
-        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.ERROR, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         status = orchestrator._parse_terminal_result(result)
 
@@ -836,7 +836,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.ERROR
         ]
         assert len(target_records) == 1
@@ -864,7 +864,7 @@ class TestSandboxOrchestrator:
             "is_error": True,
             "error": "terminal status leaked secret terminal-empty-secret-8642",
         }
-        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+        caplog.set_level(logging.WARNING, logger="plugins.business.environments.backend.sandbox.sandbox_orchestrator")
 
         status = orchestrator._parse_terminal_result(result)
 
@@ -873,7 +873,7 @@ class TestSandboxOrchestrator:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_orchestrator"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_orchestrator"
             and record.levelno >= logging.WARNING
         ]
         assert len(target_records) == 1

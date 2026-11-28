@@ -16,6 +16,16 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
             .operation
             .select_index_build(&f.state, &f.auth, &build, None)
             .unwrap();
+        let observer =
+            rusqlite::Connection::open(f.directory.0.join("knowledge/memories.db")).unwrap();
+        observer.execute_batch(
+            "CREATE TABLE observed_renewals(previous INTEGER NOT NULL, renewed INTEGER NOT NULL);
+             CREATE TRIGGER capture_renewal AFTER UPDATE OF expires_at_ms ON knowledge_index_jobs
+             WHEN OLD.state = 'leased' AND NEW.state = 'leased' AND NEW.expires_at_ms > OLD.expires_at_ms
+             BEGIN
+                 INSERT INTO observed_renewals VALUES (OLD.expires_at_ms, NEW.expires_at_ms);
+             END;",
+        ).unwrap();
         endpoint.pause();
         let task = f.run(
             config.clone(),
@@ -25,7 +35,31 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
             },
         );
         endpoint.entered().await;
-        let observed = watch_lease(&f, 300, LEASE_MS).await;
+        // Observe committed renewals, including those that happened while TLS or
+        // the HTTP handler was starting. Keep the request paused past its initial lease.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let (span, largest_gap): (i64, i64) = observer
+                    .query_row(
+                        "SELECT COALESCE(MAX(renewed)-MIN(previous),0),
+                                COALESCE(MAX(renewed-previous),0) FROM observed_renewals",
+                        [],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .unwrap();
+                assert!(largest_gap < LEASE_MS as i64, "renewal missed its deadline");
+                if span >= LEASE_MS as i64 {
+                    break;
+                }
+                assert!(
+                    !task.is_finished(),
+                    "index job stopped before renewing its lease"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("embedding did not keep its 200ms lease alive");
         if cancel {
             task.abort();
             assert!(task.await.unwrap_err().is_cancelled());
@@ -43,11 +77,6 @@ async fn delayed_embedding_renews_and_cancelled_future_marks_only_current_lease_
                 .unwrap()
                 .is_none());
         } else {
-            assert!(
-                observed.renewed_before_original_deadline,
-                "40ms renewal did not move the 200ms wall lease before it expired: {:?}",
-                observed.samples
-            );
             endpoint.release();
             assert_eq!(
                 task.await.unwrap().unwrap().unwrap().outcome,
@@ -359,53 +388,4 @@ async fn session_expiry_during_post_read_work_discards_the_result() {
         },
     );
     assert!(matches!(result, Err(KnowledgeAuthorityErrorV2::Forbidden)));
-}
-
-#[derive(Debug)]
-struct LeaseWatch {
-    renewed_before_original_deadline: bool,
-    samples: Vec<(i64, Result<i64, String>)>,
-}
-
-async fn watch_lease(fixture: &Fixture, wall_ms: u64, lease_ms: u64) -> LeaseWatch {
-    let started = std::time::Instant::now();
-    let mut samples = Vec::new();
-    let mut previous: Option<i64> = None;
-    let mut renewed_before_original_deadline = false;
-    while started.elapsed() < std::time::Duration::from_millis(wall_ms) {
-        let now = chrono::Utc::now().timestamp_millis();
-        let expiry = read_index_expiry(fixture);
-        if let (Some(prior), Ok(expiry)) = (previous, expiry.clone()) {
-            // A later sample can observe an on-time renewal after the old deadline.
-            // An advanced lease expires exactly one lease duration after renewal.
-            if expiry > prior && expiry.abs_diff(prior) < lease_ms {
-                renewed_before_original_deadline = true;
-            }
-        }
-        if let Ok(expiry) = expiry {
-            previous = Some(expiry);
-        }
-        samples.push((now, expiry));
-        tokio::task::yield_now().await;
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    LeaseWatch {
-        renewed_before_original_deadline,
-        samples,
-    }
-}
-
-fn read_index_expiry(fixture: &Fixture) -> Result<i64, String> {
-    let connection = rusqlite::Connection::open(fixture.directory.0.join("knowledge/memories.db"))
-        .map_err(|error| error.to_string())?;
-    connection
-        .busy_timeout(std::time::Duration::from_millis(20))
-        .map_err(|error| error.to_string())?;
-    connection
-        .query_row(
-            "SELECT expires_at_ms FROM knowledge_index_jobs",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|error| error.to_string())
 }

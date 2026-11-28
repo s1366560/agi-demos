@@ -5,8 +5,8 @@ import {
   type PluginDefinitionV2,
 } from '@agistack/plugin-runtime';
 
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
-import type { ProjectPlaybooksEventSource } from '../features/project-playbooks/projectPlaybooksEventSource';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
+import type { ProjectPlaybooksEventSource } from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksEventSource';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectPlaybooksEventsConfigV2,

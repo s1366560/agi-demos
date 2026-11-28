@@ -106,7 +106,7 @@ def _make_subagent(name: str = "test-agent") -> SubAgent:
 
 
 def _make_react_agent(**kwargs):
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
     defaults = {
         "model": "test-model",
@@ -170,7 +170,7 @@ class TestTopologicalSort:
     """Test _topological_sort_subtasks."""
 
     def test_no_dependencies(self):
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         tasks = [
             SubTask(id="t1", description="Task 1"),
@@ -182,7 +182,7 @@ class TestTopologicalSort:
         assert "t1" in ids and "t2" in ids
 
     def test_linear_chain(self):
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         tasks = [
             SubTask(id="t1", description="Task 1"),
@@ -194,7 +194,7 @@ class TestTopologicalSort:
         assert ids == ["t1", "t2", "t3"]
 
     def test_diamond_deps(self):
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         tasks = [
             SubTask(id="t1", description="Root"),

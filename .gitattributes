@@ -1,0 +1,5 @@
+# esbuild preserves whitespace inside third-party CSS and GLSL template literals.
+plugins/business/automation/ui/tenant-activity.js whitespace=-blank-at-eol
+plugins/business/environments/ui/runtime-pool.js whitespace=-blank-at-eol
+plugins/business/environments/ui/tenant-deploy.js whitespace=-blank-at-eol
+plugins/business/knowledge/workers/graph_projection/ui/project-search.js whitespace=-blank-at-eol

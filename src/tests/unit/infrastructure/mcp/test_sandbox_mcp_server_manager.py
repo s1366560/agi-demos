@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
+from plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager import (
+    SandboxMCPServerManager,
+)
 from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPServerStatus,
     SandboxMCPToolCallResult,
@@ -58,7 +60,7 @@ class TestSandboxMCPServerManager:
         ]
         caplog.set_level(
             logging.INFO,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.install_and_start(
@@ -73,7 +75,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Sandbox ready" in message
         assert "MCP server started" in message
@@ -110,7 +112,7 @@ class TestSandboxMCPServerManager:
         )
         caplog.set_level(
             logging.INFO,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.install_and_start(
@@ -126,7 +128,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to install MCP server" in message
         assert "secret-sandbox-id" not in message
@@ -146,7 +148,7 @@ class TestSandboxMCPServerManager:
         ]
         caplog.set_level(
             logging.INFO,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.install_and_start(
@@ -162,7 +164,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to start MCP server" in message
         assert "secret-sandbox-id" not in message
@@ -200,7 +202,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = ConnectionError("stop secret token")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.stop_server(
@@ -212,7 +214,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to stop MCP server" in message
         assert "secret-project-id" not in message
@@ -301,7 +303,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = RuntimeError("call secret token")
         caplog.set_level(
             logging.ERROR,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.call_tool(
@@ -316,7 +318,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Error calling tool" in message
         assert "secret-project-id" not in message
@@ -333,7 +335,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = RuntimeError("visibility secret token")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         visibility = await mgr.get_tool_visibility(
@@ -346,7 +348,7 @@ class TestSandboxMCPServerManager:
         target_records = [
             record
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         ]
         assert len(target_records) == 1
         message = target_records[0].getMessage()
@@ -366,7 +368,7 @@ class TestSandboxMCPServerManager:
         resource.read_resource.side_effect = RuntimeError("read secret token private://doc")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.read_resource(
@@ -380,7 +382,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "read_resource failed" in message
         assert "secret-project-id" not in message
@@ -402,7 +404,7 @@ class TestSandboxMCPServerManager:
         resource.get_sandbox_id.return_value = "secret-sandbox-id"
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         resources = await mgr.list_resources(
@@ -414,7 +416,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "list_resources failed" in message
         assert "secret-project-id" not in message
@@ -446,7 +448,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = RuntimeError("list secret token for secret-project-id")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         servers = await mgr.list_servers(project_id="secret-project-id")
@@ -455,7 +457,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to list MCP servers" in message
         assert "secret-project-id" not in message
@@ -484,7 +486,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = RuntimeError("prompt secret token")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         prompts = await mgr.list_prompts(
@@ -496,7 +498,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to list MCP prompts" in message
         assert "secret-project-id" not in message
@@ -528,7 +530,7 @@ class TestSandboxMCPServerManager:
         resource.execute_tool.side_effect = RuntimeError("log level secret token")
         caplog.set_level(
             logging.WARNING,
-            logger="src.application.services.sandbox_mcp_server_manager",
+            logger="plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager",
         )
 
         result = await mgr.set_log_level(
@@ -541,7 +543,7 @@ class TestSandboxMCPServerManager:
         message = "\n".join(
             record.getMessage()
             for record in caplog.records
-            if record.name == "src.application.services.sandbox_mcp_server_manager"
+            if record.name == "plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager"
         )
         assert "Failed to set MCP log level" in message
         assert "secret-project-id" not in message

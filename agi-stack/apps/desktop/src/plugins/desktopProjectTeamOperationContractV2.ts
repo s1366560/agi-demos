@@ -7,7 +7,7 @@ import {
   type ProjectTeamRole,
   type ProjectTeamSnapshot,
 } from '../features/project-knowledge/projectTeamClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectTeamLoadOperationInputV2 = Readonly<{

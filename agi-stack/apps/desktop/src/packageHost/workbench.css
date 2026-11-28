@@ -1,0 +1,26 @@
+.desktop-package-workbench {
+  box-sizing: border-box;
+  height: 100dvh;
+  overflow: auto;
+  padding: clamp(1rem, 3vw, 3rem);
+  background: var(--desktop-bg, Canvas);
+  color: var(--desktop-text, CanvasText);
+}
+.desktop-package-workbench > button {
+  margin-bottom: 1rem;
+}
+.desktop-package-workbench .project-business-navigation,
+.package-market-scope {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.desktop-package-workbench iframe {
+  width: 100%;
+}
+
+.workbench-content > .desktop-package-workbench {
+  height: 100%;
+  min-height: 0;
+}

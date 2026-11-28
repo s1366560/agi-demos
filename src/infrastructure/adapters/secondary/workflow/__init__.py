@@ -1,6 +1,6 @@
 """Asyncio-based workflow engine implementation."""
 
-from src.infrastructure.adapters.secondary.workflow.asyncio_workflow_engine import (
+from plugins.business.automation.workflow.engine import (
     AsyncioWorkflowEngine,
 )
 

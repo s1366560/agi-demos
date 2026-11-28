@@ -101,6 +101,29 @@ def read_bundle_archive_v2(
     )
 
 
+def declared_bundle_permissions_v2(raw: bytes) -> frozenset[str]:
+    """Read untrusted permission names for inspection. Admission verifies the entire archive."""
+    source = "project-inspect"
+    if len(raw) > MAX_BUNDLE_BYTES_V2:
+        raise BundleArchiveV2Error("bundle_too_large", "package exceeds inspection size limit")
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            descriptor = archive.getinfo(BUNDLE_DESCRIPTOR_V2)
+            if descriptor.file_size > MAX_BUNDLE_DESCRIPTOR_BYTES_V2:
+                raise BundleArchiveV2Error(
+                    "bundle_descriptor_too_large", "descriptor exceeds size limit"
+                )
+            files = {BUNDLE_DESCRIPTOR_V2: archive.read(descriptor)}
+    except (KeyError, zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError) as exc:
+        raise BundleArchiveV2Error(
+            "bundle_read_failed", "cannot inspect package descriptor"
+        ) from exc
+    manifest = _parse_bundle_descriptor_v2(files, source=source)
+    return frozenset(
+        permission for plugin in manifest.manifests for permission in plugin.permissions
+    )
+
+
 def parse_bundle_archive_v2(
     raw: bytes,
     *,

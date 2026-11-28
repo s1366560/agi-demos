@@ -31,8 +31,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 
 @pytest.fixture(autouse=True)
 async def _project_settings_v2_runtime(test_app, monkeypatch):
+    from plugins.business.environments.backend.sandbox import sandbox_projection
     from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
-    from src.infrastructure.plugins.v2 import sandbox_projection
 
     monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
     purge = AsyncMock()

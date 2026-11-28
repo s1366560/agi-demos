@@ -1,0 +1,28 @@
+{
+  "name": "@memstack/knowledge-pages",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-router-dom": "7.11.0",
+    "i18next": "25.7.3",
+    "react-i18next": "16.5.1",
+    "lucide-react": "0.562.0",
+    "use-debounce": "10.1.0",
+    "antd": "6.1.2",
+    "@tanstack/react-virtual": "3.13.18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "cytoscape": "3.33.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.2",
+    "postcss": "8.5.6",
+    "@tailwindcss/postcss": "4.1.18",
+    "tailwindcss": "4.1.18"
+  }
+}

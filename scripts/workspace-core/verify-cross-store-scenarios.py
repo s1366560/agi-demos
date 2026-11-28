@@ -110,8 +110,17 @@ def _run_sqlite_scenarios(resolved: Mapping[str, Mapping[str, str]]) -> None:
     for pair in resolved.values():
         package, target = _cargo_target(pair["sqliteFile"])
         subprocess.run(
-            ["cargo", "test", "-p", package, "--test", target, pair["sqliteTest"], "--locked"],
-            cwd=RUST_ROOT,
+            [
+                str(REPO_ROOT / "scripts/avernet-bcs/cargo.sh"),
+                "test",
+                "-p",
+                package,
+                "--test",
+                target,
+                pair["sqliteTest"],
+                "--locked",
+            ],
+            cwd=REPO_ROOT,
             check=True,
         )
 

@@ -1,3 +1,4 @@
+import { fullDesktop, sidecarRuntimeProfile } from '../desktopProfile';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -35,6 +36,11 @@ export function sidecarRequestTimeoutMs(
   ) {
     return Math.max(configuredTimeoutMs, LOCAL_RUN_EXECUTION_TIMEOUT_MS);
   }
+  if (command === 'device_plugin_manage_v2' && isRecord(args?.input) && isRecord(args.input.operation) &&
+      args.input.operation.action === 'invoke' && args.input.operation.tool === 'local_chat') {
+    return Math.max(configuredTimeoutMs, LOCAL_RUN_EXECUTION_TIMEOUT_MS);
+  }
+  if (!fullDesktop) return configuredTimeoutMs;
   const input = args?.input;
   if (!input || typeof input !== 'object' || Array.isArray(input)) return configuredTimeoutMs;
   const value = input as Record<string, unknown>;
@@ -197,7 +203,7 @@ export class SidecarSupervisor {
 
   async invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T> {
     const stopRevision = this.#stopRevision;
-    if (command !== 'local_runtime_configure') {
+    if (!fullDesktop || command !== 'local_runtime_configure') {
       return this.#invokeReady<T>(command, args, stopRevision);
     }
     const request = args === undefined ? undefined : structuredClone(args);
@@ -227,6 +233,7 @@ export class SidecarSupervisor {
     args: Record<string, unknown>,
     signal: AbortSignal,
   ): Promise<T> {
+    if (!fullDesktop) throw new Error('sidecar request is not supported');
     if (signal.aborted) throw new DOMException('MCP App request cancelled', 'AbortError');
     if (command !== 'mcp_app_operation' || args.operation !== 'tools/call' ||
         typeof args.tabId !== 'string' || typeof args.mountNonce !== 'string') {
@@ -288,7 +295,7 @@ export class SidecarSupervisor {
           new DOMException('MCP App request cancelled', 'AbortError'),
           { cancellationConfirmed: confirmed },
         ));
-        if (this.#child === child && this.#identity && child.stdin.writable) {
+        if (fullDesktop && this.#child === child && this.#identity && child.stdin.writable) {
           // The transport id never crosses renderer IPC. Cancellation uses this
           // same private pipe and cannot start or address a replacement process.
           // Ignore the original response while aborting: it can precede the
@@ -323,6 +330,7 @@ export class SidecarSupervisor {
   }
 
   async #restoreBrowserBridge(child: ChildProcessWithoutNullStreams): Promise<void> {
+    if (!fullDesktop) return;
     const previous = this.#bridgeConfiguration;
     if (!previous) return;
     for (;;) {
@@ -465,7 +473,7 @@ export class SidecarSupervisor {
           return;
         }
         if (this.#child !== child || !this.#identity) return;
-        if (message && typeof message === 'object' &&
+        if (fullDesktop && message && typeof message === 'object' &&
           (message as { type?: unknown }).type === 'computer_use_input') {
           const input = parseComputerUseInput((message as { input?: unknown }).input);
           if (input) {
@@ -507,6 +515,7 @@ export class SidecarSupervisor {
           workspaceRoot: this.#options.workspaceRoot,
           localKnowledgeAcceptance: this.#options.localKnowledgeAcceptance,
           workspaceCoreBinaryPath: this.#options.workspaceCoreBinaryPath,
+          runtimeProfile: sidecarRuntimeProfile,
           legacyDataDirectories: this.#options.legacyDataDirectories,
         })}\n`,
         (error) => {

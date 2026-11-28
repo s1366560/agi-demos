@@ -439,6 +439,7 @@ async fn subagent_host_emits_registered_execution_identity_for_each_real_invocat
         .is_some());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn subagent_websocket_control_returns_the_existing_ack_channel_and_steers_the_child() {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;

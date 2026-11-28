@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { hostControlClient as api } from '../../services/client/hostControlClient';
 import { useNotificationStore } from '../../stores/notification';
 
 // Mock the API module
 // Note: httpClient.get already returns response.data, so mock should return the data directly
-vi.mock('../../services/api', () => ({
-  default: {
+vi.mock('../../services/client/hostControlClient', () => ({
+  hostControlClient: {
     get: vi.fn().mockResolvedValue({ notifications: [] }),
     put: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -41,7 +42,6 @@ describe('Notification Store', () => {
 
   describe('fetchNotifications', () => {
     it('should fetch notifications successfully', async () => {
-      const api = (await import('../../services/api')).default;
       const mockNotifications = [
         {
           id: '1',
@@ -82,7 +82,6 @@ describe('Notification Store', () => {
     });
 
     it('should fetch unread only notifications', async () => {
-      const api = (await import('../../services/api')).default;
       const mockNotifications = [
         {
           id: '1',
@@ -110,7 +109,6 @@ describe('Notification Store', () => {
     });
 
     it('should ignore stale fetch responses from older requests', async () => {
-      const api = (await import('../../services/api')).default;
       const oldRequest = deferred<{
         notifications: Array<{
           id: string;
@@ -164,7 +162,6 @@ describe('Notification Store', () => {
     });
 
     it('should handle fetch errors gracefully', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.get).mockRejectedValue(new Error('Network error'));
 
       const { fetchNotifications } = useNotificationStore.getState();
@@ -181,7 +178,6 @@ describe('Notification Store', () => {
     });
 
     it('should set loading state during fetch', async () => {
-      const api = (await import('../../services/api')).default;
 
       // Create a promise that we can control
       let resolveFetch: (value: { notifications: [] }) => void;
@@ -207,7 +203,6 @@ describe('Notification Store', () => {
 
   describe('markAsRead', () => {
     it('should mark notification as read successfully', async () => {
-      const api = (await import('../../services/api')).default;
       // api.put returns response.data directly
       vi.mocked(api.put).mockResolvedValue({ success: true });
 
@@ -238,7 +233,6 @@ describe('Notification Store', () => {
     });
 
     it('should not decrease unread count when notification is already read', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.put).mockResolvedValue({ success: true });
 
       useNotificationStore.setState({
@@ -274,7 +268,6 @@ describe('Notification Store', () => {
     });
 
     it('should not decrease unread count when notification is missing locally', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.put).mockResolvedValue({ success: true });
 
       const notifications = [
@@ -302,7 +295,6 @@ describe('Notification Store', () => {
     });
 
     it('should handle markAsRead errors gracefully', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.put).mockRejectedValue(new Error('Network error'));
 
       useNotificationStore.setState({
@@ -337,7 +329,6 @@ describe('Notification Store', () => {
 
   describe('markAllAsRead', () => {
     it('should mark all notifications as read successfully', async () => {
-      const api = (await import('../../services/api')).default;
       // api.put returns response.data directly
       vi.mocked(api.put).mockResolvedValue({
         success: true,
@@ -379,7 +370,6 @@ describe('Notification Store', () => {
     });
 
     it('should handle markAllAsRead errors gracefully', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.put).mockRejectedValue(new Error('Network error'));
 
       const initialState = [
@@ -416,7 +406,6 @@ describe('Notification Store', () => {
 
   describe('deleteNotification', () => {
     it('should delete notification successfully', async () => {
-      const api = (await import('../../services/api')).default;
       // api.delete returns response.data directly
       vi.mocked(api.delete).mockResolvedValue({ success: true });
 
@@ -456,7 +445,6 @@ describe('Notification Store', () => {
     });
 
     it('should decrease unread count when deleting unread notification', async () => {
-      const api = (await import('../../services/api')).default;
       // api.delete returns response.data directly
       vi.mocked(api.delete).mockResolvedValue({ success: true });
 
@@ -484,7 +472,6 @@ describe('Notification Store', () => {
     });
 
     it('should not decrease unread count when deleting read notification', async () => {
-      const api = (await import('../../services/api')).default;
       // api.delete returns response.data directly
       vi.mocked(api.delete).mockResolvedValue({ success: true });
 
@@ -512,7 +499,6 @@ describe('Notification Store', () => {
     });
 
     it('should handle delete errors gracefully', async () => {
-      const api = (await import('../../services/api')).default;
       vi.mocked(api.delete).mockRejectedValue(new Error('Network error'));
 
       const initialState = [

@@ -908,19 +908,8 @@ async def _execute_memory_update(  # noqa: PLR0911
         await session.commit()
         if task_id:
             from src.application.services.memory_update_dispatch import kick_memory_update_job
-            from src.application.services.memory_update_runtime import (
-                extract_with_graph,
-                index_with_session,
-            )
 
-            graph = graph_service
-            embedder = embedding_service
-            factory = session_factory
-            kick_memory_update_job(
-                task_id,
-                extract=lambda payload: extract_with_graph(payload, graph),
-                index=lambda payload: index_with_session(payload, factory, embedder),
-            )
+            kick_memory_update_job(task_id)
 
         logger.info("memory_update: saved memory")
 

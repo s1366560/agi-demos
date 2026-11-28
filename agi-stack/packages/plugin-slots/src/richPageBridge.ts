@@ -1,0 +1,240 @@
+import type { PageScope, PageTarget, RichPage } from "./richPage";
+import { pageSearch, routeMatchPaths, splitPageLocation } from "./pageLocation";
+import { routeRank } from "./richPage";
+
+type Operation = (
+  name: string,
+  payload: Record<string, unknown> | undefined,
+  signal: AbortSignal,
+  progress?: (value: unknown) => void,
+) => Promise<unknown>;
+export interface PageBridge {
+  readonly scope: PageScope;
+  readonly target: PageTarget;
+  readonly pathname: string;
+  readonly locale: string;
+  status(loaded: boolean): void;
+  isRetired?(): boolean;
+  pendingChanged?(count: number): void;
+  pointerCapture?(active: boolean): void;
+  anchorSlot?(name: string, target: string, rect: number[] | null, search: string): void;
+  reviewDevice?(signal: AbortSignal): Promise<void>;
+  openPage?(pluginId: string, pageId: string, destination?: string): void;
+  navigate(path: string, options?: { replace?: boolean }): void;
+  voice?: {
+    start(mode: "dictation" | "voice", conversation: string, signal: AbortSignal, emit: (event: unknown) => void): Promise<void>;
+    mute(id: string, muted: boolean): void;
+  };
+  saveCsv?(text: string, signal: AbortSignal): Promise<void>;
+  invoke: Operation;
+  device?: Operation | undefined;
+}
+
+export function connectPage(
+  port: MessagePort,
+  page: RichPage,
+  bridge: PageBridge,
+) {
+  const pending = new Map<string, AbortController>();
+  let closed = false;
+  function reply(id: string, value: Record<string, unknown>) {
+    if (!closed) port.postMessage({ id, ...value });
+  }
+
+  async function handle(data: unknown) {
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("id" in data) ||
+      typeof data.id !== "string" ||
+      !/^[a-zA-Z0-9-]{1,64}$/.test(data.id)
+    )
+      return;
+    const message = data as Record<string, unknown>;
+    const id = data.id;
+    if (message.method === "cancel") {
+      pending.get(id)?.abort();
+      return;
+    }
+    if (bridge.isRetired?.()) {
+      reply(id, { type: "error", error: "page_release_retired" });
+      return;
+    }
+    if (pending.has(id)) return;
+    if (pending.size >= 16) {
+      reply(id, { type: "error", error: "page_request_limit" });
+      return;
+    }
+    const controller = new AbortController();
+    pending.set(id, controller);
+    bridge.pendingChanged?.(pending.size);
+    try {
+      let value: unknown;
+      if (message.method === "scope") {
+        const location = splitPageLocation(bridge.pathname);
+        value = {
+          ...bridge.scope,
+          ...location,
+          search: pageSearch(location.search, false, page.query_params ?? []),
+          target: bridge.target,
+          platform: bridge.target,
+          locale: bridge.locale,
+          commands: page.commands,
+          voiceAvailable: !!(page.voice_authorization && bridge.voice && bridge.scope.projectId),
+          deviceTools: bridge.target === "desktop-renderer" && bridge.device ? page.device_tools : [],
+        };
+      } else if (message.method === "anchorSlot") {
+        const { name, rect, search = "" } = message;
+        if (typeof name !== "string" || !page.anchored_slots ||
+            !Object.hasOwn(page.anchored_slots, name) || !bridge.anchorSlot ||
+            typeof search !== "string" || search.length > 2048 ||
+            (search !== "" && !search.startsWith("?")) ||
+            (rect !== null && (!Array.isArray(rect) || rect.length !== 4 ||
+              !rect.every(value => typeof value === "number" && Number.isFinite(value)) ||
+              rect[2] < 0 || rect[3] < 0))) throw new Error("page_slot_denied");
+        bridge.anchorSlot(name, page.anchored_slots[name]!, rect, search);
+      } else if (message.method === "voice" || message.method === "muteVoice") {
+        if (!bridge.voice || !page.voice_authorization || !page.commands.includes(page.voice_authorization) || !bridge.scope.projectId)
+          throw new Error("page_capability_unavailable");
+        if (message.method === "muteVoice") {
+          if (typeof message.handle !== "string" || typeof message.muted !== "boolean") throw new Error("page_request_invalid");
+          bridge.voice.mute(message.handle, message.muted);
+        } else {
+          if ((message.mode !== "dictation" && message.mode !== "voice") || typeof message.conversation !== "string" ||
+            !/^[A-Za-z0-9_-]{1,128}$/.test(message.conversation)) throw new Error("page_request_invalid");
+          await bridge.voice.start(message.mode, message.conversation, controller.signal, event => {
+            if (!controller.signal.aborted && !bridge.isRetired?.()) reply(id, {type: "event", value: event});
+          });
+        }
+      } else if (message.method === "reviewDevice") {
+        if (bridge.target !== "desktop-renderer" || !bridge.device || !page.device_tools.length || !bridge.reviewDevice)
+          throw new Error("page_capability_unavailable");
+        await bridge.reviewDevice(controller.signal);
+      } else if (message.method === "openPage") {
+        const { pluginId, pageId, destination } = message;
+        if (
+          typeof pluginId !== "string" || typeof pageId !== "string" ||
+          pluginId.includes("/") || pageId.includes("/") ||
+          (destination !== undefined && (typeof destination !== "string" || destination.length > 8192 || /[\\\u0000-\u001f]/.test(destination))) ||
+          !page.page_links?.includes(pluginId + "/" + pageId) || !bridge.openPage
+        ) throw new Error("page_navigation_denied");
+        bridge.openPage(pluginId, pageId, destination);
+      } else if (message.method === "navigate") {
+        const path = message.path;
+        if (
+          typeof path !== "string" ||
+          path.length > 8192 ||
+          /[\\\u0000-\u001f]/.test(path)
+        )
+          throw new Error("page_navigation_denied");
+        const location = splitPageLocation(path);
+        pageSearch(location.search, true);
+        if (
+          !(page.navigation_routes ?? page.routes).some((route) =>
+            routeMatchPaths(location.pathname, bridge.scope).some(
+              (candidate) => routeRank(route, candidate, bridge.scope) !== null,
+            ),
+          )
+        )
+          throw new Error("page_navigation_denied");
+        bridge.navigate(path, { replace: message.replace === true });
+      } else {
+        const name = message.name,
+          payload = message.payload;
+        if (
+          typeof name !== "string" ||
+          (payload !== undefined &&
+            (!payload ||
+              typeof payload !== "object" ||
+              Array.isArray(payload) ||
+              new TextEncoder().encode(JSON.stringify(payload)).length > 65536))
+        )
+          throw new Error("page_request_invalid");
+        let operation: Operation;
+        if ((message.method === "invoke" || message.method === "exportCsv") && page.commands.includes(name))
+          operation = bridge.invoke;
+        else if (
+          message.method === "device" &&
+          page.device_tools.includes(name) &&
+          bridge.target === "desktop-renderer" &&
+          bridge.device
+        )
+          operation = bridge.device;
+        else throw new Error("page_capability_unavailable");
+        const progress =
+          message.stream === true
+            ? (event: unknown) => {
+                if (!controller.signal.aborted)
+                  reply(id, { type: "event", value: event });
+              }
+            : undefined;
+        value = await operation(
+          name,
+          payload as Record<string, unknown> | undefined,
+          controller.signal,
+          progress,
+        );
+        if (message.method === "exportCsv") {
+          if (controller.signal.aborted || bridge.isRetired?.()) throw new Error("page_release_retired");
+          if (!bridge.saveCsv || !value || typeof value !== "object" || !("csv" in value) || typeof value.csv !== "string")
+            throw new Error("page_export_unavailable");
+          await bridge.saveCsv(value.csv, controller.signal);
+          value = undefined;
+        }
+      }
+      if (!controller.signal.aborted) reply(id, { type: "result", value });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        reply(id, {
+          type: "error",
+          error: error instanceof Error ? error.message : "page_request_failed",
+        });
+    } finally {
+      pending.delete(id);
+      if (!closed) bridge.pendingChanged?.(pending.size);
+    }
+  }
+
+  port.onmessage = (event) => {
+    if (event.data?.type === "page.pointerCapture" && page.anchored_slots && !bridge.isRetired?.()) {
+      if (typeof event.data.active === "boolean") bridge.pointerCapture?.(event.data.active);
+    }
+    else if (event.data?.type === "page.loaded") bridge.status(true);
+    else if (event.data?.type === "page.failed") bridge.status(false);
+    else void handle(event.data);
+  };
+  port.postMessage({ type: "ready" });
+  const root = typeof document !== "undefined" && document.documentElement;
+  const viewport = root && root.ownerDocument.defaultView;
+  const theme = () => {
+    if (root)
+      port.postMessage({
+        type: "appearance",
+        dark: root.dataset.theme === "dark" || root.classList.contains("dark"),
+        highContrast: root.classList.contains("high-contrast"),
+        hostViewportWidth: viewport ? viewport.innerWidth : undefined,
+        lang: bridge.locale,
+      });
+  };
+  // Every signed page mirrors the workbench theme and language, whatever surface it renders.
+  const observer = root ? new MutationObserver(theme) : undefined;
+  if (observer && root) {
+    theme();
+    if (viewport) viewport.addEventListener("resize", theme);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme", "lang"],
+    });
+  }
+  return () => {
+    observer?.disconnect();
+    if (observer && viewport) viewport.removeEventListener("resize", theme);
+    closed = true;
+    for (const call of pending.values()) call.abort();
+    pending.clear();
+    port.close();
+  };
+}
+
+/** Read the package command's bounded NDJSON stream until its terminal record. */
+export { readPackageCommandStream } from "./packageCommandStream";

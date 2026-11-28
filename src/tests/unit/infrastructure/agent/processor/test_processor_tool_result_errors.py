@@ -5,14 +5,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentObserveEvent
-from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.events.converter import EventConverter
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentObserveEvent
+from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
+from src.infrastructure.agent.events.converter import EventConverter
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline

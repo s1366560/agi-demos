@@ -30,7 +30,20 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     && test "$(python -c 'from importlib.metadata import version; print(version("ray"))')" = "${RAY_VERSION}"
 COPY pyproject.toml uv.lock /opt/memstack-ray-dependencies/
 
-COPY . .
+# The worker imports the Python runtime and performs the same bundle verification
+# as the API. Package only the cross-target sources referenced by that bundle.
+COPY src ./src
+COPY config ./config
+COPY shared ./shared
+COPY contracts ./contracts
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY memstack_tools ./memstack_tools
+COPY sdk/memstack-plugin-sdk/src ./sdk/memstack-plugin-sdk/src
+COPY plugins/business ./plugins/business
+COPY plugins/adapters ./plugins/adapters
+RUN --mount=type=bind,target=/context \
+    python /context/docker/ray/copy-module-artifacts.py /context /app
 COPY docker/ray/start-runtime.py /usr/local/libexec/memstack-ray/start-runtime.py
 COPY docker/ray/check-actor-ready.py /usr/local/libexec/memstack-ray/check-actor-ready.py
 

@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    SANDBOX_OPERATION_APPLICATION_MODULE_V2,
+    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
+    SandboxOperationApplicationResolverV2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
@@ -15,11 +20,6 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.composer import load_profile_document_v2
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_operation_services import (
-    SANDBOX_OPERATION_APPLICATION_MODULE_V2,
-    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
-    SandboxOperationApplicationResolverV2,
-)
 
 pytestmark = pytest.mark.unit
 

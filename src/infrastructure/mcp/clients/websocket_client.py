@@ -505,6 +505,8 @@ class MCPWebSocketClient:
         name: str,
         arguments: dict[str, Any],
         timeout: float | None = None,
+        *,
+        progress_token: str | int | None = None,
     ) -> MCPToolResult:
         """
         Call a tool on the MCP server.
@@ -528,10 +530,13 @@ class MCPWebSocketClient:
         logger.info(f"Calling MCP tool: {name}")
         logger.debug("Tool arguments argument_keys=%s", sorted(arguments))
 
+        params = {"name": name, "arguments": arguments}
+        if progress_token is not None:
+            params["_meta"] = {"progressToken": progress_token}
         try:
             result = await self._send_request(
                 "tools/call",
-                {"name": name, "arguments": arguments},
+                params,
                 timeout=request_timeout,
             )
 
@@ -784,7 +789,8 @@ class MCPWebSocketClient:
         Raises:
             ConnectionError: If the WebSocket connection is closed or lost.
         """
-        if not self._ws or self._ws.closed:
+        ws = self._ws
+        if not ws or ws.closed:
             raise ConnectionError(f"WebSocket not connected to {self.url}")
 
         # Only hold lock for ID generation and pending_requests access
@@ -806,12 +812,26 @@ class MCPWebSocketClient:
         try:
             logger.debug(f"Sending WebSocket request: {method} (id={request_id})")
             # Send without holding lock - allows concurrent sends
-            await self._ws.send_json(request)
+            await ws.send_json(request)
 
             # Wait for response with timeout
-            result = await asyncio.wait_for(future, timeout=timeout)
-            return cast(dict[str, Any] | None, result)
+            return cast(dict[str, Any] | None, await asyncio.wait_for(future, timeout=timeout))
 
+        except asyncio.CancelledError:
+            self._pending_requests.pop(request_id, None)
+            if method == "tools/call" and not ws.closed:
+                try:
+                    async with asyncio.timeout(1):
+                        await ws.send_json(
+                            {
+                                "jsonrpc": "2.0",
+                                "method": "notifications/cancelled",
+                                "params": {"requestId": request_id},
+                            }
+                        )
+                except (OSError, RuntimeError, TimeoutError):
+                    pass
+            raise
         except TimeoutError:
             async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)

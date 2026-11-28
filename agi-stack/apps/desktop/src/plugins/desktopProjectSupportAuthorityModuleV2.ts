@@ -12,7 +12,7 @@ import type {
   ProjectSupportListSnapshot,
   ProjectSupportScope,
   ProjectSupportTicket,
-} from '../features/project-support/projectSupportTypes';
+} from '@business/workspace/ui/desktop/project-support/projectSupportTypes';
 import { createDesktopProjectSupportHttpAuthorityV2 } from './desktopProjectSupportHttpProjectionV2';
 import {
   prepareDesktopProjectSupportOperationV2,

@@ -1,0 +1,1007 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "export_csv",
+      "abi": "invoke",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                "office_status": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "is_archived": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "office_status",
+                "is_archived"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "header",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        },
+        "required": [
+          "csv"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "workspace.list-directory",
+      "abi": "invoke",
+      "description": "Run the signed list-directory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.directory.read"
+      ]
+    },
+    {
+      "name": "workspace.read-workspace",
+      "abi": "invoke",
+      "description": "Run the signed read-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.detail.read"
+      ]
+    },
+    {
+      "name": "workspace.create-workspace",
+      "abi": "invoke",
+      "description": "Run the signed create-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.create"
+      ]
+    },
+    {
+      "name": "workspace.update-workspace",
+      "abi": "invoke",
+      "description": "Run the signed update-workspace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.settings.update"
+      ]
+    },
+    {
+      "name": "workspace.list-members",
+      "abi": "invoke",
+      "description": "Run the signed list-members command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.members.read"
+      ]
+    },
+    {
+      "name": "workspace.change-members",
+      "abi": "invoke",
+      "description": "Run the signed change-members command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.members.write"
+      ]
+    },
+    {
+      "name": "workspace.list-posts",
+      "abi": "invoke",
+      "description": "Run the signed list-posts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.posts.read"
+      ]
+    },
+    {
+      "name": "workspace.change-posts",
+      "abi": "invoke",
+      "description": "Run the signed change-posts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.posts.write"
+      ]
+    },
+    {
+      "name": "workspace.list-tasks",
+      "abi": "invoke",
+      "description": "Run the signed list-tasks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.tasks.read"
+      ]
+    },
+    {
+      "name": "workspace.change-tasks",
+      "abi": "invoke",
+      "description": "Run the signed change-tasks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.tasks.write"
+      ]
+    },
+    {
+      "name": "workspace.blackboard-read",
+      "abi": "invoke",
+      "description": "Run the signed blackboard-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.blackboard.read"
+      ]
+    },
+    {
+      "name": "workspace.blackboard-change",
+      "abi": "invoke",
+      "description": "Run the signed blackboard-change command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.blackboard.write"
+      ]
+    },
+    {
+      "name": "workspace.read-project-overview",
+      "abi": "invoke",
+      "description": "Run the signed read-project-overview command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.overview.read"
+      ]
+    },
+    {
+      "name": "workspace.read-group-chat",
+      "abi": "invoke",
+      "description": "Run the signed read-group-chat command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.chat.read"
+      ]
+    },
+    {
+      "name": "workspace.send-group-message",
+      "abi": "invoke",
+      "description": "Run the signed send-group-message command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.workspace.chat.send"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "export-csv",
+      "tool": "export_csv",
+      "payload": {
+        "header": true,
+        "rows": []
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "list-directory",
+      "permissions": [
+        "app.workspace.directory.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.list-directory"
+    },
+    {
+      "id": "read-workspace",
+      "permissions": [
+        "app.workspace.detail.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.read-workspace"
+    },
+    {
+      "id": "create-workspace",
+      "permissions": [
+        "app.workspace.create"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.create-workspace"
+    },
+    {
+      "id": "update-workspace",
+      "permissions": [
+        "app.workspace.settings.update"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.update-workspace"
+    },
+    {
+      "id": "list-members",
+      "permissions": [
+        "app.workspace.members.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.list-members"
+    },
+    {
+      "id": "change-members",
+      "permissions": [
+        "app.workspace.members.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.change-members"
+    },
+    {
+      "id": "list-posts",
+      "permissions": [
+        "app.workspace.posts.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.list-posts"
+    },
+    {
+      "id": "change-posts",
+      "permissions": [
+        "app.workspace.posts.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.change-posts"
+    },
+    {
+      "id": "list-tasks",
+      "permissions": [
+        "app.workspace.tasks.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.list-tasks"
+    },
+    {
+      "id": "change-tasks",
+      "permissions": [
+        "app.workspace.tasks.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.change-tasks"
+    },
+    {
+      "id": "blackboard-read",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.workspace.blackboard.read"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.blackboard-read"
+    },
+    {
+      "id": "blackboard-change",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.workspace.blackboard.write"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.blackboard-change"
+    },
+    {
+      "id": "read-project-overview",
+      "permissions": [
+        "app.workspace.overview.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.read-project-overview"
+    },
+    {
+      "id": "read-group-chat",
+      "permissions": [
+        "app.workspace.chat.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.read-group-chat"
+    },
+    {
+      "id": "send-group-message",
+      "permissions": [
+        "app.workspace.chat.send"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "workspace.send-group-message"
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:a62f5e554a80c0bfca7880caa5edbb4cc6c4728b0f3b6ea475e6c142f0fecc47",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "directory",
+      "title": "Workspace directory",
+      "routes": [
+        "/workspaces",
+        "/tenant/:tenantId/project/:projectId/workspaces"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspaces-web.js",
+        "digest": "sha256:7a931dcff242ffea08a1113195412d06d290087c5b6094a17737d9d139c8dba0"
+      },
+      "commands": [
+        "list-directory"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspaces-web.css",
+        "digest": "sha256:05d000975c016ebfd45585ef70db794a5ffceb247860244e4f4e7565cd8ab098"
+      },
+      "workbench": true,
+      "query_params": [
+        "q",
+        "page"
+      ],
+      "sidebar": {
+        "groups": {
+          "command": "list-directory",
+          "inputs": {
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "constants": {
+            "cards": true
+          },
+          "collection": "rows",
+          "fields": {
+            "id": "id",
+            "label": "name"
+          },
+          "match": {
+            "tenant_id": "tenant",
+            "project_id": "project",
+            "is_archived": "inactive"
+          }
+        },
+        "group": {
+          "command": "read-workspace",
+          "inputs": {
+            "workspace_id": "id"
+          },
+          "fields": {
+            "id": "id",
+            "label": "name"
+          }
+        },
+        "children": {
+          "command": "list-tasks",
+          "inputs": {
+            "workspace_id": "id",
+            "offset": "offset",
+            "limit": "limit"
+          },
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title"
+          },
+          "match": {
+            "workspace_id": "id"
+          }
+        }
+      }
+    },
+    {
+      "id": "tenant-directory",
+      "title": "Workspace directory",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/workspaces"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [],
+      "device_tools": [],
+      "entry": {
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+      }
+    },
+    {
+      "id": "directory-export",
+      "title": "Workspace CSV export",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/export"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/directory.js",
+        "digest": "sha256:493d0270660bbf5fab4f1ad23fe78c1ec9bd82d2211e752c4f58f4b235ad58d3"
+      },
+      "commands": [
+        "export-csv",
+        "list-directory"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/directory.css",
+        "digest": "sha256:e442f607512feecf1d070d827876eac0716d02ef3552f21aee8b931a2bcf4c5c"
+      }
+    },
+    {
+      "id": "overview",
+      "title": "Project overview",
+      "routes": [
+        "/workspace/overview",
+        "/tenant/:tenantId/project/:projectId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "read-project-overview"
+      ],
+      "entry": {
+        "path": "ui/project-overview-web.js",
+        "digest": "sha256:83e3ad2a897c8c2230b46e62d34549aade333b3ff894c24fa63275d314de048b"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/project-overview-web.css",
+        "digest": "sha256:92f0b4393e49b3e6183e23af60bf1319a96dff2b1c47753a4e54b48678e7c27c"
+      },
+      "slots": [
+        "recent-memories@1"
+      ],
+      "workbench": true,
+      "page_links": [
+        "memstack-knowledge/memories",
+        "memstack-knowledge/memory-detail"
+      ]
+    },
+    {
+      "id": "create",
+      "title": "Create workspace",
+      "routes": [
+        "/workspaces/new",
+        "/tenant/:tenantId/project/:projectId/workspaces/new"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workspace-create-web.js",
+        "digest": "sha256:2e8153d46cdd7ce46ed5ae45e4500b8eb9e4f12775d288f173568208effdb7d2"
+      },
+      "commands": [
+        "create-workspace"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/workspace-create-web.css",
+        "digest": "sha256:4ab38188dbf00b35acd443c86b6443d055c4c7534a2abf620f793aaf3c5ee5db"
+      },
+      "workbench": true,
+      "navigation_actions": [
+        "group-create"
+      ]
+    },
+    {
+      "id": "tenant-create",
+      "title": "Create workspace",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/workspaces/new"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [],
+      "device_tools": [],
+      "entry": {
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:2f02cd72087e74dff66367523aa730c1e9fc51d010c5d057da5667090cb45f65"
+      }
+    },
+    {
+      "id": "settings",
+      "title": "Workspace settings",
+      "routes": [
+        "/workspaces/:workspaceId/settings",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/settings"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "workspace-members",
+      "title": "Workspace members",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/members",
+        "/workspaces/:workspaceId/members"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "workspace-posts",
+      "title": "Blackboard posts",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/posts",
+        "/workspaces/:workspaceId/posts"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "workspace-tasks",
+      "title": "Workspace tasks",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks",
+        "/workspaces/:workspaceId/tasks"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "workspace-task-detail",
+      "title": "Task details",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/tasks/:taskId",
+        "/workspaces/:workspaceId/tasks/:taskId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "detail",
+      "title": "Workspace details",
+      "routes": [
+        "/workspaces/:workspaceId",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId",
+        "/tenant/:tenantId/project/:projectId/blackboard",
+        "/project/:projectId/blackboard",
+        "/tenant/:tenantId/project/:projectId/workspaces/:workspaceId/files",
+        "/workspaces/:workspaceId/files"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "blackboard-read",
+        "blackboard-change",
+        "list-directory"
+      ],
+      "entry": {
+        "path": "ui/blackboard-web.js",
+        "digest": "sha256:6758c3433dc24cdc95fcb46d05afeea88b916d605c58db268283cdf36ddf97c1"
+      },
+      "device_tools": [],
+      "style": {
+        "path": "ui/blackboard-web.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "workbench": true,
+      "query_params": [
+        "workspaceId",
+        "tab",
+        "conversationId",
+        "taskId"
+      ],
+      "page_links": [
+        "memstack-agent/chat",
+        "memstack-environments/sandbox-interaction"
+      ]
+    },
+    {
+      "id": "agent-collab",
+      "title": "Workspace chat",
+      "contributes_to": "memstack-agent/collab@1",
+      "routes": [],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/group-chat.js",
+        "digest": "sha256:04c6fb1aab3ea3f6436f0b93607e33c4aa6a0a1e0d32560f162ec98f279d63c5"
+      },
+      "style": {
+        "path": "ui/group-chat.css",
+        "digest": "sha256:53e453134d818053e9c33cef6f6a0a72572c69fb8f12064edeaacb7a9b187db7"
+      },
+      "commands": [
+        "read-group-chat",
+        "send-group-message",
+        "list-directory"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "workspaceId"
+      ]
+    }
+  ]
+}

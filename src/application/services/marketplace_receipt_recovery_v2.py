@@ -97,6 +97,7 @@ class MarketplaceReceiptRecoveryV2:
             allowed_registries=self._allowed_registries,
             on_route_commit=self._on_route_commit,
             superseded_publication=pending,
+            local_distribution=self._host.current_distribution,
         )
         if recovered or pending is None:
             return recovered

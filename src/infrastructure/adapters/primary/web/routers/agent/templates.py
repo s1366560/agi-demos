@@ -12,7 +12,6 @@ from src.domain.model.agent.prompt_template import (
     PromptTemplate,
     TemplateVariable,
 )
-from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -20,7 +19,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.database import (
     get_db,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
 from src.infrastructure.adapters.secondary.persistence.sql_prompt_template_repository import (
     SqlPromptTemplateRepository,
 )

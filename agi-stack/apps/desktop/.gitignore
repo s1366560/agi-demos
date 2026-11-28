@@ -1,5 +1,6 @@
 # electron-vite build output. Electron runs from out/ for preview and packaging.
 out/
+out-compat/
 release/
 build/sidecar/
 browser-qa/report/

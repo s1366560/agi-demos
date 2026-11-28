@@ -10,7 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.automation_command_service import (
+from plugins.business.automation.backend.automation_command_service import (
     AutomationActor,
     AutomationCommandIdempotencyConflictError,
     AutomationCommandRevisionConflictError,

@@ -11,11 +11,11 @@ from uuid import uuid4
 
 import pytest
 
+from plugins.business.agent.engine.processor.goal_evaluator import GoalEvaluator
+from plugins.business.agent.engine.processor.goal_judgment import GOAL_COMPLETION_JUDGE_TOOL_V2
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.llm_providers.llm_types import LLMConfig
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
-from src.infrastructure.agent.processor.goal_evaluator import GoalEvaluator
-from src.infrastructure.agent.processor.goal_judgment import GOAL_COMPLETION_JUDGE_TOOL_V2
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.llm.completion_finish import ProviderCompletionError
 from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
 

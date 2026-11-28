@@ -48,6 +48,7 @@ function fn(ast, name) {
   return nodes(ast, (node) => ts.isFunctionDeclaration(node) && node.name?.text === name)[0];
 }
 function compileFunction(source, bindings, name) {
+  bindings = { fullDesktop: true, ...bindings };
   if (bindings.sandboxDesktopGrants) {
     bindings = {
       ...bindings,
@@ -683,4 +684,26 @@ test('actual local runtime exit retires pending cloud login before and after the
   );
   await rejected;
   assert.deepEqual(saved, []);
+});
+
+test('a failed retirement keeps subsequent vault transitions behind the active mutation', async () => {
+  const admission = new RendererDeliveryAdmissionV2();
+  let unblock;
+  const lock = new Promise(resolve => { unblock = resolve; });
+  const mutations = [];
+  const first = admission.transition(async () => {}, async () => {
+    mutations.push('first');
+    await lock;
+  });
+  const failed = admission.transition(async () => { throw new Error('retirement failed'); },
+    async () => { mutations.push('invalid'); });
+  const rejected = assert.rejects(failed, /retirement failed/u);
+  const last = admission.transition(async () => {}, async () => { mutations.push('last'); });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(mutations, ['first']);
+  assert.throws(() => admission.assertAdmitted(), /authority_transition/u);
+  unblock();
+  await Promise.all([first, rejected, last]);
+  assert.deepEqual(mutations, ['first', 'last']);
+  admission.assertAdmitted();
 });

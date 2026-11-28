@@ -123,7 +123,7 @@ desktop-check: desktop-test ## 桌面:Rust sidecar、renderer 测试，以及一
 
 desktop-test: desktop-deps desktop-cua-repl ## 桌面:Rust sidecar 与 renderer 测试，不重复打 Electron 包
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run $(DESKTOP_WORKSPACE_CORE_SCRIPT)
-	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
+	$(CARGO) build $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar --features legacy-business
 	$(CARGO) test $(DESKTOP_CARGO_PROFILE_FLAG) -p agistack-desktop-sidecar
 	cd $(DESKTOP_APP_DIR) && AGISTACK_REAL_SIDECAR=$(DESKTOP_SIDECAR_BIN) AGISTACK_REAL_WORKSPACE_CORE=$(DESKTOP_WORKSPACE_CORE_BIN) $(PNPM) test
 
@@ -154,11 +154,43 @@ desktop-cua-repl: ## 桌面:暂存独立 Node computer-use REPL
 	cd packages/cua-repl && CI=true $(PNPM) install --ignore-workspace --frozen-lockfile
 	node $(DESKTOP_APP_DIR)/scripts/stage-cua-repl.mjs
 
-run-desktop: desktop-deps desktop-cua-helper desktop-cua-repl ## 启动 Electron 原生客户端与 Rust sidecar
+ifneq ($(filter run-desktop run-desktop-electron,$(MAKECMDGOALS)),)
+MEMSTACK_DEV_ROOT := $(abspath ..)
+include $(dir $(lastword $(MAKEFILE_LIST)))../scripts/dev/profile.mk
+AGISTACK_DESKTOP_PROFILE ?= $(if $(filter full,$(MEMSTACK_DEV_PROFILE)),full,package-host)
+AGISTACK_WEB_CONTROL_PLANE_ORIGIN ?= http://localhost:3000
+AGISTACK_DESKTOP_GRANTS_API_BASE ?= http://127.0.0.1:8000
+# A checkout operator may provision device publisher trust separately from cloud signing trust.
+DESKTOP_DEV_TRUST := $(MEMSTACK_DEV_ROOT)/.cache/desktop-dev/publisher-trust.json
+ifneq ($(wildcard $(DESKTOP_DEV_TRUST)),)
+AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE ?= $(DESKTOP_DEV_TRUST)
+export AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE
+endif
+export AGISTACK_DESKTOP_PROFILE AGISTACK_WEB_CONTROL_PLANE_ORIGIN AGISTACK_DESKTOP_GRANTS_API_BASE
+endif
+
+DESKTOP_PROFILE_OUTPUT = $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),out-compat,out)
+DESKTOP_PROFILE_ENTRY = $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),./out-compat/main/index.js,.)
+
+ifeq ($(AGISTACK_DESKTOP_FIXED_BUILD),1)
+run-desktop: ## Launch the already built Electron host and Sidecar without changing their artifacts
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/main/index.js
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/preload/index.cjs
+	test -s $(DESKTOP_APP_DIR)/$(DESKTOP_PROFILE_OUTPUT)/renderer/index.html
+	test -x "$${AGISTACK_SIDECAR_PATH:-$(CURDIR)/target/debug/agistack-desktop-sidecar}"
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- node node_modules/electron/cli.js $(DESKTOP_PROFILE_ENTRY)
+else
+ifneq ($(filter full compat,$(AGISTACK_DESKTOP_PROFILE)),)
+run-desktop: desktop-cua-helper desktop-cua-repl desktop-full-workspace
+.PHONY: desktop-full-workspace
+desktop-full-workspace: desktop-deps
 	cd $(DESKTOP_APP_DIR) && $(PNPM) run build:workspace-core:debug
-	$(CARGO) build -p agistack-desktop-sidecar
+endif
+run-desktop: desktop-deps ## 启动 Electron 原生客户端与 Rust sidecar
+	$(CARGO) build -p agistack-desktop-sidecar $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),--features legacy-business)
 	cd $(DESKTOP_APP_DIR) && $(PNPM) exec install-electron --no
-	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron
+	@cd $(DESKTOP_APP_DIR) && "$(CURDIR)/scripts/ensure-desktop-grants.sh" -- $(PNPM) run dev:electron $(if $(filter compat,$(AGISTACK_DESKTOP_PROFILE)),--entry $(DESKTOP_PROFILE_ENTRY))
+endif
 
 desktop-grants: ## 桌面:强制重新发放云端数据平面授权(24h 有效,仅本地开发)
 	@AGISTACK_DESKTOP_GRANTS_FORCE=1 ./scripts/ensure-desktop-grants.sh

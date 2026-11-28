@@ -61,6 +61,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY src/ /app/src/
+COPY plugins/business/ /app/plugins/business/
+COPY plugins/adapters/ /app/plugins/adapters/
 COPY alembic/ /app/alembic/
 COPY alembic.ini /app/
 

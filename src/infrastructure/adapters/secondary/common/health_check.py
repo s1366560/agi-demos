@@ -14,20 +14,24 @@ Each health checker returns a HealthStatus with:
 - Additional details (version, etc.)
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from neo4j import AsyncDriver
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+
+if TYPE_CHECKING:
+    from neo4j import AsyncDriver
 
 logger = logging.getLogger(__name__)
 

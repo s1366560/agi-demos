@@ -4,7 +4,7 @@ import type {
   TenantTaskRecord,
   TenantTasksQuery,
   TenantTasksScope,
-} from '../features/tenant/tenantTasksClient';
+} from '@business/workspace/ui/desktop/tenant/tenantTasksClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopTenantTasksOperationInputV2 = Readonly<{

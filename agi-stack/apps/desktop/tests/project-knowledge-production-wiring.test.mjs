@@ -89,12 +89,10 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     'createProjectMemoriesRouteModuleLoader',
     'createProjectEntitiesRouteModuleLoader',
     'createProjectCommunitiesRouteModuleLoader',
-    'createProjectGraphRouteModuleLoader',
     'createProjectTeamController',
     'createProjectMemoriesController',
     'createProjectEntitiesController',
     'createProjectCommunitiesController',
-    'createProjectGraphController',
   ]) {
     assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
     assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
@@ -103,14 +101,12 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     registrySource,
     /project-knowledge[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
-  assert.match(registrySource, /createDesktopProjectGraphClientV2/u);
   assert.match(registrySource, /createDesktopProjectCommunitiesClientV2/u);
   assert.match(registrySource, /createDesktopProjectEntitiesClientV2/u);
   assert.match(registrySource, /createDesktopProjectMemoriesClientV2/u);
   assert.match(registrySource, /createDesktopProjectTeamClientV2/u);
   assert.match(registrySource, /projectCommunitiesOperationsV2/u);
   assert.match(registrySource, /projectEntitiesOperationsV2/u);
-  assert.match(registrySource, /projectGraphOperationsV2/u);
   assert.match(registrySource, /projectMemoriesOperationsV2/u);
   assert.match(registrySource, /projectTeamOperationsV2/u);
   assert.match(
@@ -118,7 +114,6 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/gu,
   );
   assert.match(appSource, /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/gu);
-  assert.match(appSource, /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu);
   assert.match(appSource, /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu);
   assert.match(appSource, /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/gu);
   assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
@@ -126,6 +121,23 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
   assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
   assert.doesNotMatch(registrySource, /createProjectMemoriesClient/u);
   assert.doesNotMatch(registrySource, /createProjectTeamClient/u);
+});
+
+test('cloud graph bookmark mounts the installed project page and local graph uses the device', async () => {
+  const { createAppProjectKnowledgeRouteRegistry } = require(
+    '/tmp/agistack-desktop-test-dist/src/features/navigation/appRouteRegistry.js',
+  );
+  const configRef = { current: cloudConfig };
+  const registry = createAppProjectKnowledgeRouteRegistry({ configRef });
+  const route = registry.byId.get('project-project-graph');
+  const cloud = await route.loader();
+  const element = cloud.Surface({ context: { tenantId: 'tenant-1', projectId: 'project-1' } });
+  assert.equal(element.type.name, 'InstalledRoutePage');
+  assert.equal(element.props.segment, 'graph');
+  assert.equal(element.props.projectId, 'project-1');
+  configRef.current = { ...cloudConfig, mode: 'local' };
+  const local = await route.loader();
+  assert.equal(local.Surface.name, 'NativeKnowledgeGraphRouteSurface');
 });
 
 test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities', async () => {
@@ -360,19 +372,9 @@ test('late native generation changes keep graph and communities closed', async (
   }
 });
 
-for (const [id, suffix, loaderExport, marker] of [
-  [
-    'project-project-communities',
-    'communities',
-    'createProjectCommunitiesRouteModuleLoader',
-    'Local communities',
-  ],
-  [
-    'project-project-graph',
-    'graph',
-    'createProjectGraphRouteModuleLoader',
-    'data-native-knowledge-graph="true"',
-  ],
+for (const [id, suffix, marker] of [
+  ['project-project-communities', 'communities', 'Local communities'],
+  ['project-project-graph', 'graph', 'data-native-knowledge-graph="true"'],
 ])
   test(`production host opens ${suffix} surface after native snapshot admission`, async () => {
     const { snapshot, payload } = await nativeRouteSnapshot();
@@ -382,23 +384,17 @@ for (const [id, suffix, loaderExport, marker] of [
     const {
       NativeMemoriesRouteContextProvider,
     } = require('/tmp/agistack-desktop-test-dist/src/features/project-knowledge/NativeMemoriesRouteContext.js');
-    const { [loaderExport]: createLoader } = require(
-      `/tmp/agistack-desktop-test-dist/src/features/project-knowledge/${suffix === 'graph' ? 'projectGraphRouteModule' : 'projectCommunitiesRouteModule'}.js`,
-    );
     const {
       createDesktopHashRouteHost,
     } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopHashRouteHost.js');
     const {
       DesktopProductionRouterView,
     } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/DesktopProductionRouter.js');
-    const registry = createDesktopProductionRouteRegistry({
-      implementedLoaders: registerDesktopProductionRouteLoaders({
-        [id]: createLoader({
-          createBinding() {
-            throw Error('cloud_binding_called');
-          },
-        }),
-      }),
+    const { createAppProjectKnowledgeRouteRegistry } = require(
+      '/tmp/agistack-desktop-test-dist/src/features/navigation/appRouteRegistry.js',
+    );
+    const registry = createAppProjectKnowledgeRouteRegistry({
+      configRef: { current: { ...cloudConfig, mode: 'local' } },
     });
     const path = `/tenant/${payload.scope.tenant_id}/project/${payload.scope.project_id}/${suffix}`;
     const host = createDesktopHashRouteHost({

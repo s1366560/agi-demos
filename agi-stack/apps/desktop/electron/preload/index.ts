@@ -1,3 +1,4 @@
+import { fullDesktop, packageCommands } from '../desktopProfile';
 import type { McpAppGuestHostEvent } from '../../src/features/chat/mcpAppGuestProtocol';
 const MCP_APP_GUEST_EVENT = 'agistack:mcp-app-guest-event';
 import { requireDeviceMcpRequestV2 } from '../../src/api/deviceMcpContractV2';
@@ -46,7 +47,7 @@ const UPDATE_STATE_CHANNEL = 'agistack:update-state';
 const UPDATE_CHECK_CHANNEL = 'agistack:update-check';
 const UPDATE_RESTART_TO_APPLY_CHANNEL = 'agistack:update-restart-to-apply';
 const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
-const allowedCommands = new Set([
+const allowedCommands = fullDesktop ? new Set([
   'frontend_ready',
   'platform_plugin_authority_select_v2',
   'platform_plugin_renderer_distribution_current_v2',
@@ -55,7 +56,6 @@ const allowedCommands = new Set([
   'platform_plugin_renderer_owner_retire_v2',
   'trusted_session_clear',
   'legacy_local_login_purge',
-  'retire_local_workspace_history',
   'open_device_authorization_url',
   'get_desktop_capabilities',
   'capture_current_display',
@@ -83,6 +83,9 @@ const allowedCommands = new Set([
   'cloud_request_cancel',
   'local_runtime_status',
   'local_runtime_configure',
+  'local_run_execute',
+  'local_run_stop',
+  'package_workspace_choose',
   'choose_workspace_directory',
   'workspace_core_status',
   'browser_bridge_install',
@@ -91,6 +94,7 @@ const allowedCommands = new Set([
   'computer_use_manage_v2',
   'audio_sessions_manage_v2',
   'device_mcp_manage_v2',
+  'device_plugin_manage_v2',
   'mcp_app_guest_open',
   'mcp_app_guest_start',
   'mcp_app_guest_update',
@@ -121,7 +125,7 @@ const allowedCommands = new Set([
   'iab_show_pane',
   'iab_set_bounds',
   'iab_hide_pane',
-]);
+]) : packageCommands;
 
 async function invokeDesktopCommand<T = unknown>(
   command: string,
@@ -130,7 +134,7 @@ async function invokeDesktopCommand<T = unknown>(
   if (!allowedCommands.has(command)) {
     throw new Error('desktop command is not supported');
   }
-  if (command === 'device_mcp_manage_v2') requireDeviceMcpRequestV2(args);
+  if (fullDesktop && command === 'device_mcp_manage_v2') requireDeviceMcpRequestV2(args);
   return ipcRenderer.invoke(DESKTOP_COMMAND_CHANNEL, command, args) as Promise<T>;
 }
 
@@ -263,6 +267,13 @@ function onCloudSessionInvalidated(listener: (payload: unknown) => void): () => 
   return () => ipcRenderer.removeListener(CLOUD_SESSION_INVALID_CHANNEL, wrappedListener);
 }
 
+function onPackageProgress(listener: (payload: unknown) => void): () => void {
+  if (typeof listener !== 'function') throw new Error('Invalid package progress listener');
+  const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown) => listener(payload);
+  ipcRenderer.on('memstack:cloud-package-progress', wrapped);
+  return () => ipcRenderer.removeListener('memstack:cloud-package-progress', wrapped);
+}
+
 function onCloudSocketEvent(listener: (payload: unknown) => void): () => void {
   if (typeof listener !== 'function') {
     throw new Error('Cloud socket listener is invalid');
@@ -369,22 +380,17 @@ contextBridge.exposeInMainWorld(
     runtime: 'electron',
     platform: process.platform,
     core: commandBridge,
-    captureCurrentDisplay,
-    getCapabilities,
-    openWebControlPlane,
+    ...(fullDesktop ? { captureCurrentDisplay, getCapabilities, openWebControlPlane, iab: iabBridge } : {}),
     focusMainWindow,
     windowControls,
-    files: fileBridge,
+    files: fullDesktop ? fileBridge : Object.freeze({ open: openNativeFile }),
     updates: updateBridge,
-    iab: iabBridge,
     events: Object.freeze({
-      onMcpAppGuest,
+      ...(fullDesktop ? { onMcpAppGuest, onCloudSocketEvent, onComputerUseActivity, onComputerUseInput } : {}),
       onSidecarRecovered,
       onOAuthSessionChanged,
       onCloudSessionInvalidated,
-      onCloudSocketEvent,
-      onComputerUseActivity,
-      onComputerUseInput,
+      onPackageProgress,
     }),
   }),
 );

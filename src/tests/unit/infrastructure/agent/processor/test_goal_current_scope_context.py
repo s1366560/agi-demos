@@ -2,8 +2,8 @@
 
 import pytest
 
+from plugins.business.agent.engine.processor.goal_judgment import build_goal_check_context
 from src.infrastructure.agent.native_computer_use.image_messages import tool_image_message
-from src.infrastructure.agent.processor.goal_judgment import build_goal_check_context
 
 pytestmark = pytest.mark.unit
 

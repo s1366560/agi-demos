@@ -37,6 +37,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser, SkillMarkdown
+from plugins.business.agent.skill_validation.validator import AgentSkillsValidator
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.model.agent.skill_source import SkillSource
@@ -74,8 +76,6 @@ from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SkillEvolutionSchedulerProtocolV2,
     current_skill_evolution_scheduler_v2,
 )
-from src.infrastructure.skill.markdown_parser import MarkdownParser, SkillMarkdown
-from src.infrastructure.skill.validator import AgentSkillsValidator
 
 logger = logging.getLogger(__name__)
 

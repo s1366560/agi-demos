@@ -5,11 +5,11 @@ import type {
   TenantBillingTenant,
   TenantBillingUsage,
   TenantInvoice,
-} from '../features/tenant-admin/tenantBillingClient';
+} from '@business/billing/ui/desktop/tenant-admin/tenantBillingClient';
 import {
   TENANT_BILLING_FILE_REASON,
   TENANT_BILLING_LOCAL_REASON,
-} from '../features/tenant-admin/tenantBillingClient';
+} from '@business/billing/ui/desktop/tenant-admin/tenantBillingClient';
 import {
   isRecord,
   observeTenantMembership,

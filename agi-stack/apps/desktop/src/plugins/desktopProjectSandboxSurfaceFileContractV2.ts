@@ -4,7 +4,7 @@ import type {
   SandboxFileEntry,
   SandboxFileContent,
   SandboxFileAuthority,
-} from '../features/sandbox/sandboxRuntimeClient';
+} from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 export function parseFileListing(
   input: unknown,
   expectedPath: string,

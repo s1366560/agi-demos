@@ -1,7 +1,11 @@
+import { fullDesktop } from '../desktopProfile';
+import { authorizePackageEndpoint } from './cloudPluginSettingsEndpointPolicy';
+import { readPackageCommandStream } from '../../../../packages/plugin-slots/src/packageCommandStream';
 import {
   isCloudSandboxDownloadPath,
   requireCloudSandboxFileAuthority,
 } from '../../src/api/cloudSandboxDownloadAuthority';
+import { parseLocalRunRequest } from './localRunRequest';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import type { CloudSessionRefreshOutcome } from './cloudAuthenticationAuthority';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
@@ -99,6 +103,8 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
     reason: 'proactive' | 'unauthorized',
   ): Promise<CloudSessionRefreshOutcome>;
   refreshState?: CloudSessionRefreshState;
+  onPackageProgress?(value: unknown): void;
+  onPackageStreamActivity?(): void;
   withContextSwitch?(
     operation: () => Promise<VaultBoundCloudRequestResult>,
   ): Promise<VaultBoundCloudRequestResult>;
@@ -106,11 +112,13 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
 
 export type CloudRequestExecutionLease = Readonly<{
   signal: AbortSignal;
+  renewPackageStream(): void;
   release(): void;
 }>;
 
 export type CloudRequestExecutionRegistryOptions = Readonly<{
   timeoutMs: number;
+  maxPackageStreamMs?: number;
 }>;
 
 type AuthorizedEndpoint = Readonly<{
@@ -162,17 +170,23 @@ const MIME_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/u;
 type CloudRequestExecution = Readonly<{
   ownerId: number;
   controller: AbortController;
-  timeout: ReturnType<typeof setTimeout>;
+  clearTimers(): void;
 }>;
 
 export class CloudRequestExecutionRegistry {
   readonly #timeoutMs: number;
+  readonly #maxPackageStreamMs: number;
   readonly #executions = new Map<string, CloudRequestExecution>();
 
   constructor(options: CloudRequestExecutionRegistryOptions) {
     if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) {
       throw new Error('cloud request timeout is invalid');
     }
+    const streamLimit = options.maxPackageStreamMs ?? options.timeoutMs;
+    if (!Number.isSafeInteger(streamLimit) || streamLimit < options.timeoutMs) {
+      throw new Error('cloud package stream limit is invalid');
+    }
+    this.#maxPackageStreamMs = streamLimit;
     this.#timeoutMs = options.timeoutMs;
   }
 
@@ -184,25 +198,46 @@ export class CloudRequestExecutionRegistry {
     if (this.#executions.has(id)) throw new Error('cloud request id is already active');
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
+    const started = performance.now();
+    let hardTimer: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
       const execution = this.#executions.get(id);
       if (!execution || execution.controller !== controller) return;
       this.#executions.delete(id);
+      execution.clearTimers();
       controller.abort(new Error('cloud request timed out'));
-    }, this.#timeoutMs);
-    const execution = Object.freeze({ ownerId, controller, timeout });
+    };
+    let idleTimer = setTimeout(expire, this.#timeoutMs);
+    const clearTimers = () => {
+      clearTimeout(idleTimer);
+      clearTimeout(hardTimer);
+    };
+    const execution = Object.freeze({ ownerId, controller, clearTimers });
     this.#executions.set(id, execution);
 
     let released = false;
     return Object.freeze({
       signal: controller.signal,
+      renewPackageStream: () => {
+        if (this.#executions.get(id) !== execution) return;
+        if (!hardTimer) {
+          const remaining = this.#maxPackageStreamMs - (performance.now() - started);
+          if (remaining <= 0) {
+            expire();
+            return;
+          }
+          hardTimer = setTimeout(expire, remaining);
+        }
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(expire, this.#timeoutMs);
+      },
       release: () => {
         if (released) return;
         released = true;
         const current = this.#executions.get(id);
         if (!current || current.controller !== controller) return;
         this.#executions.delete(id);
-        clearTimeout(current.timeout);
+        current.clearTimers();
       },
     });
   }
@@ -212,7 +247,7 @@ export class CloudRequestExecutionRegistry {
     const execution = this.#executions.get(id);
     if (!execution || execution.ownerId !== ownerId) return false;
     this.#executions.delete(id);
-    clearTimeout(execution.timeout);
+    execution.clearTimers();
     execution.controller.abort(new Error('cloud request was cancelled'));
     return true;
   }
@@ -222,7 +257,7 @@ export class CloudRequestExecutionRegistry {
     for (const [requestId, execution] of this.#executions) {
       if (execution.ownerId !== ownerId) continue;
       this.#executions.delete(requestId);
-      clearTimeout(execution.timeout);
+      execution.clearTimers();
       execution.controller.abort(new Error('cloud request owner was destroyed'));
       cancelled += 1;
     }
@@ -233,7 +268,7 @@ export class CloudRequestExecutionRegistry {
     let cancelled = 0;
     for (const [requestId, execution] of this.#executions) {
       this.#executions.delete(requestId);
-      clearTimeout(execution.timeout);
+      execution.clearTimers();
       execution.controller.abort(new Error('cloud request broker is shutting down'));
       cancelled += 1;
     }
@@ -267,6 +302,52 @@ export async function authorizeVaultBoundSandboxDesktopGrant(
     credential: session.credential,
     expiresAt: session.expires_at,
   });
+}
+
+/** Main-only admission material for the private Sidecar control pipe. */
+export async function authorizeDesktopLocalRun(
+  command: 'local_run_execute' | 'local_run_stop',
+  input: unknown,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<Record<string, unknown>> {
+  const { args, conversationId, runId } = parseLocalRunRequest(command, input);
+  const session = await adoptCloudSession(await dependencies.loadTrustedSession(), dependencies);
+  const currentBearer = () => dependencies.refreshState?.credential ?? session.credential;
+  const observe = async (path: string) => {
+    const response = await authorizedFetch(session, dependencies, { path, method: 'GET' });
+    const body = await boundedJson(response, false, currentBearer());
+    dependencies.signal?.throwIfAborted();
+    if (!response.ok) throw new Error('local run scope observation failed');
+    return body;
+  };
+  // A 401 can rotate the token once. All accepted observations must use the same credential.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const context = parseObservedContext(await observe('/api/v1/workspace-context'));
+    const bearer = currentBearer();
+    const identity = await observe('/api/v1/auth/me');
+    if (bearer !== currentBearer()) continue;
+    if (!context.projectId || context.tenantId !== args.tenant_id ||
+        !isRecord(identity) || identity.user_id !== args.user_id) {
+      throw new Error('local run identity or tenant mismatch');
+    }
+    await observeEndpointWorkspaceScope({
+      kind: 'project', tenantId: context.tenantId, projectId: context.projectId, conversationId,
+    }, context, session, dependencies);
+    if (runId !== null) {
+      const summary = await observe(`/api/v1/agent/runs/${encodeURIComponent(runId)}/summary`);
+      if (requireCloudRunSummaryScope(summary, runId, context).conversationId !== conversationId) {
+        throw new Error('local run conversation mismatch');
+      }
+    }
+    if (bearer !== currentBearer()) continue;
+    const latest = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+    if (latest.api_base_url !== session.api_base_url || latest.credential !== bearer) {
+      throw new Error('local run session changed');
+    }
+    dependencies.signal?.throwIfAborted();
+    return { ...args, api_base_url: latest.api_base_url, authorization: `Bearer ${bearer}` };
+  }
+  throw new Error('local run session changed');
 }
 
 export function isIntentionalCloudCancel(error: unknown): boolean {
@@ -310,30 +391,41 @@ export async function executeVaultBoundCloudRequest(
   const endpoint = authorizeEndpoint(request);
   const session = await adoptCloudSession(await dependencies.loadTrustedSession(), dependencies);
   dependencies.signal?.throwIfAborted();
+  const projectCatalog = async () => {
+    const response = await authorizedFetch(session, dependencies, {
+      path: '/api/v1/project-packages/projects/', method: 'GET',
+    });
+    return {status: response.status, body: await boundedJson(response, false, session.credential)};
+  };
+  if (request.method === 'GET' && request.path === '/api/v1/project-packages/projects/') {
+    return projectCatalog();
+  }
+  const tenantCatalog = async () => {
+    const response = await authorizedFetch(session, dependencies, {
+      path: '/api/v1/tenant-packages/tenants', method: 'GET',
+    });
+    return {status: response.status, body: await boundedJson(response, false, session.credential)};
+  };
+  if (request.method === 'GET' && request.path === '/api/v1/tenant-packages/tenants') {
+    return tenantCatalog();
+  }
   const contextResponse = await authorizedFetch(
     session,
     dependencies,
     Object.freeze({ path: '/api/v1/workspace-context', method: 'GET' }),
   );
   const contextBody = await boundedJson(contextResponse, false, session.credential);
-  if (!contextResponse.ok) {
-    return Object.freeze({ status: contextResponse.status, body: contextBody });
-  }
-  const context = await observeEndpointWorkspaceScope(
-    endpoint, parseObservedContext(contextBody), session, dependencies,
-  );
-  assertEndpointScope(endpoint, context);
-  if (request.memory_scope !== undefined) {
-    assertCloudMemoryContext(request.memory_scope, contextBody);
-    const identityResponse = await authorizedFetch(session, dependencies, {
-      path: '/api/v1/auth/me', method: 'GET',
-    });
-    const identityBody = await boundedJson(identityResponse, false, session.credential);
-    dependencies.signal?.throwIfAborted();
-    if (!identityResponse.ok) return Object.freeze({ status: identityResponse.status, body: identityBody });
-    assertCloudMemoryActor(request.memory_scope, identityBody);
-  }
   if (endpoint.kind === 'workspace-context-switch') {
+    const noSelection = contextResponse.status === 404 && isRecord(contextBody) &&
+      isRecord(contextBody.detail) && contextBody.detail.code === 'workspace_context_unavailable';
+    if (!contextResponse.ok && !noSelection) return {status: contextResponse.status, body: contextBody};
+    if (noSelection || parseObservedContext(contextBody).tenantId !== endpoint.tenantId) {
+      // Only an explicit selection may cross the current tenant or initialize empty context.
+      const projects = await projectCatalog();
+      if (projects.status !== 200 || !Array.isArray(projects.body) || !projects.body.some(
+        item => isRecord(item) && item.tenant_id === endpoint.tenantId && item.project_id === request.body?.project_id,
+      )) throw new Error('cloud request tenant scope mismatch');
+    }
     const switchContext = async (): Promise<VaultBoundCloudRequestResult> => {
       dependencies.signal?.throwIfAborted();
       const response = await authorizedFetch(session, dependencies, request);
@@ -345,12 +437,41 @@ export async function executeVaultBoundCloudRequest(
       ? dependencies.withContextSwitch(switchContext)
       : switchContext();
   }
+  let selected: ReturnType<typeof parseObservedContext>;
+  if (contextResponse.ok) selected = parseObservedContext(contextBody);
+  else if (contextResponse.status === 404 && isRecord(contextBody) && isRecord(contextBody.detail)
+      && contextBody.detail.code === 'workspace_context_unavailable'
+      && request.path.startsWith('/api/v1/tenant-packages/') && endpoint.tenantId) {
+    const catalog = await tenantCatalog();
+    if (catalog.status !== 200 || !isRecord(catalog.body) || !Array.isArray(catalog.body.items)
+        || !catalog.body.items.some(item => isRecord(item) && item.tenant_id === endpoint.tenantId)) {
+      throw new Error('cloud request tenant scope mismatch');
+    }
+    selected = {tenantId:endpoint.tenantId, projectId:null, workspaceId:null};
+  } else {
+    return Object.freeze({ status: contextResponse.status, body: contextBody });
+  }
+  assertSingleProjectScope(request, endpoint);
+  const adopted = await adoptVisibleProject(endpoint, selected, session, dependencies);
+  const context = fullDesktop
+    ? await observeEndpointWorkspaceScope(endpoint, adopted, session, dependencies) : adopted;
+  assertEndpointScope(endpoint, context);
+  if (fullDesktop && request.memory_scope !== undefined) {
+    assertCloudMemoryContext(request.memory_scope, contextBody);
+    const identityResponse = await authorizedFetch(session, dependencies, {
+      path: '/api/v1/auth/me', method: 'GET',
+    });
+    const identityBody = await boundedJson(identityResponse, false, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!identityResponse.ok) return Object.freeze({ status: identityResponse.status, body: identityBody });
+    assertCloudMemoryActor(request.memory_scope, identityBody);
+  }
   if (endpoint.kind === 'workspace-context') {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
-  const runReview = cloudRunReviewTarget(request.path);
+  const runReview = fullDesktop ? cloudRunReviewTarget(request.path) : null;
   let summaryIdentity: Readonly<{ conversationId: string }> | null = null;
-  if (runReview?.action === 'changes') {
+  if (fullDesktop && runReview?.action === 'changes') {
     const summaryResponse = await authorizedFetch(session, dependencies, {
       path: `/api/v1/agent/runs/${encodeURIComponent(runReview.runId)}/summary`, method: 'GET',
     });
@@ -362,9 +483,27 @@ export async function executeVaultBoundCloudRequest(
     summaryIdentity = requireCloudRunSummaryScope(summaryBody, runReview.runId, context);
   }
   const response = await authorizedFetch(
-    session, activityDeliveryDependencies(request, dependencies), request,
+    session, fullDesktop ? activityDeliveryDependencies(request, dependencies) : dependencies, request,
   );
-  if (request.response?.kind === 'binary' && response.ok) {
+  if (response.ok && request.method === 'POST' &&
+      /^\/api\/v1\/(?:platform-plugins\/v2\/optional-business|tenant-packages)\/[a-z0-9][a-z0-9._-]{0,127}\/commands\?stream=true$/u.test(request.path)) {
+    const check = (value: unknown) => {
+      dependencies.signal?.throwIfAborted();
+      const text = JSON.stringify(value);
+      if ([session.credential, dependencies.refreshState?.credential].some(key => key && text?.includes(key)))
+        throw new Error('cloud response contains protected credential');
+    };
+    const body = await readPackageCommandStream(response, value => {
+      check(value);
+      dependencies.onPackageProgress?.(value);
+    }, dependencies.onPackageStreamActivity).catch((error: unknown) => {
+      check(error instanceof Error ? error.message : String(error));
+      throw error;
+    });
+    check(body);
+    return {status: response.status, body};
+  }
+  if (fullDesktop && request.response?.kind === 'binary' && response.ok) {
     return Object.freeze({
       status: response.status,
       body: await boundedBinary(
@@ -375,7 +514,7 @@ export async function executeVaultBoundCloudRequest(
       ),
     });
   }
-  if (request.response?.kind === 'event-stream' && response.ok) {
+  if (fullDesktop && request.response?.kind === 'event-stream' && response.ok) {
     return Object.freeze({
       status: response.status,
       body: await boundedEventStream(
@@ -385,11 +524,18 @@ export async function executeVaultBoundCloudRequest(
       ),
     });
   }
-  const body = await boundedJson(response, true, session.credential);
+  const resolvingArchive = request.method === 'POST' &&
+    request.path === '/api/v1/platform-plugins/v2/optional-business/npm/resolve';
+  const resourceUrl = new URL(request.path, 'https://cloud.invalid');
+  const loadingSignedPage = response.ok && request.method === 'GET' &&
+    /^\/api\/v1\/(?:platform-plugins\/v2\/optional-business|tenant-packages)\/[a-z0-9][a-z0-9._-]{0,127}\/ui$/u.test(resourceUrl.pathname) &&
+    resourceUrl.searchParams.has('page_id') && resourceUrl.searchParams.has('expected_digest');
+  const body = await boundedJson(response, true, session.credential,
+    resolvingArchive || loadingSignedPage ? 16 * 1024 * 1024 + 65536 : MAX_RESPONSE_BYTES);
   dependencies.signal?.throwIfAborted();
-  if (response.ok && runReview?.action === 'summary') {
+  if (fullDesktop && response.ok && runReview?.action === 'summary') {
     requireCloudRunSummaryScope(body, runReview.runId, context);
-  } else if (response.ok && runReview?.action === 'changes' && summaryIdentity) {
+  } else if (fullDesktop && response.ok && runReview?.action === 'changes' && summaryIdentity) {
     requireCloudRunChangesScope(body, runReview, summaryIdentity);
   }
   return Object.freeze({ status: response.status, body });
@@ -427,6 +573,7 @@ export class CloudSessionAuthenticationInvalidError extends Error {
 
 export async function projectVaultBoundCloudSession(
   dependencies: VaultBoundCloudRequestDependencies,
+  retireLocalHistory?: () => Promise<void>,
 ): Promise<VaultBoundCloudSessionProjection | null> {
   dependencies.signal?.throwIfAborted();
   const storedSession = await dependencies.loadTrustedSession();
@@ -441,6 +588,8 @@ export async function projectVaultBoundCloudSession(
   );
   if (contextResponse.status === 401) throw new CloudSessionAuthenticationInvalidError();
   const contextBody = await boundedJson(contextResponse, false, session.credential);
+  if (contextResponse.status === 404 && isRecord(contextBody) && isRecord(contextBody.detail) &&
+      contextBody.detail.code === 'workspace_context_unavailable') throw new Error('cloud_project_selection_required');
   if (!contextResponse.ok || !isRecord(contextBody)) {
     throw new Error('cloud session scope observation failed');
   }
@@ -479,6 +628,28 @@ export async function projectVaultBoundCloudSession(
     throw new Error('cloud session project catalog scope mismatch');
   }
 
+  if (retireLocalHistory && context.projectId !== null) {
+    try {
+      const query = new URLSearchParams({ project_id: context.projectId, limit: '1', offset: '0' });
+      const response = await authorizedFetch(session, dependencies, {
+        path: `/api/v1/agent/conversations?${query}`, method: 'GET',
+      });
+      if (response.ok) {
+        const page = await boundedJson(response, false, session.credential);
+        if (isRecord(page) && Array.isArray(page.items) && typeof page.total === 'number') {
+          dependencies.signal?.throwIfAborted();
+          const latest = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+          if (latest.api_base_url === session.api_base_url &&
+              latest.credential === (dependencies.refreshState?.credential ?? session.credential)) {
+            await retireLocalHistory();
+          }
+        }
+      }
+    } catch {
+      // Login remains usable if history or local cleanup is temporarily unavailable.
+      dependencies.signal?.throwIfAborted();
+    }
+  }
   return Object.freeze({
     status: 'authenticated',
     api_base_url: session.api_base_url,
@@ -676,16 +847,22 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
   }
   if (body !== undefined) {
     const bodyBytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
-    if (bodyBytes > MAX_REQUEST_BYTES && !allowsCloudSandboxImportBudget(record, body, bodyBytes)) {
+    const packageUpload = record.method === 'POST' &&
+      ['/api/v1/platform-plugins/v2/optional-business/inspect', '/api/v1/platform-plugins/v2/optional-business/install', '/api/v1/tenant-packages/inspect', '/api/v1/tenant-packages/install'].includes(String(record.path)) &&
+      bodyBytes <= 16 * 1024 * 1024 + 8192;
+    if (bodyBytes > MAX_REQUEST_BYTES && !packageUpload && !(fullDesktop && allowsCloudSandboxImportBudget(record, body, bodyBytes))) {
       throw new Error('cloud request body is too large');
     }
   }
-  const form = parseForm(record.form, method);
+  if (!fullDesktop && [record.form, record.response, record.mutation, record.memory_scope].some(value => value !== undefined)) {
+    throw new Error('cloud request is invalid');
+  }
+  const form = fullDesktop ? parseForm(record.form, method) : null;
   if (body !== undefined && form !== null) {
     throw new Error('cloud request body is invalid');
   }
-  const mutation = parseMutation(record.mutation, method);
-  const response = parseResponsePolicy(record.response);
+  const mutation = fullDesktop ? parseMutation(record.mutation, method) : null;
+  const response = fullDesktop ? parseResponsePolicy(record.response) : null;
   return Object.freeze({
     path,
     method: method as VaultBoundCloudRequestInput['method'],
@@ -693,7 +870,7 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
     ...(form === null ? {} : { form }),
     ...(mutation === null ? {} : { mutation }),
     ...(response === null ? {} : { response }),
-    ...(record.memory_scope === undefined ? {} : {
+    ...(!fullDesktop || record.memory_scope === undefined ? {} : {
       memory_scope: requireCloudMemoryRequestScope(record.memory_scope),
     }),
   });
@@ -829,16 +1006,18 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
   ) {
     throw new Error('cloud request endpoint is not allowed');
   }
-  if (request.memory_scope !== undefined ||
-      (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command')) {
-    const memory = authorizeCloudMemoryEndpoint(request, target);
-    if (memory) return memory;
-    throw new Error('cloud request memory endpoint is not allowed');
-  }
-  if (request.form !== undefined || request.response !== undefined) {
-    const specializedEndpoint = authorizeCloudProductEndpoint(request, target);
-    if (specializedEndpoint) return specializedEndpoint;
-    throw new Error('cloud request endpoint is not allowed');
+  if (fullDesktop) {
+    if (request.memory_scope !== undefined ||
+        (request.mutation && 'kind' in request.mutation && request.mutation.kind === 'memory-command')) {
+      const memory = authorizeCloudMemoryEndpoint(request, target);
+      if (memory) return memory;
+      throw new Error('cloud request memory endpoint is not allowed');
+    }
+    if (request.form !== undefined || request.response !== undefined) {
+      const specializedEndpoint = authorizeCloudProductEndpoint(request, target);
+      if (specializedEndpoint) return specializedEndpoint;
+      throw new Error('cloud request endpoint is not allowed');
+    }
   }
   if (
     target.pathname === '/api/v1/workspace-context' &&
@@ -895,6 +1074,17 @@ function authorizeEndpoint(request: VaultBoundCloudRequestInput): AuthorizedEndp
       tenantId: null,
       projectId: null,
     });
+  }
+  if (!fullDesktop) {
+    const release = authorizePackageEndpoint(request, target);
+    if (release) return release;
+    // P5 permits the current project's history list for native retirement and replay.
+    const query = target.searchParams;
+    if (request.method === 'GET' && target.pathname === '/api/v1/agent/conversations' &&
+        query.size === 4 && ['project_id', 'status', 'limit', 'offset'].every(key => query.has(key))) {
+      return { kind: 'project', tenantId: null, projectId: identifier(query.get('project_id'), 'cloud request project scope is invalid') };
+    }
+    throw new Error('cloud request endpoint is not allowed');
   }
   if (segments[1] === 'api' && segments[2] === 'v1' && BACKEND_ROOTS.has(segments[3] ?? '')) {
     return authorizeBackendEndpoint(request, target, segments);
@@ -1070,7 +1260,9 @@ async function authorizedFetch(
   if (outcome.status !== 'refreshed' && outcome.status !== 'current') {
     throw new Error('cloud session refresh unavailable');
   }
-  refreshState.credential = outcome.record.credential;
+  const refreshed = parseTrustedCloudSession(outcome.record);
+  if (refreshed.api_base_url !== session.api_base_url) throw new Error('cloud session origin changed');
+  refreshState.credential = refreshed.credential;
   return sendAuthorizedFetch(session, dependencies, request);
 }
 
@@ -1091,14 +1283,14 @@ async function sendAuthorizedFetch(
     Authorization: `Bearer ${credential}`,
   });
   if (request.body !== undefined) headers.set('Content-Type', 'application/json');
-  if (request.mutation) {
+  if (fullDesktop && request.mutation) {
     if ('expected_revision' in request.mutation) {
       headers.set('kind' in request.mutation && request.mutation.kind === 'memory-command'
         ? CLOUD_MEMORY_REVISION_HEADER : 'X-Expected-Revision', String(request.mutation.expected_revision));
     }
     headers.set('Idempotency-Key', request.mutation.idempotency_key);
   }
-  const form = request.form === undefined ? undefined : reconstructFormData(request.form);
+  const form = fullDesktop && request.form ? reconstructFormData(request.form) : undefined;
   return dependencies.fetch(target.toString(), {
     method: request.method ?? 'GET',
     headers,
@@ -1310,6 +1502,7 @@ async function boundedJson(
   response: Response,
   allowNoContent = false,
   protectedCredential: string | null = null,
+  maxBytes = MAX_RESPONSE_BYTES,
 ): Promise<unknown> {
   const declaredLengthHeader = response.headers.get('content-length');
   const declaredLength = Number(declaredLengthHeader ?? '0');
@@ -1320,11 +1513,11 @@ async function boundedJson(
     await cancelResponseBody(response);
     throw new Error('cloud response contract is invalid');
   }
-  if (declaredLength > MAX_RESPONSE_BYTES) {
+  if (declaredLength > maxBytes) {
     await cancelResponseBody(response);
     throw new Error('cloud response is too large');
   }
-  const text = await readBoundedResponseText(response);
+  const text = await readBoundedResponseText(response, maxBytes);
   if (!text && allowNoContent && response.status === 204) return null;
   if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
     throw new Error('cloud response contract is invalid');
@@ -1339,7 +1532,7 @@ async function boundedJson(
   }
 }
 
-async function readBoundedResponseText(response: Response): Promise<string> {
+async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) return '';
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -1350,7 +1543,7 @@ async function readBoundedResponseText(response: Response): Promise<string> {
       const chunk = await reader.read();
       if (chunk.done) break;
       receivedBytes += chunk.value.byteLength;
-      if (receivedBytes > MAX_RESPONSE_BYTES) {
+      if (receivedBytes > maxBytes) {
         await reader.cancel('cloud response is too large');
         throw new Error('cloud response is too large');
       }
@@ -1442,6 +1635,70 @@ async function observeEndpointWorkspaceScope(
     throw new Error('cloud request workspace scope observation failed');
   }
   return Object.freeze({ ...context, workspaceId: endpoint.workspaceId });
+}
+
+function declaredProjectIds(
+  request: VaultBoundCloudRequestInput,
+  endpoint: AuthorizedEndpoint,
+): Set<string> {
+  const target = new URL(request.path, 'https://desktop.invalid');
+  const names = new Set<string>();
+  if (endpoint.projectId !== null) names.add(endpoint.projectId);
+  for (const value of target.searchParams.getAll('project_id')) {
+    if (value) names.add(value);
+  }
+  const bodyProject = request.body?.project_id;
+  if (typeof bodyProject === 'string' && bodyProject.length > 0) names.add(bodyProject);
+  const parts = target.pathname.split('/');
+  if (parts[3] === 'tenants' && parts[5] === 'projects' && parts[6]) {
+    names.add(decodeURIComponent(parts[6]));
+  }
+  return names;
+}
+
+/** Path, query, and body may name one project. Two different ids are a contradiction. */
+function assertSingleProjectScope(
+  request: VaultBoundCloudRequestInput,
+  endpoint: AuthorizedEndpoint,
+): void {
+  if (declaredProjectIds(request, endpoint).size > 1) {
+    throw new Error('cloud request project scope mismatch');
+  }
+}
+
+/**
+ * A catalog-visible project on the request is authoritative. The saved workspace
+ * context is replaced for this call and no longer blocks the request by itself.
+ */
+async function adoptVisibleProject(
+  endpoint: AuthorizedEndpoint,
+  context: Readonly<{ tenantId: string; projectId: string | null; workspaceId: string | null }>,
+  session: TrustedCloudSession,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<typeof context> {
+  if (endpoint.tenantId !== null && endpoint.tenantId !== context.tenantId) {
+    throw new Error('cloud request tenant scope mismatch');
+  }
+  if (endpoint.projectId === null || endpoint.projectId === context.projectId) return context;
+  const response = await authorizedFetch(session, dependencies, {
+    path: `/api/v1/projects/${encodeURIComponent(endpoint.projectId)}?tenant_id=${encodeURIComponent(context.tenantId)}`,
+    method: 'GET',
+  });
+  const body = await boundedJson(response, false, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (
+    !response.ok ||
+    !isRecord(body) ||
+    body.id !== endpoint.projectId ||
+    body.tenant_id !== context.tenantId
+  ) {
+    throw new Error('cloud request project scope mismatch');
+  }
+  return Object.freeze({
+    tenantId: context.tenantId,
+    projectId: endpoint.projectId,
+    workspaceId: null,
+  });
 }
 
 function assertEndpointScope(

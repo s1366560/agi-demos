@@ -303,3 +303,43 @@ async def test_delete_pattern_hides_patterns_outside_requested_tenant(
 
     assert exc_info.value.status_code == 404
     repo.delete.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_signed_pattern_commands_reuse_tenant_membership_and_delete_authority(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from pydantic import ValidationError
+
+    from plugins.business.automation.backend import pattern_operations as signed
+
+    repo = SimpleNamespace(
+        list_by_tenant=AsyncMock(return_value=[_pattern()]),
+        get_by_id=AsyncMock(return_value=_pattern()),
+        delete=AsyncMock(return_value=True),
+    )
+    authority = _pattern_authority(repo, db=AsyncMock())
+    ctx = SimpleNamespace(
+        scope=SimpleNamespace(tenant_id="tenant-1"),
+        request=object(),
+        user=authority.current_user,
+        db=authority.db,
+    )
+    access = AsyncMock()
+
+    @asynccontextmanager
+    async def resolve(request, user, db, tenant):
+        assert (request, user, db, tenant) == (ctx.request, ctx.user, ctx.db, "tenant-1")
+        yield authority
+
+    monkeypatch.setattr(signed, "workflow_pattern_authority", resolve)
+    monkeypatch.setattr(patterns_router, "require_tenant_access", access)
+    assert (await signed.list_patterns(ctx, {}, None))["patterns"][0]["id"] == "pattern-1"
+    access.assert_awaited_once_with(ctx.db, ctx.user, "tenant-1")
+    with pytest.raises(ValidationError):
+        await signed.delete_pattern(ctx, {"pattern_id": "pattern-1", "tenant_id": "other"}, None)
+    assert (await signed.delete_pattern(ctx, {"pattern_id": "pattern-1"}, None))[
+        "pattern_id"
+    ] == "pattern-1"
+    access.assert_awaited_with(ctx.db, ctx.user, "tenant-1", require_admin=True)
+    repo.delete.assert_awaited_once_with("pattern-1")

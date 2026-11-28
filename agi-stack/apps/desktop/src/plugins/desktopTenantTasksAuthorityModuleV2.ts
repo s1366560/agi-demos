@@ -18,7 +18,7 @@ import type {
   TenantTasksRetryPendingResult,
   TenantTasksScope,
   TenantTasksSnapshot,
-} from '../features/tenant/tenantTasksClient';
+} from '@business/workspace/ui/desktop/tenant/tenantTasksClient';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   requireDesktopTenantTaskRecordV2,

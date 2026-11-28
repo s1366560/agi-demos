@@ -530,6 +530,10 @@ class LocalHITLResumeConsumer:
         message_id: str | None,
     ) -> bool:
         """Crash recovery fallback: create a fresh agent and replay."""
+        from plugins.business.agent.engine.react.project_react_agent import (
+            ProjectAgentConfig,
+            ProjectReActAgent,
+        )
         from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
@@ -540,10 +544,6 @@ class LocalHITLResumeConsumer:
             load_hitl_state_for_resume,
         )
         from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot_agent_mode
-        from src.infrastructure.agent.core.project_react_agent import (
-            ProjectAgentConfig,
-            ProjectReActAgent,
-        )
         from src.infrastructure.agent.hitl.generation_recovery_v2 import (
             admit_persisted_hitl_state_v2,
         )

@@ -18,14 +18,14 @@ Orchestrates domain logic. Services here are "thick" — some embed infrastructu
 | Domain | Key Services |
 |--------|-------------|
 | Agent | `agent_service.py`, `agent/` subdirectory |
-| Sandbox | `sandbox_orchestrator.py` + 8 sandbox_* services |
+| Sandbox credentials | `sandbox_token_service.py`; [Environments](../../plugins/business/environments/) owns provisioning and runtime services |
 | Memory | `memory_service.py`, `memory_index_service.py`, `search_service.py` |
 | Skills | `skill_service.py`, `skill_resource_sync_service.py`, `filesystem_skill_loader.py` |
 | Auth | `auth_service_v2.py`, `authorization_service.py` |
 | MCP | `mcp_app_service.py`, `mcp_runtime_service.py` |
 | LLM | `llm_provider_manager.py`, `provider_service.py`, `provider_resolution_service.py` |
 | SubAgent | `subagent_service.py` |
-| Project | `project_service.py`, `project_sandbox_lifecycle_service.py` |
+| Project | `project_service.py` |
 
 ## Patterns
 
@@ -36,7 +36,6 @@ Orchestrates domain logic. Services here are "thick" — some embed infrastructu
 
 ## Gotchas
 
-- Sandbox has the most services (8+) reflecting complex sandbox lifecycle
 - `agent/` subdirectory exists within services for agent-specific decomposition
 - `channels/` subdirectory handles multi-channel (Feishu, etc.) integrations
 - Service constructors accept port interfaces but are typically instantiated by DI container

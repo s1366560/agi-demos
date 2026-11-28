@@ -1,0 +1,296 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "quote",
+      "abi": "invoke",
+      "permissions": [
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "enum": [
+              "free",
+              "pro",
+              "enterprise"
+            ]
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "storage_limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "plan",
+          "storage_limit"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "billing.tenant-account",
+      "abi": "invoke",
+      "description": "Run the signed tenant-account command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.account.read"
+      ]
+    },
+    {
+      "name": "billing.change-plan",
+      "abi": "invoke",
+      "description": "Run the signed change-plan command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.plan.write"
+      ]
+    },
+    {
+      "name": "billing.billing-details",
+      "abi": "invoke",
+      "description": "Run the signed billing-details command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.billing.account.read"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "quote-free",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "free"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "free"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "quote-pro",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "pro"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "pro"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "quote-enterprise",
+      "tool": "quote",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "plan": "enterprise"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "const": "enterprise"
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "tenant-account",
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "permissions": [
+        "app.billing.account.read"
+      ],
+      "accepts_input": false,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "billing.tenant-account"
+    },
+    {
+      "id": "change-plan",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.billing.plan.write"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "billing.change-plan"
+    },
+    {
+      "id": "billing-details",
+      "payload": {
+        "full_history": true
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "full_history": {
+            "const": true
+          }
+        },
+        "required": [
+          "full_history"
+        ]
+      },
+      "permissions": [
+        "app.billing.account.read"
+      ],
+      "accepts_input": false,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "billing.billing-details"
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:bf79751e68f0c6d93e16839436b9450c7276690ae4cd7e3e4679136b11268521",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "account",
+      "title": "Plans and invoices",
+      "routes": [
+        "/billing"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/web-billing.js",
+        "digest": "sha256:53489796bf8a29133b797184542251c116b3247719fb666dbd5da27d499f9984"
+      },
+      "commands": [
+        "quote-free",
+        "quote-pro",
+        "quote-enterprise",
+        "tenant-account",
+        "change-plan",
+        "billing-details"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/web-billing.css",
+        "digest": "sha256:f65b452421a1914d5d870dff29882e0f033e536103d9e4b26b3ded8c1945cd13"
+      }
+    },
+    {
+      "id": "tenant-account",
+      "title": "Tenant billing",
+      "routes": [
+        "/tenant/:tenantId/billing"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/web-billing.js",
+        "digest": "sha256:53489796bf8a29133b797184542251c116b3247719fb666dbd5da27d499f9984"
+      },
+      "commands": [
+        "billing-details",
+        "change-plan"
+      ],
+      "device_tools": [],
+      "scope": "tenant",
+      "workbench": true,
+      "style": {
+        "path": "ui/web-billing.css",
+        "digest": "sha256:f65b452421a1914d5d870dff29882e0f033e536103d9e4b26b3ded8c1945cd13"
+      }
+    }
+  ]
+}

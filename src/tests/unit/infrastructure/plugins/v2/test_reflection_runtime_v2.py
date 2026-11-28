@@ -335,7 +335,7 @@ def test_reflection_contract_and_static_authority_retirement_are_explicit() -> N
     tool_source = (_ROOT / "src/infrastructure/agent/tools/reflection_tool.py").read_text(
         encoding="utf-8"
     )
-    react_source = (_ROOT / "src/infrastructure/agent/core/react_agent.py").read_text(
+    react_source = (_ROOT / "plugins/business/agent/engine/react/react_agent.py").read_text(
         encoding="utf-8"
     )
 

@@ -281,44 +281,6 @@ jobs:
       - name: Stage native sidecar
         run: corepack pnpm run stage:sidecar
 
-      - name: Build native Workspace Core
-        if: runner.os != 'macOS'
-        run: corepack pnpm run build:workspace-core
-
-      - name: Build universal macOS Workspace Core
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ../../../scripts/avernet-bcs/cargo.sh --version
-          RUSTUP_HOME="$PWD/../../../.cache/avernet-bcs/rustup" \
-            CARGO_HOME="$PWD/../../../.cache/avernet-bcs/cargo" \
-            rustup target add \
-              --toolchain 1.91.1 \
-              x86_64-apple-darwin \
-              aarch64-apple-darwin
-          ../../../scripts/avernet-bcs/cargo.sh build \
-            -p memstack-workspace-core \
-            --bin memstack-workspace-core \
-            --locked \
-            --release \
-            --target x86_64-apple-darwin
-          ../../../scripts/avernet-bcs/cargo.sh build \
-            -p memstack-workspace-core \
-            --bin memstack-workspace-core \
-            --locked \
-            --release \
-            --target aarch64-apple-darwin
-          mkdir -p ../../../.cache/avernet-bcs/target/release
-          lipo -create \
-            ../../../.cache/avernet-bcs/target/x86_64-apple-darwin/release/memstack-workspace-core \
-            ../../../.cache/avernet-bcs/target/aarch64-apple-darwin/release/memstack-workspace-core \
-            -output ../../../.cache/avernet-bcs/target/release/memstack-workspace-core
-          chmod 755 ../../../.cache/avernet-bcs/target/release/memstack-workspace-core
-
-      - name: Stage Workspace Core helper
-        run: corepack pnpm run stage:workspace-core
-
       - name: Smoke update recovery helper protocol
         run: corepack pnpm run smoke:update-recovery
 
@@ -347,7 +309,7 @@ jobs:
 
       - name: Build macOS release artifacts
         if: runner.os == 'macOS'
-        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder --config electron-builder.profile.cjs ${{ matrix.builder-args }} --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -378,14 +340,14 @@ jobs:
 
       - name: Build Windows release artifacts
         if: runner.os == 'Windows'
-        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder --config electron-builder.profile.cjs ${{ matrix.builder-args }} --publish never
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Build Linux release artifacts
         if: runner.os == 'Linux'
-        run: corepack pnpm exec electron-builder ${{ matrix.builder-args }} --publish never
+        run: corepack pnpm exec electron-builder --config electron-builder.profile.cjs ${{ matrix.builder-args }} --publish never
 
       - name: Verify package identity, installer digests, and blockmap_structure_and_coverage_only
         run: node scripts/verify-release-artifacts.mjs

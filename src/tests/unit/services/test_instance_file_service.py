@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.application.services.instance_file_service import InstanceFileService
+from plugins.business.environments.backend.instance_file_service import InstanceFileService
 
 
 @pytest.mark.unit

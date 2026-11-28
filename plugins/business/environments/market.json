@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Environments",
+    "zh": "运行环境"
+  },
+  "description": {
+    "en": "Preview file patches and authorize sandbox terminal sessions.",
+    "zh": "预览文件补丁并授权沙箱终端会话。"
+  },
+  "icon": "terminal"
+}

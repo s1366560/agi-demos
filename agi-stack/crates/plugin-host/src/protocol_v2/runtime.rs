@@ -684,6 +684,16 @@ impl GenerationLeaseV2 {
             .ok_or(RuntimeV2Error::GenerationRetired)
     }
 
+    /// Extend a live caller's lease for a child operation, including during retirement.
+    pub fn child(&self) -> Result<Self, RuntimeV2Error> {
+        let generation = self.generation()?;
+        let mut lifecycle = lock(&generation.lifecycle);
+        lifecycle.leases += 1;
+        Ok(Self {
+            generation: Some(Arc::clone(generation)),
+        })
+    }
+
     pub async fn release(mut self) -> Result<(), RuntimeV2Error> {
         if let Some(generation) = self.generation.take() {
             if generation.release()? {

@@ -9,21 +9,21 @@ from typing import Any
 
 import pytest
 
-from src.domain.events.agent_events import AgentArtifactCreatedEvent
-from src.domain.model.artifact.artifact import ArtifactCategory
-from src.infrastructure.agent.core.llm_stream import StreamEvent
-from src.infrastructure.agent.processor.artifact_handler import (
+from plugins.business.agent.engine.processor.artifact_handler import (
     ArtifactHandler,
     extract_previewable_session_file_paths,
 )
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentArtifactCreatedEvent
+from src.domain.model.artifact.artifact import ArtifactCategory
+from src.infrastructure.agent.core.llm_stream import StreamEvent
 from src.infrastructure.agent.tools.result import ToolResult
 
-LOGGER_NAME = "src.infrastructure.agent.processor.artifact_handler"
+LOGGER_NAME = "plugins.business.agent.engine.processor.artifact_handler"
 
 
 class _FakeArtifactService:
@@ -261,7 +261,7 @@ async def test_process_tool_artifacts_extraction_failure_log_redacts_tool_and_ex
         raise RuntimeError("extract secret unavailable")
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.artifact_handler.extract_artifacts_from_mcp_result",
+        "plugins.business.agent.engine.processor.artifact_handler.extract_artifacts_from_mcp_result",
         fail_extraction,
     )
 
@@ -287,7 +287,7 @@ async def test_process_tool_artifacts_extraction_failure_log_redacts_tool_and_ex
 @pytest.mark.unit
 async def test_process_step_persists_previewable_links_after_text_end(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream",
+        "plugins.business.agent.engine.processor.processor.LLMStream",
         _TextWithLinkedFileStream,
     )
     service = _FakeArtifactService()

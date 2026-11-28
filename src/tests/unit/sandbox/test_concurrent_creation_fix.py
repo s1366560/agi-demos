@@ -33,7 +33,7 @@ class TestConcurrentCreationFix:
     @pytest.fixture
     def lifecycle_service(self, mock_repository, mock_adapter):
         """Create lifecycle service with mocks."""
-        from src.application.services.project_sandbox_lifecycle_service import (
+        from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
             ProjectSandboxLifecycleService,
         )
 
@@ -605,7 +605,7 @@ class TestAgentWorkerSandboxConsistency:
                     MagicMock(return_value=mock_repo),
                 )
                 m.setattr(
-                    "src.application.services.project_sandbox_lifecycle_service.ProjectSandboxLifecycleService",
+                    "plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service.ProjectSandboxLifecycleService",
                     lifecycle_cls,
                 )
 

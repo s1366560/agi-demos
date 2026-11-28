@@ -3,8 +3,35 @@
 The Web plugin hub and Electron plugin settings expose Discover, Installed, and Sources.
 The authenticated cloud catalog includes signed V2 packages alongside Codex-style packages. V2 cards hand off
 to the existing verified installer; discovery does not grant signature trust or permissions.
-Local desktop installations belong to the selected local project and do not require a cloud
-account. Cloud mutations require authorization for the selected tenant and project.
+In the native desktop app, a signed device package belongs to the signed-in cloud user, selected
+project and device. Project administrators approve the signed digest, permissions and host generation.
+The device saves the verified package in its application store.
+
+## Signed device packages
+
+Open **Settings → Plugins → Signed packages on this device**. Configure trusted publisher public keys
+using `AGISTACK_LOCAL_PLUGIN_TRUSTED_KEYS_FILE` before launching the app. For checkout-local
+development, `make -C agi-stack run-desktop` also reads an operator-provisioned
+`.cache/desktop-dev/publisher-trust.json` with `schema_version: 1` and a `public_keys_pem`
+array of trusted Ed25519 public keys. An explicit environment setting takes precedence. Select a signed
+`.mspkg` with a `desktop-sidecar` Wasm target. The page shows the device ID, credential fingerprint,
+active host generation, verified package digest and requested permissions. A project manager can
+approve installation and invocation for their selected account for 24 hours. A project member can
+install using an existing grant from an administrator. An administrator can also grant a different
+member access using the project device grant API.
+
+Device grants live at `/api/v1/projects/{project_id}/device-plugin-grants`. The collection accepts
+approvals, `GET /authority` reports current project management access, `POST /check` admits a single
+installation or invocation, and `DELETE /{grant_id}` revokes the grant. The sidecar derives the current
+account and project from the trusted cloud session. Its device proof stays in the application vault.
+Each invocation re-verifies the signed package, checks the selected generation and presents the
+original grant ID to the cloud. The separate data-plane credential acknowledges the host publication.
+
+Reinstalling a signed version selects it atomically after verification, compilation and admission.
+Selecting an earlier signed release follows the same procedure. Settings show the installed version,
+current grant status, and the last successful invocation for that selection. The knowledge retrieval
+package has a buildable example under `plugins/business/knowledge/workers/device_search`. Enter a query and
+documents in the tool arguments field to search their contents on the device.
 
 ## Sources and compatibility
 
@@ -51,7 +78,12 @@ Codex-private services:
 
 Place this in `hooks/hooks.json`. Supported events are `session_start`, `before_request`, and
 `after_tool_execute`. Commands read an event JSON object on standard input. A nonzero exit
-or timeout fails the triggering operation; disable the plugin or correct it before retrying.
+or timeout fails a session-start or before-request operation. For desktop post-tool hooks, the
+sidecar returns the completed tool result and queues a separate delivery per hook. A project
+manager can list pending deliveries at `GET /api/v1/plugin-marketplace/v3/hook-deliveries` and
+retry one at `POST /api/v1/plugin-marketplace/v3/hook-deliveries/{id}/retry` with a scoped JSON
+body. Delivery IDs stay stable across retries so hook handlers can deduplicate side effects.
+Updating, disabling, or removing the owning installation prevents replay to the changed package.
 The maximum timeout is 30 seconds. Hook output cannot silently modify permissions or grant
 authority. Cloud commands execute inside the owning project's sandbox.
 

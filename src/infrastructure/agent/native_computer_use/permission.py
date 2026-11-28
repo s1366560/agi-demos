@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from src.infrastructure.agent.native_computer_use.broker import NativeComputerBroker
 
+from plugins.business.agent.engine.processor.hitl_tool_handler import (
+    queue_tool_part_hitl_completion,
+)
 from src.domain.events.agent_events import (
     AgentDomainEvent,
     AgentObserveEvent,
@@ -28,7 +31,6 @@ from src.infrastructure.agent.native_computer_use.store import (
     request_key,
     run_key,
 )
-from src.infrastructure.agent.processor.hitl_tool_handler import queue_tool_part_hitl_completion
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult

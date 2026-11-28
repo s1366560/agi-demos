@@ -12,7 +12,7 @@ import type {
   ProjectSupportScope,
   ProjectSupportStatus,
   ProjectSupportTicket,
-} from '../features/project-support/projectSupportTypes';
+} from '@business/workspace/ui/desktop/project-support/projectSupportTypes';
 
 const PAGE_SIZE = 25;
 const CLOUD_ACTIONS = Object.freeze(['view', 'list', 'create', 'close', 'retry']);

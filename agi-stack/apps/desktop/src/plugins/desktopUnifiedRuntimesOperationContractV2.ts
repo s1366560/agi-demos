@@ -1,6 +1,6 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import type { UnifiedRuntimesScope } from '../features/unified-runtimes/unifiedRuntimesTypes';
+import type { UnifiedRuntimesScope } from '@business/environments/ui/desktop/unified-runtimes/unifiedRuntimesTypes';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopUnifiedRuntimesOperationInputV2 = Readonly<{

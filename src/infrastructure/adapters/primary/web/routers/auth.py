@@ -807,6 +807,7 @@ async def read_users_me(
         global_roles=global_role_names,
         is_active=current_user.is_active,
         is_superuser=current_user.is_superuser is True,
+        must_change_password=bool(current_user.must_change_password),
         created_at=current_user.created_at,
         profile=_user_profile(current_user),
         preferred_language=current_user.preferred_language,
@@ -1022,7 +1023,7 @@ async def device_code_request(request: dict[str, Any] | None = None) -> dict[str
     compatibility with client_id / scope hints).
     """
     _request_unused = request  # reserved
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.adapters.secondary.cache.redis_pool import get_redis_client
 
     redis_client = await get_redis_client()
 
@@ -1068,7 +1069,7 @@ async def device_code_approve(
 
     The frontend `/device` page posts here with {"user_code": "..."}.
     """
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.adapters.secondary.cache.redis_pool import get_redis_client
 
     user_code = str(payload.get("user_code", "")).strip().upper()
     if not user_code:
@@ -1133,7 +1134,7 @@ async def device_code_approve(
 @router.post("/auth/device/token")
 async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
     """Poll for a device-code approval. Unauthenticated — device_code is the secret."""
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.adapters.secondary.cache.redis_pool import get_redis_client
 
     device_code = str(payload.get("device_code", "")).strip()
     if not device_code:
@@ -1207,7 +1208,7 @@ async def device_code_cancel(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, bool]:
     """Idempotently abandon a device grant and revoke only its server-bound token."""
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.adapters.secondary.cache.redis_pool import get_redis_client
 
     device_code = request.device_code.strip()
     if not device_code:

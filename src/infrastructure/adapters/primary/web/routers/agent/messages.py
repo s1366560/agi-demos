@@ -5,9 +5,7 @@ Endpoints for conversation messages, execution history, and status.
 
 import json
 import logging
-from collections import defaultdict
 from collections.abc import Mapping
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -165,10 +163,10 @@ async def _verify_conversation_access(
     *,
     tenant_id: str,
     project_id: str | None = None,
-) -> None:
+) -> DBConversation:
     query = select(DBConversation).where(DBConversation.id == conversation_id).limit(1)
     result = await db.execute(refresh_select_statement(query))
-    conversation = result.scalar_one_or_none()
+    conversation: DBConversation | None = result.scalar_one_or_none()
     if conversation is None:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
     effective_project_id = conversation.project_id if project_id is None else project_id
@@ -201,6 +199,7 @@ async def _verify_conversation_access(
     )
     if scope_result.scalar_one_or_none() is None:
         raise HTTPException(status_code=403, detail=_("Access denied"))
+    return conversation
 
 
 # Legacy alias event-type strings that the agent has historically emitted but
@@ -2002,59 +2001,6 @@ def _decode_stream_recovery_payload(
 # ---------------------------------------------------------------------------
 
 
-def _compute_durations(executions: list[dict[str, Any]]) -> list[float]:
-    """Extract durations in ms from executions that have both start and end times."""
-    durations: list[float] = []
-    for e in executions:
-        if e.get("started_at") and e.get("completed_at"):
-            started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
-            completed = datetime.fromisoformat(e["completed_at"].replace("Z", "+00:00"))
-            durations.append((completed - started).total_seconds() * 1000)
-    return durations
-
-
-def _compute_tool_usage(executions: list[dict[str, Any]]) -> dict[str, int]:
-    """Count tool usage across executions."""
-    tool_usage: dict[str, int] = {}
-    for e in executions:
-        tool_name = e.get("tool_name")
-        if tool_name:
-            tool_usage[tool_name] = tool_usage.get(tool_name, 0) + 1
-    return tool_usage
-
-
-def _compute_status_distribution(executions: list[dict[str, Any]]) -> dict[str, int]:
-    """Count status distribution across executions."""
-    status_distribution: dict[str, int] = {}
-    for e in executions:
-        status = e.get("status", "UNKNOWN")
-        status_distribution[status] = status_distribution.get(status, 0) + 1
-    return status_distribution
-
-
-def _compute_timeline_data(executions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Build timeline data bucketed by hour."""
-    if not executions:
-        return []
-
-    time_buckets: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"count": 0, "completed": 0, "failed": 0}
-    )
-
-    for e in executions:
-        if not e.get("started_at"):
-            continue
-        started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
-        bucket_key = started.strftime("%Y-%m-%d %H:00")
-        time_buckets[bucket_key]["count"] += 1
-        if e.get("status") == "COMPLETED":
-            time_buckets[bucket_key]["completed"] += 1
-        elif e.get("status") == "FAILED":
-            time_buckets[bucket_key]["failed"] += 1
-
-    return [{"time": k, **v} for k, v in sorted(time_buckets.items())]
-
-
 @router.get("/conversations/{conversation_id}/execution/stats")
 async def get_execution_stats(
     conversation_id: str,
@@ -2068,7 +2014,7 @@ async def get_execution_stats(
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:
-        await _verify_conversation_access(
+        conversation = await _verify_conversation_access(
             conversation_id,
             current_user,
             db,
@@ -2082,17 +2028,21 @@ async def get_execution_stats(
             limit=1000,
         )
 
-        durations = _compute_durations(executions)
-
-        return ExecutionStatsResponse(
-            total_executions=len(executions),
-            completed_count=sum(1 for e in executions if e.get("status") == "COMPLETED"),
-            failed_count=sum(1 for e in executions if e.get("status") == "FAILED"),
-            average_duration_ms=sum(durations) / len(durations) if durations else 0.0,
-            tool_usage=_compute_tool_usage(executions),
-            status_distribution=_compute_status_distribution(executions),
-            timeline_data=_compute_timeline_data(executions),
+        from plugins.business.agent.backend.conversation_execution_statistics import (
+            conversation_execution_statistics,
         )
+        from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
+
+        try:
+            summary = await conversation_execution_statistics(
+                db, conversation, current_user, executions
+            )
+        except OptionalBusinessError as error:
+            raise HTTPException(
+                status_code=403 if error.code == "forbidden" else 503,
+                detail=_("Conversation statistics package is unavailable"),
+            ) from error
+        return ExecutionStatsResponse(**summary)
 
     except HTTPException:
         raise

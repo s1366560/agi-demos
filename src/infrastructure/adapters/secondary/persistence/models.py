@@ -765,23 +765,6 @@ class Notification(Base):
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
-class Invoice(Base):
-    __tablename__ = "invoices"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, ForeignKey("tenants.id"), nullable=False)
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)
-    currency: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)
-    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    invoice_url: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
-
-
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
@@ -2686,6 +2669,7 @@ class CronJobRunModel(Base):
             "runtime_execution_id",
             unique=True,
             postgresql_where=text("runtime_execution_id IS NOT NULL"),
+            sqlite_where=text("runtime_execution_id IS NOT NULL"),
         ),
         Index("ix_cron_job_runs_job_status", "job_id", "status"),
         Index("ix_cron_job_runs_project_started", "project_id", "started_at"),
@@ -2699,6 +2683,7 @@ class CronJobRunModel(Base):
             "ix_cron_job_runs_runtime_deadline",
             "deadline_at",
             postgresql_where=text("status IN ('running', 'waiting_human')"),
+            sqlite_where=text("status IN ('running', 'waiting_human')"),
         ),
     )
 
@@ -2764,6 +2749,7 @@ class CronOperationModel(Base):
             "run_id",
             unique=True,
             postgresql_where=text("run_id IS NOT NULL"),
+            sqlite_where=text("run_id IS NOT NULL"),
         ),
         Index(
             "uq_agistack_cron_operations_reconcile",
@@ -2772,6 +2758,7 @@ class CronOperationModel(Base):
             "schedule_revision",
             unique=True,
             postgresql_where=text("operation_kind = 'reconcile_schedule'"),
+            sqlite_where=text("operation_kind = 'reconcile_schedule'"),
         ),
         Index(
             "uq_agistack_cron_operations_scheduled_fire",
@@ -2779,6 +2766,7 @@ class CronOperationModel(Base):
             "scheduled_for",
             unique=True,
             postgresql_where=text("operation_kind = 'execute_run' AND trigger_type = 'scheduled'"),
+            sqlite_where=text("operation_kind = 'execute_run' AND trigger_type = 'scheduled'"),
         ),
         Index(
             "ix_agistack_cron_operations_claim",
@@ -4098,6 +4086,7 @@ class WebhookModel(Base):
             "name",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
     )
 

@@ -29,11 +29,11 @@ import {
   desktopVaultBoundCloudRequestBroker,
   type VaultBoundCloudRequestBroker,
 } from '../../api/cloudRequestBroker';
-import type { DesktopAutomationApi } from '../automations/automationClient';
+import type { DesktopAutomationApi } from '@business/automation/ui/desktop/automations/automationClient';
 import {
   automationActionAvailability,
   normalizeAutomationCapabilities,
-} from '../automations/automationModel';
+} from '@business/automation/ui/desktop/automations/automationModel';
 import {
   createAgentWorkspaceAuthorityClient,
   type AgentWorkspaceAuthorityClient,
@@ -101,7 +101,7 @@ import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperatio
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
-} from '../project-blackboard/projectBlackboardClient';
+} from '@business/workspace/ui/desktop/project-blackboard/projectBlackboardClient';
 import {
   createProjectKnowledgeCapabilityClients,
   loadProjectKnowledgeCapabilities,
@@ -120,12 +120,12 @@ import type {
   ProjectWorkspacesClient,
   ProjectWorkspacesScope,
   ProjectWorkspacesSnapshot,
-} from '../project-workspaces/projectWorkspacesClient';
-import { projectSupportCapability } from '../project-support/projectSupportCapability';
+} from '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesClient';
+import { projectSupportCapability } from '@business/workspace/ui/desktop/project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
 import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
 import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
-import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
+import { loadTenantOverviewCapability } from '@business/workspace/ui/desktop/tenant/tenantOverviewCapability';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
@@ -133,8 +133,8 @@ import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTen
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
-import { loadTenantTasksCapability } from '../tenant/tenantTasksCapability';
-import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
+import { loadTenantTasksCapability } from '@business/workspace/ui/desktop/tenant/tenantTasksCapability';
+import { tenantWorkspacesCapability } from '@business/workspace/ui/desktop/tenant/tenantWorkspacesCapability';
 import type { TenantAuditClient } from '../tenant-admin/tenantAuditClient';
 import { createDesktopTenantAuditClientV2, type DesktopTenantAuditOperationsV2 } from '../../plugins/desktopTenantAuditAuthorityModuleV2';
 import {

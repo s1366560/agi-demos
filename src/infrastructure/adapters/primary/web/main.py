@@ -27,6 +27,7 @@ from redis.asyncio import Redis
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from src.application.services.graph_projection_jobs import recovery_loop
 from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
 from src.configuration.api_release import API_RELEASE_VERSION
 from src.configuration.config import get_settings
@@ -35,6 +36,7 @@ from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspac
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
+from src.host.runtime.oci_mcp_lease import worker_recovery
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
     install_api_access_log_middleware,
@@ -52,6 +54,9 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     plugin_runtime_host_v2_from_scope,
     shutdown_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.primary.web.startup.replica_readiness_v2 import (
+    replica_probe_router,
 )
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
     get_connection_manager,
@@ -245,10 +250,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
-    _install_memory_update_recovery(app)
-
     try:
-        yield
+        _install_memory_update_recovery(app)
+        async with (
+            worker_recovery(bool(settings.plugin_worker_allowed_registries)),
+            recovery_loop(async_session_factory),
+        ):
+            yield
     finally:
         await _shutdown_lifespan_side_effects(app)
 
@@ -266,31 +274,24 @@ async def _shutdown_lifespan_side_effects(app: FastAPI) -> None:
 
 
 def _install_memory_update_recovery(app: FastAPI) -> None:
-    """Install the durable memory-update accelerator and one startup recovery pass.
-
-    Recovery waits until a project agent binds the graph runtime. The TaskLog
-    rows remain the queue if this process stops before that binding exists.
-    """
+    """Recover durable jobs using their project authority, independently of chat startup."""
     from src.application.services.memory_update_dispatch import (
         MemoryUpdateDispatcher,
         install_memory_update_dispatcher,
     )
-    from src.application.services.memory_update_runtime import (
-        bound_extract,
-        bound_index,
-        memory_update_runtime_ready,
-    )
+
+    from .startup.memory_update_recovery import scoped_memory_update_stages
 
     dispatcher = MemoryUpdateDispatcher(
         async_session_factory,
-        extract=bound_extract,
-        index=bound_index,
+        acquire_stages=scoped_memory_update_stages(
+            async_session_factory, app.state.scoped_profile_runtime_v2
+        ),
         stage_timeout_s=float(settings.llm_timeout),
-        ready=memory_update_runtime_ready,
     )
     install_memory_update_dispatcher(dispatcher)
     app.state.memory_update_dispatcher = dispatcher
-    dispatcher.resume_soon()
+    dispatcher.start()
 
 
 async def _shutdown_application_plugins_v2(app: FastAPI) -> None:
@@ -413,6 +414,10 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         },
     )
 
+    from src.host.operations.deployment_adapters import resolve_application_operation
+
+    app.state.resolve_package_application_operation = resolve_application_operation
+
     # Instrument FastAPI for OpenTelemetry (must be done before router registration)
     if settings.enable_telemetry:
         from src.infrastructure.telemetry.config import configure_tracer_provider
@@ -487,6 +492,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     @app.get("/health")
     async def health_check() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok", "version": API_RELEASE_VERSION}
+
+    app.include_router(replica_probe_router)
 
     # Serve static files (MCP Apps sandbox proxy, etc.)
     _static_dir = Path(__file__).parent / "static"

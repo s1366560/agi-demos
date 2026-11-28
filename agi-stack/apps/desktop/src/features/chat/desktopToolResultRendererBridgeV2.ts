@@ -3,7 +3,7 @@ import type {
   ToolResultPresentationV2,
 } from "@agistack/plugin-slots";
 import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
-import type { ToolCallPresentationKind } from "./chatTimelineModel";
+import type { ToolCallPresentationKind } from "@business/agent/ui/desktop/chat/chatTimelineModel";
 import type { ToolResultStatus } from "./toolResultStatus";
 
 export type DesktopToolResultRendererStatusV2 = ToolResultStatus;

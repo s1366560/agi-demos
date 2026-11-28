@@ -33,6 +33,21 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 
 
 @pytest.mark.unit
+async def test_kernel_probes_report_readiness_while_plugin_admission_is_unavailable() -> None:
+    from src.infrastructure.adapters.primary.web.main import create_app
+
+    app = create_app()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://replica"
+    ) as client:
+        live = await client.get("/health")
+        ready = await client.get("/health/ready")
+    assert live.status_code == 200
+    assert ready.status_code == 503
+    assert ready.json() == {"status": "unready", "reason": "replica_starting"}
+
+
+@pytest.mark.unit
 async def test_observability_route_match_uses_current_publication_before_boundary_pin() -> None:
     app = FastAPI()
     mount_generation_http_dispatcher_v2(app)

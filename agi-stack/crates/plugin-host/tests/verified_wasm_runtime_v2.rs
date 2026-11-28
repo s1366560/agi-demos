@@ -209,3 +209,76 @@ fn custom_catalog_override_cannot_be_combined_with_verified_external_archives() 
         assert!(loader.stage(snapshot).await.is_err());
     });
 }
+
+#[test]
+fn signed_invoke_guest_receives_json_object_and_returns_bounded_json() {
+    block_on(async {
+        let echo = r#"(module (memory (export "memory") 2)
+            (func (export "invoke") (param $len i32) (result i32)
+                i32.const 65536 i32.const 0 local.get $len memory.copy local.get $len))"#;
+        let (archive, snapshot) = fixture::signed_fixture(echo, |bundle| {
+            bundle["manifests"][0]["modules"][0]["entrypoint"] = "invoke".into();
+            bundle["manifests"][0]["quotas"]["max_wasm_memory_bytes"] = 131072.into();
+            bundle["layers"][0]["entries"][0]["quotas"]["max_wasm_memory_bytes"] = 131072.into();
+        });
+        let generation = LoaderV2::for_target(DataPlaneTargetV2::DesktopSidecar, [])
+            .with_verified_archives(vec![archive])
+            .stage(snapshot)
+            .await
+            .unwrap();
+        let manager = GenerationManagerV2::new();
+        manager.publish(Arc::clone(&generation)).await;
+        let set = generation
+            .resolve::<WasmToolSetV2>(WASM_TOOL_SET_SERVICE_V2, &scope(), None)
+            .unwrap();
+        let authority = Arc::new(Authority(AtomicBool::new(true)));
+        let operation = Arc::new(WasmOperationV2::new(
+            manager.acquire().unwrap(),
+            scope(),
+            "json".into(),
+            Some(authority.clone()),
+        ));
+        let tools = set.prepare(&operation).await;
+        for value in ["甲", "乙"] {
+            let input = json!({"query":value, "options":{"limit":1}});
+            assert_eq!(tools[0].invoke(input.clone()).await.unwrap(), input);
+        }
+        assert!(tools[0]
+            .invoke(json!({"query":"x".repeat(65536)}))
+            .await
+            .is_err());
+        authority.0.store(false, Ordering::Release);
+        assert!(tools[0].invoke(json!({"query":"revoked"})).await.is_err());
+        operation.close().await.unwrap();
+        manager.close().await;
+    });
+}
+
+#[test]
+fn two_valid_entrypoints_are_not_a_single_signed_tool_abi() {
+    block_on(async {
+        let dual = r#"(module (memory (export "memory") 2)
+            (func (export "score") (param i32) (result i32) local.get 0)
+            (func (export "invoke") (param i32) (result i32) local.get 0))"#;
+        let (archive, snapshot) = fixture::signed_fixture(dual, |_| {});
+        assert!(LoaderV2::for_target(DataPlaneTargetV2::DesktopSidecar, [])
+            .with_verified_archives(vec![archive])
+            .stage(snapshot)
+            .await
+            .is_err());
+    });
+}
+
+#[test]
+fn staging_rejects_guest_whose_start_function_fails() {
+    block_on(async {
+        let wat = r#"(module (func $init unreachable) (start $init)
+            (func (export "score") (param i32) (result i32) local.get 0))"#;
+        let (archive, snapshot) = fixture::signed_fixture(wat, |_| {});
+        assert!(LoaderV2::for_target(DataPlaneTargetV2::DesktopSidecar, [])
+            .with_verified_archives(vec![archive])
+            .stage(snapshot)
+            .await
+            .is_err());
+    });
+}

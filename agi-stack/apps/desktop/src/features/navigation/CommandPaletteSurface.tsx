@@ -1,0 +1,271 @@
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
+import { useI18n } from '../../i18n';
+export type CommandPaletteItem = {
+  id: string;
+  kind: 'route' | 'settings' | 'action';
+  groupId: string;
+  groupLabel: string;
+  routeId?: string;
+  label: string;
+  description: string;
+  icon: ReactNode;
+  shortcut?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  searchText: string;
+  onSelect: () => void;
+};
+
+import { DESKTOP_NAVIGATION_GROUPS } from './desktopCanonicalNavigationCatalog';
+
+export function CommandPaletteSurface({
+  shortcutIds,
+  inputRef,
+  query,
+  items,
+  onQueryChange,
+  onClose,
+}: {
+  shortcutIds: readonly string[];
+  inputRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  items: CommandPaletteItem[];
+  onQueryChange: (query: string) => void;
+  onClose: (restoreFocus?: boolean) => void;
+}) {
+  const { t } = useI18n();
+  const shortcutEnabled = (id: string) => shortcutIds.includes(id);
+  const paletteRef = useRef<HTMLElement>(null);
+  const groupedItems = useMemo(() => groupCommandPaletteItems(items), [items]);
+  const enabledItems = useMemo(
+    () => groupedItems.flatMap(([, group]) => group.items.filter((item) => !item.disabled)),
+    [groupedItems],
+  );
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const activeItem = enabledItems.find((item) => item.id === activeItemId) ?? enabledItems[0];
+  const activeOptionId = activeItem ? `command-option-${activeItem.id}` : undefined;
+
+  useEffect(() => {
+    setActiveItemId((current) => {
+      if (current && enabledItems.some((item) => item.id === current)) {
+        return current;
+      }
+      return enabledItems[0]?.id ?? null;
+    });
+  }, [enabledItems]);
+
+  useEffect(() => {
+    if (!activeOptionId) return;
+    document.getElementById(activeOptionId)?.scrollIntoView({ block: 'nearest' });
+  }, [activeOptionId]);
+
+  useEffect(() => {
+    const keepFocusInsidePalette = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (paletteRef.current?.contains(target)) return;
+      inputRef.current?.focus();
+    };
+
+    window.addEventListener('focusin', keepFocusInsidePalette);
+    return () => window.removeEventListener('focusin', keepFocusInsidePalette);
+  }, [inputRef]);
+
+  const runItem = (item: CommandPaletteItem) => {
+    if (item.disabled) return;
+    item.onSelect();
+    onClose(false);
+  };
+
+  const moveActiveItem = (delta: number) => {
+    setActiveItemId((current) => {
+      if (enabledItems.length === 0) return null;
+      const currentIndex = enabledItems.findIndex((item) => item.id === current);
+      const startIndex = currentIndex === -1 ? (delta > 0 ? -1 : 0) : currentIndex;
+      const nextIndex = (startIndex + delta + enabledItems.length) % enabledItems.length;
+      return enabledItems[nextIndex].id;
+    });
+  };
+
+  const containTabFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || event.key !== 'Tab') return;
+    const focusableElements = getCommandPaletteFocusableElements(paletteRef.current);
+    if (!focusableElements.length) return;
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement.focus();
+      return;
+    }
+    if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement.focus();
+    }
+  };
+
+  return (
+    <div className="command-palette-backdrop" onMouseDown={() => onClose(true)}>
+      <section
+        ref={paletteRef}
+        className="command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('commandPalette.title')}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose(true);
+            return;
+          }
+          containTabFocus(event);
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <label className="command-search">
+          <MagnifyingGlassIcon aria-hidden="true" />
+          <input
+            ref={inputRef}
+            value={query}
+            role="combobox"
+            aria-label={t('commandPalette.search')}
+            placeholder={t('commandPalette.searchPlaceholder')}
+            aria-controls="command-palette-results"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-activedescendant={activeOptionId}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' && shortcutEnabled('palette-move')) {
+                event.preventDefault();
+                moveActiveItem(1);
+              }
+              if (event.key === 'ArrowUp' && shortcutEnabled('palette-move')) {
+                event.preventDefault();
+                moveActiveItem(-1);
+              }
+              if (event.key === 'Home' && shortcutEnabled('palette-jump') && enabledItems[0]) {
+                event.preventDefault();
+                setActiveItemId(enabledItems[0].id);
+              }
+              if (
+                event.key === 'End' &&
+                shortcutEnabled('palette-jump') &&
+                enabledItems[enabledItems.length - 1]
+              ) {
+                event.preventDefault();
+                setActiveItemId(enabledItems[enabledItems.length - 1].id);
+              }
+              if (event.key === 'Enter' && shortcutEnabled('palette-run') && activeItem) {
+                event.preventDefault();
+                runItem(activeItem);
+              }
+            }}
+          />
+        </label>
+        <div
+          id="command-palette-results"
+          className="command-list"
+          role="listbox"
+          aria-label={t('commandPalette.results')}
+        >
+          {items.length === 0 ? (
+            <div className="command-empty" role="status">
+              {t('commandPalette.empty')}
+            </div>
+          ) : (
+            groupedItems.map(([groupId, group]) => {
+              const headingId = `command-group-${groupId}`;
+              return (
+                <section
+                  className="command-group"
+                  role="group"
+                  aria-labelledby={headingId}
+                  key={groupId}
+                >
+                  <h2 id={headingId}>{group.label}</h2>
+                  {group.items.map((item) => (
+                    <button
+                      id={`command-option-${item.id}`}
+                      className={`command-row ${item.disabled ? 'disabled' : ''} ${
+                        item.id === activeItem?.id ? 'selected' : ''
+                      }`}
+                      type="button"
+                      role="option"
+                      aria-selected={item.id === activeItem?.id}
+                      aria-disabled={item.disabled || undefined}
+                      key={item.id}
+                      disabled={item.disabled}
+                      title={item.disabledReason}
+                      onMouseEnter={() => {
+                        if (!item.disabled) {
+                          setActiveItemId(item.id);
+                        }
+                      }}
+                      onClick={() => runItem(item)}
+                    >
+                      <span className="command-icon" aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <span className="command-copy">
+                        <strong>{item.label}</strong>
+                        {item.disabledReason || item.description ? (
+                          <em>{item.disabledReason ?? item.description}</em>
+                        ) : null}
+                      </span>
+                      {item.shortcut ? (
+                        <kbd className="command-shortcut">{item.shortcut}</kbd>
+                      ) : null}
+                    </button>
+                  ))}
+                </section>
+              );
+            })
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function getCommandPaletteFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) return [];
+  const selectors = [
+    'button:not(:disabled)',
+    'input:not(:disabled)',
+    'textarea:not(:disabled)',
+    'select:not(:disabled)',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+  return Array.from(container.querySelectorAll<HTMLElement>(selectors)).filter(
+    (element) => element.getAttribute('aria-hidden') !== 'true',
+  );
+}
+
+// Use the same grouped order for rendering and keyboard traversal.
+export function groupCommandPaletteItems(items: readonly CommandPaletteItem[]) {
+  const groups = new Map<string, { label: string; items: CommandPaletteItem[] }>();
+  for (const item of items) {
+    const group = groups.get(item.groupId);
+    if (group) group.items.push(item);
+    else groups.set(item.groupId, { label: item.groupLabel, items: [item] });
+  }
+  const ordered = DESKTOP_NAVIGATION_GROUPS.flatMap(({ id }) => {
+    const group = groups.get(id);
+    if (!group) return [];
+    groups.delete(id);
+    return [[id, group] as const];
+  });
+  return [...ordered, ...groups.entries()];
+}

@@ -10,14 +10,14 @@ import {
   RUNTIME_DEPLOYMENTS_CLOUD_REASON,
   RUNTIME_DEPLOYMENTS_LOCAL_REASON,
   RuntimeDeploymentsUnavailableError,
-} from '../features/runtime-deployments/runtimeDeploymentsContract';
+} from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsContract';
 import type {
   RuntimeDeployment,
   RuntimeDeploymentProgressEvent,
   RuntimeDeploymentsPage,
   RuntimeDeploymentsQuery,
   RuntimeDeploymentsScope,
-} from '../features/runtime-deployments/runtimeDeploymentsTypes';
+} from '@business/environments/ui/desktop/runtime-deployments/runtimeDeploymentsTypes';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import {

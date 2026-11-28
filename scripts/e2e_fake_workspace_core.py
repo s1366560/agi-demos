@@ -8,7 +8,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 _MANIFEST = _ROOT / "docs/architecture/workspace-core-route-manifest.json"
-_CONTRACT = "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
+_CONTRACT = "56278e246fbb5ce4221c7b2ec4c088449ae6a70623946cfcfa6551e6c4d5a89e"
 _KEYS = "d58c38e884a298e4dc9b9aa4ab8ff7ab4694adb3def80719d9c71c4646ae02db"
 
 

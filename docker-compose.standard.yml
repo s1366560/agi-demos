@@ -1,0 +1,73 @@
+# Fresh local development installation. Each checkout uses its own Compose project and volumes.
+services:
+  registry:
+    image: registry:2
+    ports:
+      - "127.0.0.1:${STANDARD_REGISTRY_PORT:-5095}:5000"
+    volumes:
+      - registry:/var/lib/registry
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: memstack
+      POSTGRES_DB: memstack
+      POSTGRES_PASSWORD_FILE: /run/postgres-password
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ${STANDARD_DIRECTORY:?}/postgres-password:/run/postgres-password:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "memstack", "-d", "memstack"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.kernel
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      registry: {condition: service_started}
+    ports:
+      - "127.0.0.1:${STANDARD_API_PORT:-8000}:8000"
+    env_file:
+      - ${STANDARD_DIRECTORY:?}/kernel.env
+    environment:
+      ENVIRONMENT: development
+      PACKAGE_KERNEL_DATABASE_MODE: standalone
+      PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY: /run/memstack-initial
+      PACKAGE_APPLICATION_RUNTIME_URL: ${PACKAGE_APPLICATION_RUNTIME_URL:-}
+      REDIS_HOST: redis
+      PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES: '["/run/memstack-initial/publisher.pem"]'
+      PLUGIN_WORKER_ALLOWED_REGISTRIES: '["http://127.0.0.1:${STANDARD_REGISTRY_PORT:-5095}"]'
+    volumes:
+      - ${STANDARD_DIRECTORY:?}/database.env:/app/.env:ro
+      - ${STANDARD_DIRECTORY:?}/owner.json:/run/memstack-initial/owner.json:ro
+      - ${STANDARD_DIRECTORY:?}/publisher.pem:/run/memstack-initial/publisher.pem:ro
+      - ./charts/memstack/files/standard-packages.json:/run/memstack-initial/selection.json:ro
+      - ${STANDARD_DIRECTORY:?}/archives:/run/memstack-initial/archives:ro
+      # The local execution host creates restricted worker containers through the development daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5).close()"]
+      interval: 5s
+      timeout: 7s
+      retries: 45
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile.project-packages
+    depends_on:
+      api: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:${STANDARD_WEB_PORT:-3000}:80"
+volumes:
+  postgres: {}
+  registry: {}

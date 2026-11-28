@@ -1,6 +1,6 @@
 """Generic channel implementation module loader.
 
-Loads stable channel modules from the infrastructure package using ``importlib``
+Loads each channel adapter from its own package using ``importlib``
 so application-layer consumers remain decoupled from specific implementations.
 
 Usage::
@@ -25,15 +25,21 @@ from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
 
-_SIBLING_FQN_PREFIX: dict[str, str] = {
-    "feishu": "feishu",
-}
-
 logger = logging.getLogger(__name__)
 
-_CHANNEL_MODULE_REGISTRY: dict[str, Path] = {
-    "feishu": Path(__file__).resolve().parent / "feishu",
-}
+_CHANNEL_MODULE_REGISTRY: dict[str, Path] = {}
+
+
+def _packaged_channel(channel: str) -> Path | None:
+    if not channel.isidentifier():
+        return None
+    try:
+        package = importlib.util.find_spec(f"plugins.adapters.channels.{channel}.backend")
+    except ModuleNotFoundError:
+        return None
+    if package is None or not package.submodule_search_locations:
+        return None
+    return Path(next(iter(package.submodule_search_locations)))
 
 
 def register_channel_plugin(channel: str, plugin_dir: Path) -> None:
@@ -71,13 +77,15 @@ def load_channel_module(channel: str, submodule: str) -> ModuleType:
     ImportError
         If the module spec cannot be created.
     """
-    implementation_dir = _CHANNEL_MODULE_REGISTRY.get(channel)
+    implementation_dir = _CHANNEL_MODULE_REGISTRY.get(channel) or _packaged_channel(channel)
     if implementation_dir is None:
         msg = (
             f"Unknown channel {channel!r}. Registered channels: {sorted(_CHANNEL_MODULE_REGISTRY)}"
         )
         raise KeyError(msg)
 
+    if not submodule.isidentifier():
+        raise ValueError("Invalid channel submodule name")
     file_path = implementation_dir / f"{submodule}.py"
     if not file_path.exists():
         msg = f"Channel implementation module not found: {file_path}"
@@ -87,8 +95,7 @@ def load_channel_module(channel: str, submodule: str) -> ModuleType:
 
     # Compute the sibling FQN that _load_sibling() in plugin.py would use
     # (e.g. "feishu_adapter") so we can share the same module object.
-    sibling_prefix = _SIBLING_FQN_PREFIX.get(channel, channel)
-    sibling_fqn = f"{sibling_prefix}_{submodule}"
+    sibling_fqn = f"{channel}_{submodule}"
 
     # Fast-path: already loaded by _load_sibling() or a prior call.
     if sibling_fqn in sys.modules:

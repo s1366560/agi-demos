@@ -65,7 +65,7 @@ async def test_reservation_and_owner_claim_are_durable_and_exclusive(postgres_re
 def _processor(run_id, execute, *, pipeline=False, permission_manager=None):
     from unittest.mock import MagicMock
 
-    from src.infrastructure.agent.processor.processor import (
+    from plugins.business.agent.engine.processor.processor import (
         ProcessorConfig,
         SessionProcessor,
         ToolDefinition,
@@ -427,7 +427,7 @@ async def test_revoked_owner_cannot_dispatch_a_model(postgres_registry, monkeypa
             calls.append("model")
             yield None
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream", Stream)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.LLMStream", Stream)
     async with SubAgentExecutionOwnerV2(sessions, scope.session_id, run.run_id):
         async with sessions() as db, db.begin():
             lease = await db.get(SubAgentOwnerLeaseV2, (scope.session_id, run.run_id))

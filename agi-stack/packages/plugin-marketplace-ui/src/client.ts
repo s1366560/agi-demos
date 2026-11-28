@@ -24,6 +24,11 @@ export interface MarketplaceSource {
   trusted: boolean;
 }
 export interface MarketplaceInstallation {
+  desired_revision?: number;
+  actual_digest?: string | null;
+  running_version?: string | null;
+  has_desktop_ui?: boolean;
+  commands?: string[];
   install_strategy?: 'signed-v2';
   id: string;
   plugin_id: string;
@@ -92,6 +97,25 @@ export function createMarketplaceClient(
 ) {
   const query = new URLSearchParams({ ...scope });
   return {
+    businessPage: (plugin: string, digest: string, signal?: AbortSignal) =>
+      transport<{
+        digest: string;
+        bytes_base64: string;
+        source: string;
+        module_ref: string;
+      }>(
+        `/api/v1/platform-plugins/v2/optional-business/${encodeURIComponent(plugin)}/ui?${new URLSearchParams({ ...scope, target: 'desktop-renderer', expected_digest: digest })}`,
+        { ...(signal ? { signal } : {}) },
+      ),
+    businessCommand: (plugin: string, digest: string, command: string, signal?: AbortSignal, payload?: Record<string, unknown>) =>
+      transport<Record<string, unknown>>(
+        `/api/v1/platform-plugins/v2/optional-business/${encodeURIComponent(plugin)}/commands`,
+        {
+          method: 'POST',
+          body: { ...scope, expected_digest: digest, command_id: command, ...(payload === undefined ? {} : { payload }) },
+          ...(signal ? { signal } : {}),
+        },
+      ),
     oauthStatus: (id: string, server: string, signal?: AbortSignal) =>
       transport<MarketplaceOAuthStatus>(`${ROOT}/installations/${encodeURIComponent(id)}/oauth/${encodeURIComponent(server)}/status?${query}`, { ...(signal ? { signal } : {}) }),
     oauthAction: (id: string, server: string, action: 'start' | 'cancel' | 'disconnect', configuration: { client_id?: string; client_metadata_url?: string } = {}, key = crypto.randomUUID(), signal?: AbortSignal) =>
@@ -159,7 +183,12 @@ export function createMarketplaceClient(
         {
           method: 'POST',
           ...(signal ? { signal } : {}),
-          body: { ...payload, ...scope, idempotency_key: idempotencyKey },
+          body: {
+            ...payload,
+            ...scope,
+            ...(installation.desired_revision === undefined ? {} : { expected_revision: installation.desired_revision }),
+            idempotency_key: idempotencyKey,
+          },
         },
       ),
   };

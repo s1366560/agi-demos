@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.core.llm_stream import StreamEvent
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 
 
 class _ReasoningThenTextStream:
@@ -26,7 +26,7 @@ class _ReasoningThenTextStream:
 @pytest.mark.unit
 async def test_process_step_maps_reasoning_start_before_text(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream",
+        "plugins.business.agent.engine.processor.processor.LLMStream",
         _ReasoningThenTextStream,
     )
     processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])

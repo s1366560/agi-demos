@@ -1,39 +1,22 @@
-"""Bind the durable memory-update job to the process graph and chunk index."""
+"""Extract and index using the services held by one durable job lease."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from src.application.services.memory_update_jobs import ExtractionQueued, GraphNotReady
 
-_graph_service: object | None = None
-_embedding_service: object | None = None
-_session_factory: object | None = None
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.domain.model.memory.episode import Episode
 
 
-def bind_memory_update_runtime(
-    *,
-    graph_service: object,
-    embedding_service: object,
-    session_factory: object,
-) -> None:
-    """Remember the services a restarted process should use for recovery."""
-    global _graph_service, _embedding_service, _session_factory
-    _graph_service = graph_service
-    _embedding_service = embedding_service
-    _session_factory = session_factory
-
-
-def memory_update_runtime_ready() -> bool:
-    return _graph_service is not None and _session_factory is not None
-
-
-def clear_memory_update_runtime() -> None:
-    """Drop a process binding so a later test or shutdown starts unbound."""
-    global _graph_service, _embedding_service, _session_factory
-    _graph_service = None
-    _embedding_service = None
-    _session_factory = None
+@runtime_checkable
+class _EpisodeWriter(Protocol):
+    async def add_episode(self, episode: Episode) -> object: ...
 
 
 async def extract_with_graph(payload: dict[str, Any], graph_service: object | None) -> None:
@@ -61,10 +44,9 @@ async def extract_with_graph(payload: dict[str, Any], graph_service: object | No
         project_id=_text(payload.get("project_id")),
         user_id=_text(payload.get("user_id")),
     )
-    add_episode = getattr(graph_service, "add_episode", None)
-    if not callable(add_episode):
+    if not isinstance(graph_service, _EpisodeWriter):
         raise GraphNotReady("graph runtime cannot accept episodes")
-    result = await add_episode(episode)
+    result = await graph_service.add_episode(episode)
     status = str(getattr(result, "status", "") or "")
     if status.upper() == "PENDING":
         raise ExtractionQueued("graph queued the episode")
@@ -72,21 +54,35 @@ async def extract_with_graph(payload: dict[str, Any], graph_service: object | No
 
 async def index_with_session(
     payload: dict[str, Any],
-    session_factory: object | None,
+    session_factory: Callable[[], AsyncSession] | None,
     embedding_service: object | None,
 ) -> None:
     """Replace searchable chunks for the saved revision."""
     if session_factory is None:
         raise GraphNotReady("session factory is not bound")
+    from sqlalchemy import select
+
+    from src.domain.model.memory.processing import MemoryProcessingSource
+    from src.infrastructure.adapters.secondary.persistence.models import Memory
     from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
         SqlChunkRepository,
     )
     from src.infrastructure.memory.chunk_sync import upsert_memory_chunks
 
-    if not callable(session_factory):
-        raise GraphNotReady("session factory is not bound")
+    source = MemoryProcessingSource.from_payload(payload)
+    if source is None:
+        return
     session = session_factory()
     try:
+        current_revision = select(Memory.id).where(
+            Memory.id == source.memory_id,
+            Memory.project_id == source.project_id,
+            Memory.version == source.revision,
+            Memory.task_id == source.task_id,
+            Memory.status == "ENABLED",
+        )
+        if await session.scalar(current_revision) is None:
+            return
         await upsert_memory_chunks(
             SqlChunkRepository(session),
             memory_id=str(payload.get("memory_id") or ""),
@@ -96,17 +92,12 @@ async def index_with_session(
             metadata={"tenant_id": payload.get("tenant_id")},
             embedding_service=cast("Any", embedding_service),
         )
-        await session.commit()
+        # Generate embeddings without locking memory edits. Fence only the final commit so
+        # chunks from a superseded or deleted revision roll back with the session.
+        if await session.scalar(current_revision.with_for_update()) is not None:
+            await session.commit()
     finally:
         await session.close()
-
-
-async def bound_extract(payload: dict[str, Any]) -> None:
-    await extract_with_graph(payload, _graph_service)
-
-
-async def bound_index(payload: dict[str, Any]) -> None:
-    await index_with_session(payload, _session_factory, _embedding_service)
 
 
 def _text(value: object) -> str | None:

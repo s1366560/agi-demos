@@ -112,3 +112,25 @@ fn lifecycle_is_scoped_and_revocation_cannot_be_reenabled_without_approval() {
     store::uninstall(&db, &scope("a"), &reference).unwrap();
     assert!(store::uninstall(&db, &scope("a"), &reference).is_err());
 }
+
+#[test]
+fn route_epoch_preserves_continuity_only_while_the_grant_remains_active() {
+    let db = Connection::open_in_memory().unwrap();
+    store::initialize(&db).unwrap();
+    let scope = scope("project-a");
+    let reference = reference();
+    let epoch = || store::route_epoch(&db, &scope, &reference.bundle_id);
+    assert_eq!(epoch(), None);
+    store::install(&db, &keys(), &scope, &reference, RAW, &grants()).unwrap();
+    let first = epoch().unwrap();
+    store::install(&db, &keys(), &scope, &reference, RAW, &grants()).unwrap();
+    assert_eq!(epoch(), Some(first));
+    store::set_enabled(&db, &[], &scope, &reference, false).unwrap();
+    assert_eq!(epoch(), None);
+    store::set_enabled(&db, &keys(), &scope, &reference, true).unwrap();
+    let restored = epoch().unwrap();
+    assert!(restored > first);
+    store::uninstall(&db, &scope, &reference).unwrap();
+    store::install(&db, &keys(), &scope, &reference, RAW, &grants()).unwrap();
+    assert!(epoch().unwrap() > restored);
+}

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memstack-feishu-channel"
+version = "1.0.0"
+description = "Feishu channel protocol and bundled default task timeline for MemStack."
+requires-python = ">=3.12"
+dependencies = ["lark-oapi", "aiohttp>=3.9"]
+
+[tool.setuptools]
+packages = ["plugins.adapters.channels.feishu", "plugins.adapters.channels.feishu.backend"]
+package-dir = {"plugins.adapters.channels.feishu" = "."}
+
+[tool.setuptools.package-data]
+"plugins.adapters.channels.feishu" = ["timeline.wasm"]

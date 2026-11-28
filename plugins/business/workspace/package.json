@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-workspace",
+  "version": "1.6.5",
+  "target": "python",
+  "tool_name": "export_csv",
+  "wasm": "directory.wasm",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/business/workspace",
+  "kind": "business"
+}

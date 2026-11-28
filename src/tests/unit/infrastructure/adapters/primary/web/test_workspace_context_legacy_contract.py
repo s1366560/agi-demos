@@ -14,9 +14,7 @@ from src.domain.model.auth.workspace_context import (
     WorkspaceContextError,
     WorkspaceContextErrorCode,
 )
-from src.infrastructure.adapters.primary.web.routers.workspace_context import (
-    _raise_workspace_context_http_error,
-)
+from src.host.identity.workspace_context import raise_context_error
 
 pytestmark = pytest.mark.unit
 
@@ -94,7 +92,7 @@ def test_workspace_context_error_envelope_is_frozen(
     detail: dict[str, str],
 ) -> None:
     with pytest.raises(HTTPException) as caught:
-        _raise_workspace_context_http_error(WorkspaceContextError(code))
+        raise_context_error(WorkspaceContextError(code))
 
     assert caught.value.status_code == status_code
     assert caught.value.detail == detail
@@ -102,7 +100,7 @@ def test_workspace_context_error_envelope_is_frozen(
 
 def test_workspace_context_revision_conflict_and_timestamp_are_frozen() -> None:
     with pytest.raises(HTTPException) as caught:
-        _raise_workspace_context_http_error(
+        raise_context_error(
             WorkspaceContextError(
                 WorkspaceContextErrorCode.REVISION_CONFLICT,
                 expected_revision=2,

@@ -1,5 +1,5 @@
 import type * as K from './nativeKnowledgeContracts';
-import type { ProjectKnowledgeScope } from './projectKnowledgeClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import * as s from './nativeKnowledgeSchema';
 
 const sameRemote = (remote: K.NativeKnowledgeRemote | null, id: string): boolean =>

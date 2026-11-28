@@ -7,13 +7,13 @@ import pytest
 from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 
+from plugins.business.automation.backend.automation_command_service import (
+    AutomationRunReceipt,
+)
 from src.application.schemas.cron import (
     AutomationRunCommandV2,
     CronActionCapability,
     ManualRunRequest,
-)
-from src.application.services.automation_command_service import (
-    AutomationRunReceipt,
 )
 from src.domain.model.cron.cron_job import CronJob
 from src.infrastructure.adapters.primary.web.routers import cron as cron_router

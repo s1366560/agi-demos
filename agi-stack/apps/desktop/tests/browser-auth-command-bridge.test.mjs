@@ -22,6 +22,7 @@ function declaration(ast, name) {
   return ts.isVariableDeclaration(result) ? `const ${result.getText(ast)};` : result.getText(ast);
 }
 function compile(text, bindings, name) {
+  bindings = { fullDesktop: true, ...bindings };
   const output = ts.transpileModule(text, { compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
   } }).outputText;

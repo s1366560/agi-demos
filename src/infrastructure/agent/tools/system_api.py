@@ -108,9 +108,14 @@ def openapi_for_published_generation(registry: Any, descriptor: Any) -> dict[str
 
 def _get_openapi_schema() -> dict[str, Any]:
     from src.infrastructure.adapters.primary.web.main import app
+    from src.infrastructure.plugins.v2.boundary import current_generation_v2
+    from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-    schema = app.openapi()
-    return schema if isinstance(schema, dict) else {}
+    registry = getattr(app.state, "platform_plugin_route_registry_v2", None)
+    if not isinstance(registry, RouteTableRegistryV2):
+        raise RuntimeV2Error("route_generation_unavailable", "operation has no HTTP registry")
+    return dict(registry.resolve_generation(current_generation_v2()).openapi.schema)
 
 
 def _operation_tags(operation: dict[str, Any]) -> list[str]:
@@ -325,21 +330,20 @@ def _mapping_or_error(value: Any, name: str) -> tuple[dict[str, Any] | None, Too
 async def _request_operation(
     ctx: ToolContext,
     *,
-    operation_id: str,
+    operation: dict[str, Any],
     path_params: dict[str, Any] | None,
     query: dict[str, Any] | None,
     body: Any,
     timeout_seconds: float | None,
 ) -> ToolResult:
-    runtime = _current_system_api_tool_runtime()
-    operation = _catalog_by_operation().get(operation_id)
-    if operation is None:
-        return ToolResult(
-            output=_json({"error": "unknown_operation_id", "operation_id": operation_id}),
-            title="System API request failed",
-            is_error=True,
-        )
+    from src.infrastructure.plugins.v2.boundary import (
+        IF_PLUGIN_GENERATION_HEADER_V2,
+        current_generation_v2,
+    )
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+    runtime = _current_system_api_tool_runtime()
+    operation_id = str(operation["operation_id"])
     rendered_path, path_error = _render_path(str(operation["path_template"]), path_params)
     if path_error is not None:
         return path_error
@@ -365,6 +369,13 @@ async def _request_operation(
         "Authorization": _auth_header_value(token),
         "Accept": "application/json",
     }
+    try:
+        generation = current_generation_v2()
+    except RuntimeV2Error as error:
+        if error.code != "generation_not_pinned":
+            raise
+    else:
+        headers[IF_PLUGIN_GENERATION_HEADER_V2] = generation.digest
     try:
         async with runtime.client_factory(
             timeout=request_timeout,
@@ -490,34 +501,44 @@ async def system_api_tool(  # noqa: PLR0911
     """List, describe, or invoke a MemStack API operation."""
     from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+    if action not in {"list", "describe", "request"}:
+        return ToolResult(
+            output=_json(
+                {
+                    "error": "unknown_action",
+                    "action": action,
+                    "allowed_actions": ["list", "describe", "request"],
+                }
+            ),
+            title="System API failed",
+            is_error=True,
+        )
+
+    try:
+        catalog = _operation_catalog()
+    except RuntimeV2Error as exc:
+        if exc.code not in {"route_generation_unavailable", "generation_not_pinned"}:
+            raise
+        unavailable = {
+            "status": "unavailable",
+            "failure_class": "backend",
+            "code": exc.code,
+            "generation_status": "unpublished",
+            "publication_required": True,
+            "substitutes_other_generation": False,
+            "message": str(exc),
+            "distinction": _(
+                "The pinned plugin generation has no staged HTTP route table. "
+                "Enable the package's HTTP contribution in the same scope and publish it."
+            ),
+        }
+        return ToolResult(
+            output=_json(unavailable),
+            title="System API generation unavailable",
+            metadata=unavailable,
+            is_error=True,
+        )
     if action == "list":
-        try:
-            catalog = _operation_catalog()
-        except RuntimeV2Error as exc:
-            if exc.code != "route_generation_unavailable":
-                raise
-            unavailable = {
-                "status": "unavailable",
-                "failure_class": "backend",
-                "code": exc.code,
-                "generation_status": "unpublished",
-                "publication_required": True,
-                "substitutes_other_generation": False,
-                "message": str(exc),
-                "distinction": _(
-                    "The pinned plugin generation has no staged HTTP route table. "
-                    "This is a publication gap, not an authorization denial. "
-                    "This tool does not publish routes and does not serve another "
-                    "generation's table. A scoped profile publication does not "
-                    "publish HTTP routes."
-                ),
-            }
-            return ToolResult(
-                output=_json(unavailable),
-                title="System API generation unavailable",
-                metadata=unavailable,
-                is_error=True,
-            )
         operations = _filter_operations(
             search=search,
             tag=tag,
@@ -538,45 +559,32 @@ async def system_api_tool(  # noqa: PLR0911
             is_error=True,
         )
 
+    operation = _catalog_by_operation(catalog).get(operation_id)
+    if operation is None:
+        return ToolResult(
+            output=_json({"error": "unknown_operation_id", "operation_id": operation_id}),
+            title="System API operation not found",
+            is_error=True,
+        )
     if action == "describe":
-        operation = _catalog_by_operation().get(operation_id)
-        if operation is None:
-            return ToolResult(
-                output=_json({"error": "unknown_operation_id", "operation_id": operation_id}),
-                title="System API operation not found",
-                is_error=True,
-            )
         return ToolResult(
             output=_json(_public_operation(operation, include_schema=True)),
             title=f"System API operation {operation_id}",
         )
 
-    if action == "request":
-        checked_path_params, path_params_error = _mapping_or_error(path_params, "path_params")
-        if path_params_error is not None:
-            return path_params_error
-        checked_query, query_error = _mapping_or_error(query, "query")
-        if query_error is not None:
-            return query_error
-        return await _request_operation(
-            ctx,
-            operation_id=operation_id,
-            path_params=checked_path_params,
-            query=checked_query,
-            body=body,
-            timeout_seconds=timeout_seconds,
-        )
-
-    return ToolResult(
-        output=_json(
-            {
-                "error": "unknown_action",
-                "action": action,
-                "allowed_actions": ["list", "describe", "request"],
-            }
-        ),
-        title="System API failed",
-        is_error=True,
+    checked_path_params, path_params_error = _mapping_or_error(path_params, "path_params")
+    if path_params_error is not None:
+        return path_params_error
+    checked_query, query_error = _mapping_or_error(query, "query")
+    if query_error is not None:
+        return query_error
+    return await _request_operation(
+        ctx,
+        operation=operation,
+        path_params=checked_path_params,
+        query=checked_query,
+        body=body,
+        timeout_seconds=timeout_seconds,
     )
 
 

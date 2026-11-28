@@ -156,6 +156,7 @@ impl agistack_core::ports::LlmPort for ScriptedKnowledgeLlm {
     }
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn agent_access_explicit_http_producer_carries_session_into_real_engine_and_tool_calls() {
     use axum::{

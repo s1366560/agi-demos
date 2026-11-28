@@ -1,5 +1,5 @@
-import { parseSandboxRuntimeCapabilitySnapshot } from '../features/sandbox/sandboxRuntimeSurfaceClient';
-import { parseKasmProxySession } from '../features/sandbox/sandboxRuntimeClient';
+import { parseSandboxRuntimeCapabilitySnapshot } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeSurfaceClient';
+import { parseKasmProxySession } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 import { parseFileListing, parseFileContent } from './desktopProjectSandboxSurfaceFileContractV2';
 import {
   sandboxSurfaceErrorV2,

@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.configuration.config import get_settings
-from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.agent import core as core_package
-from src.infrastructure.agent.core import project_react_agent as project_react_agent_module
-from src.infrastructure.agent.core.project_react_agent import (
+from plugins.business.agent.engine.react import project_react_agent as project_react_agent_module
+from plugins.business.agent.engine.react.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
+from src.configuration.config import get_settings
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent import core as core_package
 from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
     AGENT_LIFECYCLE_CHANGED_EVENT_V2,
     AGENT_SUBAGENT_LIFECYCLE_EVENT_V2,
@@ -197,7 +197,7 @@ def mock_session_context():
 def mock_artifact_lifecycle_projection():
     """Keep lifecycle tests focused while production resolution stays V2-only."""
     with patch(
-        "src.infrastructure.agent.core.project_react_agent."
+        "plugins.business.agent.engine.react.project_react_agent."
         "current_artifact_lifecycle_application_service_v2",
         return_value=MagicMock(artifact=MagicMock()),
     ):
@@ -237,9 +237,9 @@ class TestProjectReActAgentLifecycleNotifications:
                 new_callable=AsyncMock,
                 return_value=mock_session_context,
             ),
-            patch("src.infrastructure.agent.core.react_agent.ReActAgent") as react_agent,
+            patch("plugins.business.agent.engine.react.react_agent.ReActAgent") as react_agent,
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=None,
             ),
         ):
@@ -303,7 +303,7 @@ class TestProjectReActAgentLifecycleNotifications:
         agent._detached_subagent_task_supervisor = supervisor
 
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=None,
         ):
             assert await agent.stop() is True
@@ -326,7 +326,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         with (
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier"
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier"
             ) as notifier,
             patch(
                 "src.infrastructure.agent.state.agent_session_pool.clear_session_cache",
@@ -401,7 +401,7 @@ class TestProjectReActAgentLifecycleNotifications:
                 return_value=False,
             ),
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=None,
             ),
         ):
@@ -483,11 +483,11 @@ class TestProjectReActAgentLifecycleNotifications:
                 return_value=mock_session_context,
             ),
             patch(
-                "src.infrastructure.agent.core.react_agent.ReActAgent",
+                "plugins.business.agent.engine.react.react_agent.ReActAgent",
             ),
             # Inject the mock notifier
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):
@@ -531,7 +531,7 @@ class TestProjectReActAgentLifecycleNotifications:
                 side_effect=RuntimeError("graph service init failed"),
             ),
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):
@@ -612,10 +612,10 @@ class TestProjectReActAgentLifecycleNotifications:
                 return_value=mock_session_context,
             ),
             patch(
-                "src.infrastructure.agent.core.react_agent.ReActAgent",
+                "plugins.business.agent.engine.react.react_agent.ReActAgent",
             ),
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):
@@ -677,9 +677,9 @@ class TestProjectReActAgentLifecycleNotifications:
                 new_callable=AsyncMock,
                 return_value=mock_session_context,
             ),
-            patch("src.infrastructure.agent.core.react_agent.ReActAgent") as mock_react_cls,
+            patch("plugins.business.agent.engine.react.react_agent.ReActAgent") as mock_react_cls,
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):
@@ -746,7 +746,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             await agent.pause()
@@ -770,7 +770,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             await agent.resume()
@@ -794,7 +794,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             await agent.stop()
@@ -827,7 +827,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             events = []
@@ -870,7 +870,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             events = []
@@ -908,7 +908,7 @@ class TestProjectReActAgentLifecycleNotifications:
         agent._react_agent = mock_react
 
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             async for _event in agent.execute_chat(
@@ -945,7 +945,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             events = []
@@ -986,7 +986,7 @@ class TestProjectReActAgentLifecycleNotifications:
         agent._react_agent = mock_react
 
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             events = [
@@ -1071,11 +1071,11 @@ class TestProjectReActAgentNotificationContent:
                 return_value=mock_session_context,
             ),
             patch(
-                "src.infrastructure.agent.core.react_agent.ReActAgent",
+                "plugins.business.agent.engine.react.react_agent.ReActAgent",
             ),
             # Inject the mock notifier
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):
@@ -1116,7 +1116,7 @@ class TestProjectReActAgentNotificationContent:
 
         # Inject the mock notifier
         with patch(
-            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
             return_value=mock_notifier,
         ):
             async for _ in agent.execute_chat(
@@ -1160,7 +1160,7 @@ class TestProjectReActAgentNotificationContent:
             ),
             # Inject the mock notifier
             patch(
-                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                "plugins.business.agent.engine.react.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
             ),
         ):

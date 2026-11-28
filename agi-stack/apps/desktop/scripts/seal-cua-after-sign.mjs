@@ -1,3 +1,4 @@
+import { recordRuntimeChecksums } from './signed-runtime-checksums.mjs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { refreshCuaChecksums, verifyCuaRuntime } from './cua-packaging.mjs';
@@ -5,6 +6,7 @@ import { refreshCuaChecksums, verifyCuaRuntime } from './cua-packaging.mjs';
 export default async function sealCuaAfterSign(context) {
   if (context.electronPlatformName === 'win32') {
     const directory = join(context.appOutDir, 'resources/sidecar');
+    await recordRuntimeChecksums(join(context.appOutDir, 'resources'), { platform: 'win32', full: true });
     await refreshCuaChecksums(directory, 'win32');
     await verifyCuaRuntime(directory, { platform: 'win32' });
   } else if (context.electronPlatformName === 'darwin') {

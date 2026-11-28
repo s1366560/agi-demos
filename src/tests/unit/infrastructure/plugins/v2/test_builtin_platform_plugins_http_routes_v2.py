@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from fastapi.routing import APIRoute
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
@@ -17,6 +18,9 @@ from src.application.schemas.platform_plugins import (
 )
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.host.identity.device_plugin_grants import router as device_grants_router
+from src.host.transport.project_package_routes import project_package_router
+from src.host.transport.tenant_packages import router as tenant_package_router
 from src.infrastructure.plugins.v2 import builtin_platform_plugins_http_routes as subject
 from src.infrastructure.plugins.v2.builtin_http_routes import build_builtin_route_graph_v2
 
@@ -124,77 +128,11 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             "republish_last_ready_v2",
             PlatformPluginPublicationReadinessResponseV2,
         ),
-        (
-            f"{v2}/optional-business/install",
-            ("POST",),
-            "install_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}",
-            ("GET",),
-            "projection_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/enable",
-            ("POST",),
-            "enable_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/disable",
-            ("POST",),
-            "disable_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/uninstall",
-            ("POST",),
-            "uninstall_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/purge",
-            ("POST",),
-            "purge_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/rollback",
-            ("POST",),
-            "rollback_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/invoke",
-            ("POST",),
-            "invoke_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/commands",
-            ("POST",),
-            "command_optional_business_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("PUT",),
-            "put_optional_business_storage_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("GET",),
-            "get_optional_business_storage_v2",
-            dict[str, Any],
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/ui",
-            ("GET",),
-            "ui_optional_business_v2",
-            dict[str, Any],
+        *(
+            (route.path, tuple(sorted(route.methods)), route.name, route.response_model)
+            for router in (project_package_router, tenant_package_router, device_grants_router)
+            for route in router.routes
+            if isinstance(route, APIRoute)
         ),
         (
             prefix,
@@ -209,46 +147,24 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             None,
         ),
     )
-    assert (
-        tuple(definition.tags for definition in definitions[:-2])
-        == (("Platform Plugins", "Platform Plugins V2"),) * (len(definitions) - 2)
-    )
+    assert tuple(definition.tags for definition in definitions[:-2]) == (
+        ("Platform Plugins", "Platform Plugins V2"),
+    ) * (len(definitions) - 2)
     assert tuple(definition.tags for definition in definitions[-2:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
-    assert tuple(definition.status_code for definition in definitions[:-2]) == (
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        201,
-        None,
-        201,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
+    assert {
+        definition.name: definition.status_code
+        for definition in definitions
+        if definition.status_code is not None
+    } == {
+        "issue_data_plane_credential_v2": 201,
+        "rotate_data_plane_credential_v2": 201,
+        "approve_device_package": 201,
+        "revoke_device_package": 204,
+    }
     assert {definition.owner_entry_id for definition in definitions} == {
         subject.PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2
     }

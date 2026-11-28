@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.infrastructure.agent.processor import (
+from plugins.business.agent.engine.processor import (
     GoalCheckResult,
     ProcessorConfig,
     SessionProcessor,
@@ -235,7 +235,7 @@ async def test_plan_can_finish_with_pending_execution_tasks(has_task_reader) -> 
 
 
 async def test_unavailable_goal_judge_stops_without_asking_agent_to_repeat_tools():
-    from src.infrastructure.agent.processor.processor import ProcessorResult, ProcessorState
+    from plugins.business.agent.engine.processor.processor import ProcessorResult, ProcessorState
 
     client = AsyncMock()
     client.generate.return_value = {"content": "", "tool_calls": [], "finish_reason": "stop"}
@@ -259,7 +259,7 @@ async def test_unavailable_goal_judge_stops_without_asking_agent_to_repeat_tools
 async def test_invalid_first_judgment_retries_in_judge_without_main_agent_turn():
     import json
 
-    from src.infrastructure.agent.processor.goal_evaluator import (
+    from plugins.business.agent.engine.processor.goal_evaluator import (
         GOAL_COMPLETION_JUDGE_TOOL_V2,
         GoalEvaluator,
     )

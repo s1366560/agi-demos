@@ -2,11 +2,11 @@
 crates/bootstrap/memstack-workspace-core/Cargo.toml	2d2afb5dec537027224d12699df5b8d47d991e3377b634b6c78e2203e6fba04d	100644	Add the isolated MemStack Workspace Core package
 crates/bootstrap/memstack-workspace-core/src/agent_registry.rs	5badc58ac1cde531488e9f38fb8f3ec99abceec5d151c83bd36c86157a38efe5	100644	Add fail-closed structured HTTP Agent Registry authority
 crates/bootstrap/memstack-workspace-core/src/agents.rs	905dcd7b397681dffe590382638593a0db0dd40f720ee3119e68d2709e1237d4	100644	Add legacy-compatible public Workspace Agent mutation adapters
-crates/bootstrap/memstack-workspace-core/src/capabilities.rs	d1f3c86ff81b41fefd4102454d9dea81cd1d4fd3a040ad10b898040e4459f9a6	100644	Add fail-closed public API capability negotiation
+crates/bootstrap/memstack-workspace-core/src/capabilities.rs	6d0a4e8dc359d2a9649dc5e9cd0cf724ef12145e067fddaf01bb9e42fc3859ee	100644	Add fail-closed public API capability negotiation
 crates/bootstrap/memstack-workspace-core/src/context.rs	2014c7e3d3eaea88a041b3b90a0074e4b809df80c5227530b893814f79a7e20e	100644	Add legacy-compatible public Workspace Context HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/context_judge.rs	f62e0f82e7c2d743acd7ef8fa920dacc4f0e27c6c0dfb11d2b7c0249da46cde8	100644	Add structured Agent Judge client for ambiguous Context selection
 crates/bootstrap/memstack-workspace-core/src/creation.rs	cd8d68383df1bb5379ebd0e8c6fc2083421281b41b040486bf63f2d61ed263a5	100644	Add internal and legacy-compatible public Create Workspace HTTP adapters
-crates/bootstrap/memstack-workspace-core/src/lib.rs	c67352769ed8d719845af98344ce147e75c57995d54b1ac06ee77dcbeb23cea0	100644	Add authenticated Workspace authority routes and contracts
+crates/bootstrap/memstack-workspace-core/src/lib.rs	3700aa13f3341da7135056689ac735d6dec48b4e4de6ebbc4cf5978695ac8339	100644	Add authenticated Workspace authority routes and contracts
 crates/bootstrap/memstack-workspace-core/src/main.rs	a62dfe71d29638d00f5e6b39120a8ca5536292b96ac14cea69272733964174f5	100644	Add the Cloud and Desktop Workspace Core binary entrypoint
 crates/bootstrap/memstack-workspace-core/src/desktop_control.rs	dc5c858694f923fedfa4bbc20e36dac257af4878ead4ff456002f80607bbedaa	100644	Add the authenticated Desktop helper control protocol
 crates/bootstrap/memstack-workspace-core/src/message_delivery.rs	3a27b3bda8e2432b7aa890cb94d56dda6d9f8ef3a7f4398fc462362dd43d6205	100644	Deliver committed Workspace messages through the Agent Runtime Provider
@@ -16,7 +16,7 @@ crates/bootstrap/memstack-workspace-core/src/mutations.rs	d0f0d14d27ed5bad28f3fc
 crates/bootstrap/memstack-workspace-core/src/outbox.rs	23f6ac4e1bbccf4f6532785b51fee26f46ccc0ad293bdce26f158d3206ae094d	100644	Add durable Redis Streams outbox dispatch
 crates/bootstrap/memstack-workspace-core/src/policy.rs	7ffb98ab89074afa547af85b59d2661e56029e8945b0ee6a7073f639d323d974	100644	Add legacy-compatible Workspace Agent Policy HTTP adapters
 crates/bootstrap/memstack-workspace-core/src/provider_registry.rs	ebd240e7edaf3e5a1657d0d370290d2983d8026bcbc6a4771187e065e31b0ef3	100644	Add structured external Provider Registry validation client
-crates/bootstrap/memstack-workspace-core/src/public_api.rs	eaf5bda1e9bcff6f856cc691e22b28db8ae1c07a4bbb1ca37a37eebc6b6862d4	100644	Add scoped public Workspace read compatibility handlers
+crates/bootstrap/memstack-workspace-core/src/public_api.rs	d8fa0a930bee9e8caacad19b476b5eae8e298a7459da51be1638c6949882d64a	100644	Add scoped public Workspace read handlers including members without a local email
 crates/bootstrap/memstack-workspace-core/src/runtime.rs	30279ce1a71ae55d4eddf412b1c01e6bbe48e8cd1682b649808f59db30fcb4f4	100644	Add durable Agent Runtime correlation terminal and replay authority
 crates/bootstrap/memstack-workspace-core/src/runtime_recovery.rs	ca54d420b795301e78bbd1a7b968abe4d0fc263a1de24ec4abd9a1a201a7c162	100644	Add leased Agent-judged runtime recovery and callback acknowledgement
 crates/bootstrap/memstack-workspace-core/src/workspace_provider_events.rs	86459e5b0a638244f90fa2c015cff7715360554ac1a52388592e4e4933bee112	100644	Bridge authenticated Workspace Agent Runtime Provider callbacks

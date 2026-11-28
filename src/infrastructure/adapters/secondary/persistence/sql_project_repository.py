@@ -17,6 +17,7 @@ Migration Benefits:
 import logging
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -52,6 +53,12 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
         super().__init__(session)
 
     # === Interface implementation (project-specific queries) ===
+
+    async def ids_for_tenant(self, tenant_id: str) -> list[str]:
+        result = await self._session.scalars(
+            select(DBProject.id).where(DBProject.tenant_id == tenant_id)
+        )
+        return list(result)
 
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0

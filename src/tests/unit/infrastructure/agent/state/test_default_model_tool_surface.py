@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.chat_run_tool_permission_v2 import ChatRunToolPermissionV2
-from src.infrastructure.agent.core.react_agent_tool_policy import (
+from plugins.business.agent.engine.react.react_agent_tool_policy import (
     filter_non_workspace_conversation_tools,
 )
+from src.application.services.chat_run_tool_permission_v2 import ChatRunToolPermissionV2
 from src.infrastructure.agent.permission.rules import classify_sandbox_tool_permission
 from src.infrastructure.agent.state import agent_worker_state as worker
 from src.infrastructure.plugins.v2.agent_canvas_tools import AGENT_CANVAS_TOOL_NAMES_V2

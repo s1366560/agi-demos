@@ -14,9 +14,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
+from plugins.business.agent.engine.processor.run_context import RunContext
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
-from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.plugins.v2.agent_loop import (
     AgentLoopRunContextV2,
     BuiltinAgentLoopResolverV2,

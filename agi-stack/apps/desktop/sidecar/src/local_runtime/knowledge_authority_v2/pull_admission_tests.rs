@@ -4,6 +4,7 @@ use super::*;
 use axum::http::StatusCode;
 use std::sync::atomic::Ordering;
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pull_rejects_renderer_remote_inputs_and_mismatched_scope_before_cloud_calls() {
     let directory = TestDirectory::new();
@@ -90,6 +91,7 @@ async fn pull_rejects_renderer_remote_inputs_and_mismatched_scope_before_cloud_c
     server.abort();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pull_verifies_cloud_actor_and_project_before_reading_remote_changes() {
     let directory = TestDirectory::new();

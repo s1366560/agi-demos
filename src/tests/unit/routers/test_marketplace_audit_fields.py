@@ -7,6 +7,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.cluster_service import ClusterService
+from plugins.business.environments.backend.instance_template_service import InstanceTemplateService
 from src.application.schemas.cluster_schemas import ClusterCreate
 from src.application.schemas.gene_schemas import (
     GeneCreate,
@@ -16,8 +18,6 @@ from src.application.schemas.gene_schemas import (
     GenomeRatingCreate,
 )
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
-from src.application.services.cluster_service import ClusterService
-from src.application.services.instance_template_service import InstanceTemplateService
 from src.infrastructure.adapters.primary.web.gene_application_authority_v2 import (
     GeneApplicationAuthorityV2,
 )

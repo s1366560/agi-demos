@@ -1,8 +1,8 @@
 import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../api/client';
 import { desktopApiFetch, desktopApiAuthenticationAvailable } from '../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../types';
-import { parseKasmProxySession } from '../features/sandbox/sandboxRuntimeClient';
-import { parseSandboxRuntimeCapabilitySnapshot } from '../features/sandbox/sandboxRuntimeSurfaceClient';
+import { parseKasmProxySession } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
+import { parseSandboxRuntimeCapabilitySnapshot } from '@business/environments/ui/desktop/sandbox/sandboxRuntimeSurfaceClient';
 import {
   freezeSandboxSurfaceConfigV2,
   prepareSandboxSurfaceInputV2,

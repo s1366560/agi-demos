@@ -201,7 +201,7 @@ def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
     category="knowledge",
     tags=frozenset({"skill", "knowledge"}),
 )
-async def skill_loader_tool(
+async def skill_loader_tool(  # noqa: PLR0911
     ctx: ToolContext,
     *,
     name: str,
@@ -233,6 +233,21 @@ async def skill_loader_tool(
         )
 
     try:
+        from src.infrastructure.agent.core.project_package_tools import load_operation_package_skill
+
+        packaged = await load_operation_package_skill(deps.tenant_id, deps.project_id, skill_name)
+        if packaged and packaged.full_content:
+            return ToolResult(
+                output=_format_skill_content(skill_name, packaged.full_content, None, ""),
+                title=f"Loaded skill: {skill_name}",
+                metadata={
+                    "name": skill_name,
+                    "skill_id": packaged.id,
+                    "tools": list(packaged.tools),
+                    "dir": None,
+                    "source": packaged.source.value,
+                },
+            )
         owned_skill = (
             await deps.marketplace_skill_resolver(skill_name)
             if deps.marketplace_skill_resolver is not None

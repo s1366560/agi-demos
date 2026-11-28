@@ -32,9 +32,10 @@
 src/domain/model/channels/                  # 消息与渠道领域模型
 src/application/services/channels/          # 应用编排、HITL、媒体导入
 src/infrastructure/adapters/secondary/channels/
-  feishu/                                   # 内置 Feishu 实现
   channel_plugin_loader.py                  # 内置实现模块加载适配器
   connection_manager.py                     # 连接生命周期
+plugins/adapters/channels/feishu/backend/   # 飞书连接、回调、媒体与卡片
+plugins/adapters/channels/feishu/contribution.py # 飞书 generation 贡献
 src/infrastructure/plugins/v2/channel_adapters.py
                                              # V2 catalog/provider effects
 ```

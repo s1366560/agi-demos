@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.auth.user import User
 from src.domain.model.tenant.webhook import Webhook
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
@@ -15,6 +14,7 @@ from src.infrastructure.adapters.primary.web.tenant_webhook_application_authorit
     tenant_webhook_application_authority_context_v2,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/tenant-webhooks", tags=["Webhooks"])
@@ -180,6 +180,8 @@ async def delete_webhook(
         await _require_webhook_tenant_admin(webhook_id, authority)
         deleted = await authority.services.webhooks.delete_webhook(webhook_id)
         if not deleted:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Webhook not found"))
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_("Webhook not found")
+            )
         await authority.db.commit()
         return None

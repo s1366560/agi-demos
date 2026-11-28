@@ -2097,6 +2097,9 @@ async def _ctrl_send_dispatch(
     runtime = _require_control_runtime()
     if runtime.restart_callback is None:
         raise _missing_runtime("subagents send")
+    from src.infrastructure.agent.core.project_package_subagents import require_signed_continuation
+
+    await require_signed_continuation(parent_run)
     conv_id = runtime.conversation_id
     lineage_root = str(parent_run.metadata.get("lineage_root_run_id") or parent_run.run_id).strip()
     follow_up = _send_build_follow_up_options(
@@ -2445,6 +2448,9 @@ async def _ctrl_steer_with_restart(
     runtime = _require_control_runtime()
     if runtime.restart_callback is None:
         raise _missing_runtime("subagents steer")
+    from src.infrastructure.agent.core.project_package_subagents import require_signed_continuation
+
+    await require_signed_continuation(run)
     resolved_run_id = run.run_id
     await _ctrl_exec_cancellations(ctx, {resolved_run_id: resolved_run_id}, resolved_run_id)
     updated_old = await registry_call_v2(

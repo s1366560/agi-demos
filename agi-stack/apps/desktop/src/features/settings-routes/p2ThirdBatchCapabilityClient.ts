@@ -14,7 +14,7 @@ import {
 import {
   type TemplatesRouteClient,
   type TemplatesRouteScope,
-} from './templatesRouteClient';
+} from '@business/environments/ui/desktop/settings-routes/templatesRouteClient';
 
 const SERVICE_VERSION = '0.1.0' as const;
 const CONTRACT_VERSION = '4.0.0' as const;

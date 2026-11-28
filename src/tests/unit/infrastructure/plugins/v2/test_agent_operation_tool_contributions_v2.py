@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor import ToolDefinition
 from src.domain.model.mcp.tool import MCPTool, MCPToolSchema
-from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
     activate_skill_mcp_operation_tools_v2,
     contribute_operation_tool_definitions_v2,

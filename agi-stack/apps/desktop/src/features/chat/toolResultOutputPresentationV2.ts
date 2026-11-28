@@ -6,7 +6,7 @@ import {
 import {
   detectPayloadLanguage,
   type ToolCallPresentationKind,
-} from "./chatTimelineModel";
+} from "@business/agent/ui/desktop/chat/chatTimelineModel";
 import { computerUseResultPresentationV2 } from "./computerUseResultPresentationV2";
 import { projectToolResultPresentationV2 } from "./toolResultPresentationV2";
 

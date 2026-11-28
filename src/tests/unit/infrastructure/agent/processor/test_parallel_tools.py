@@ -11,12 +11,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.domain.events.agent_events import AgentErrorEvent
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.domain.events.agent_events import AgentErrorEvent
 
 
 def _create_tool_def(name: str, description: str = "Test tool") -> ToolDefinition:

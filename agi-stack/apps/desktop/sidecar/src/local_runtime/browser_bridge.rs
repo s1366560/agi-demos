@@ -2527,6 +2527,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn side_panel_session_over_unix_mints_a_working_credential() {
         use tower::ServiceExt;

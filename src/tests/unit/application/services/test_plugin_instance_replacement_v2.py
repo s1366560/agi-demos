@@ -179,6 +179,7 @@ async def replacement_manager(db_session):
         ),
         artifact_client,
         trusted_public_keys=(key,),
+        allowed_registries=frozenset({"https://registry.memstack.test"}),
     )
     request = _request(bundle, archive, key).model_copy(
         update={"tenant_id": SCOPE.tenant_id, "approved_permissions": frozenset()}

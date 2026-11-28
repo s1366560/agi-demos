@@ -18,7 +18,10 @@ from src.infrastructure.plugins.v2.billing_services import (
     BILLING_PROVIDER_MODULE_V2,
     BillingApplicationResolverV2,
 )
-from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -57,6 +60,9 @@ async def test_application_resolver_builds_billing_services_from_operation_db() 
             ) as operation,
         ):
             _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
+            operation.provide(
+                OPERATION_IDENTITY_SERVICE_V2, {"user_id": "user", "tenant_id": "tenant-a"}
+            )
             resolver = operation.require(BILLING_APPLICATION_SERVICE_V2)
             assert isinstance(resolver, BillingApplicationResolverV2)
 
@@ -187,6 +193,10 @@ async def test_billing_read_and_upgrade_use_the_operation_session(
             ) as operation,
         ):
             _ = operation.provide(OPERATION_DB_SESSION_SERVICE_V2, test_db)
+            operation.provide(
+                OPERATION_IDENTITY_SERVICE_V2,
+                {"user_id": test_user.id, "tenant_id": test_tenant_db.id},
+            )
             resolver = operation.require(BILLING_APPLICATION_SERVICE_V2)
             services = resolver.resolve(operation)
 
@@ -215,12 +225,12 @@ async def test_later_billing_candidate_failure_keeps_last_good_generation(
     original_apply = billing_subject._apply_billing_provider_v2
     apply_count = 0
 
-    def flaky_apply(context: ContextV2, config: dict[str, object]) -> None:
+    async def flaky_apply(context: ContextV2, config: dict[str, object]) -> None:
         nonlocal apply_count
         apply_count += 1
         if apply_count > 1:
             raise RuntimeError("billing provider unavailable")
-        original_apply(context, config)
+        await original_apply(context, config)
 
     monkeypatch.setattr(billing_subject, "_apply_billing_provider_v2", flaky_apply)
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())

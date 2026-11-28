@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     services:
+      registry:
+        image: registry:2
+        ports:
+          - 5095:5000
       postgres:
         image: pgvector/pgvector:pg16
         env:
@@ -43,6 +47,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      PLUGIN_WORKER_ALLOWED_REGISTRIES: '["http://127.0.0.1:5095"]'
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/memstack
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
@@ -155,7 +160,7 @@ jobs:
         working-directory: agi-stack
         env:
           CARGO_PROFILE_DEV_DEBUG: "0"
-        run: cargo build -p agistack-desktop-sidecar
+        run: cargo build -p agistack-desktop-sidecar --features legacy-business
 
       - name: Install Workspace Core native libraries
         run: |
@@ -169,6 +174,8 @@ jobs:
         run: bash scripts/avernet-bcs/cargo.sh build -p memstack-workspace-core --bin memstack-workspace-core
 
       - name: Build Electron main and preload
+        env:
+          AGISTACK_DESKTOP_PROFILE: compat
         working-directory: agi-stack/apps/desktop
         run: corepack pnpm exec electron-vite build
 
@@ -187,6 +194,25 @@ jobs:
         run: |
           bash "$GITHUB_WORKSPACE/scripts/ci/use_ubuntu_archive_mirror.sh"
           pnpm --dir agi-stack/apps/desktop exec playwright install --with-deps chromium
+
+      - name: Publish the signed Knowledge package used by the Web routes
+        run: |
+          set -euo pipefail
+          publisher=$(mktemp -d "$RUNNER_TEMP/knowledge-publisher.XXXXXX")
+          openssl genpkey -algorithm ED25519 -out "$publisher/key"
+          openssl pkey -in "$publisher/key" -pubout -out "$publisher/public.pem"
+          image=127.0.0.1:5095/e2e/knowledge
+          docker build -t "$image:ci" plugins/business/knowledge/workers/graph_projection
+          docker push "$image:ci"
+          pinned=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image:ci")
+          rustup target add wasm32-unknown-unknown
+          cargo build --locked --release --target wasm32-unknown-unknown --target-dir "$publisher/target" \
+            --manifest-path plugins/business/knowledge/workers/device_search/Cargo.toml
+          PYTHONPATH=sdk/memstack-plugin-sdk/src uv run python -m scripts.build_standard_packages \
+            --package knowledge --knowledge-image "$pinned" --key "$publisher/key" --out "$publisher/archives" \
+            --device-wasm "$publisher/target/wasm32-unknown-unknown/release/memstack_device_knowledge.wasm"
+          echo "PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES=[\"$publisher/public.pem\"]" >> "$GITHUB_ENV"
+          echo "NEO4J_KNOWLEDGE_PACKAGE=$publisher/archives/memstack-knowledge.mspkg" >> "$GITHUB_ENV"
 
       - name: Materialize authoritative test database URL
         run: |

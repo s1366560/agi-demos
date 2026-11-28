@@ -3,7 +3,7 @@ import {
   projectKnowledgeError,
   requestProjectKnowledgeJson,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import {
   prepareNativeKnowledgeCloudConnection,
   requireNativeKnowledgeCloudConnectionResponse,

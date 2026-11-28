@@ -1,0 +1,17 @@
+{
+  "schema": "memstack.slot-ui/1",
+  "title": "Workspace directory",
+  "actions": [
+    {
+      "id": "export-csv",
+      "label": "Export CSV",
+      "input": {
+        "label": "Authorized directory rows (JSON)",
+        "initial": {
+          "header": true,
+          "rows": []
+        }
+      }
+    }
+  ]
+}

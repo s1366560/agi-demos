@@ -224,7 +224,7 @@ async def test_react_agent_registry_resolver_tracks_generation_reload() -> None:
     )
     assert first.accepted is True
 
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
     agent = ReActAgent(model="test-model", provider_id="test-provider", tools={})
     resolver = agent._session_runner.deps.subagent_run_registry_resolver

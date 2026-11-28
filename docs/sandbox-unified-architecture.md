@@ -3,7 +3,7 @@
 > 状态：架构已落地（部分阶段仍为 Partial）。
 > Last checked against code: 2026-06-23
 >
-> 说明：本文原为「方案 / Phase 提案」，现改为反映现状的架构说明。代码事实以 `src/application/services/sandbox_orchestrator.py`、`src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 等为准。
+> 说明：本文原为「方案 / Phase 提案」，现改为反映现状的架构说明。代码事实以 `plugins/business/environments/backend/sandbox/sandbox_orchestrator.py`、`src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 等为准。
 
 ## 一、架构概览
 
@@ -54,10 +54,10 @@
 
 ### 2.1 SandboxOrchestrator（已实现）
 
-统一服务编排层，为 REST API 和 Agent Tools 提供一致接口。**当前状态：已实现**，代码位于 `src/application/services/sandbox_orchestrator.py`，并通过 `src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 注入到 REST API。
+统一服务编排层，为 REST API 和 Agent Tools 提供一致接口。**当前状态：已实现**，代码位于 `plugins/business/environments/backend/sandbox/sandbox_orchestrator.py`，并通过 `src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 注入到 REST API。
 
 ```python
-# src/application/services/sandbox_orchestrator.py
+# plugins/business/environments/backend/sandbox/sandbox_orchestrator.py
 
 class SandboxOrchestrator:
     """统一 Sandbox 服务编排层"""
@@ -147,7 +147,7 @@ SessionProcessor (工具执行)
 ## 五、迁移步骤与完成度
 
 ### Phase 1: 创建 SandboxOrchestrator — **Done**
-- `src/application/services/sandbox_orchestrator.py` 已实现 `SandboxOrchestrator`（含 desktop/terminal/command 全套方法）。
+- `plugins/business/environments/backend/sandbox/sandbox_orchestrator.py` 已实现 `SandboxOrchestrator`（含 desktop/terminal/command 全套方法）。
 - 事件**未**独立成 `sandbox_events.py`，而是归入 `src/domain/events/types.py` + `agent_events.py`（见 2.2）。
 
 ### Phase 2: 重构 Agent Tools — **Partial**

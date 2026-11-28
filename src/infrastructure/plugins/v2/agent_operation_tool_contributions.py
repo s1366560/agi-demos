@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol, cast, runtime_checkable
 
+from plugins.business.agent.engine.processor import ToolDefinition
 from src.domain.model.mcp.tool import MCPTool
 from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPConfig
-from src.infrastructure.agent.processor import ToolDefinition
 
 from .runtime import OperationContextV2, RuntimeV2Error
 from .tool_set import ToolSetContributionCatalogProtocolV2, ToolSetV2

@@ -1,8 +1,8 @@
 """Process-local accelerator over the durable memory-update task rows.
 
 The TaskLog written in the save transaction is the queue. ``kick`` only
-starts work that is already durable. Startup and agent initialization call
-``resume`` so a restarted process continues rows whose in-process task died.
+starts work that is already durable. The periodic recovery pass also picks
+up rows committed in other processes, including Ray actors.
 """
 
 from __future__ import annotations
@@ -10,20 +10,22 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from contextvars import Context
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.memory_update_jobs import (
+    AcquireStages,
     Extract,
     Index,
     execute_memory_update_job,
     resume_memory_update_jobs,
+    stage_provider,
 )
 
 logger = logging.getLogger(__name__)
 
 SessionFactory = Callable[[], AsyncSession]
-ReadyCheck = Callable[[], bool]
 
 
 class MemoryUpdateDispatcher:
@@ -33,54 +35,55 @@ class MemoryUpdateDispatcher:
         self,
         session_factory: SessionFactory,
         *,
-        extract: Extract,
-        index: Index,
+        extract: Extract | None = None,
+        index: Index | None = None,
+        acquire_stages: AcquireStages | None = None,
         stage_timeout_s: float | None = None,
-        ready: ReadyCheck | None = None,
         retry_delay_s: Callable[[int], float] | None = None,
     ) -> None:
         self._session_factory = session_factory
-        self._extract = extract
-        self._index = index
+        self._acquire_stages = stage_provider(extract, index, acquire_stages)
         self._stage_timeout_s = stage_timeout_s
-        self._ready = ready
         self._retry_delay_s = retry_delay_s
         self._tasks: set[asyncio.Task[str | list[str]]] = set()
         self._inflight: set[str] = set()
+        self._recovery: asyncio.Task[None] | None = None
 
-    def kick(
-        self,
-        task_id: str,
-        *,
-        extract: Extract | None = None,
-        index: Index | None = None,
-    ) -> None:
+    def kick(self, task_id: str) -> None:
         """Start one already committed job without waiting for it."""
         if task_id in self._inflight:
             return
         self._inflight.add(task_id)
         task = asyncio.create_task(
-            self._run(task_id, extract or self._extract, index or self._index),
+            self._run(task_id),
             name=f"memory-update-{task_id}",
+            context=Context(),
         )
         self._tasks.add(task)
         task.add_done_callback(self._finish)
 
-    def resume_soon(self) -> None:
-        """Schedule a recovery pass. Rows stay pending when the runtime is not bound."""
-        if self._ready is not None and not self._ready():
-            return
-        task = asyncio.create_task(self.resume(), name="memory-update-resume")
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    def start(self, *, interval_seconds: float = 30.0) -> None:
+        """Scan immediately, then recover newly committed or previously unavailable jobs."""
+        if self._recovery is None:
+            self._recovery = asyncio.create_task(
+                self._poll(interval_seconds),
+                name="memory-update-recovery",
+                context=Context(),
+            )
+
+    async def _poll(self, interval_seconds: float) -> None:
+        while True:
+            try:
+                await self.resume()
+            except Exception as exc:
+                logger.warning("memory update recovery failed error_type=%s", type(exc).__name__)
+            await asyncio.sleep(interval_seconds)
 
     async def resume(self) -> list[str]:
-        if self._ready is not None and not self._ready():
-            return []
         return await resume_memory_update_jobs(
             self._session_factory,
-            extract=self._extract,
-            index=self._index,
+            acquire_stages=self._acquire_stages,
+            limit=None,
             stage_timeout_s=self._stage_timeout_s,
         )
 
@@ -91,21 +94,24 @@ class MemoryUpdateDispatcher:
             await asyncio.gather(*pending)
 
     async def aclose(self) -> None:
+        if self._recovery is not None:
+            self._recovery.cancel()
+            await asyncio.gather(self._recovery, return_exceptions=True)
+            self._recovery = None
         pending = [task for task in self._tasks if not task.done()]
         for task in pending:
             task.cancel()
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    async def _run(self, task_id: str, extract: Extract, index: Index) -> str:
+    async def _run(self, task_id: str) -> str:
         try:
             outcome = "missing"
             while True:
                 outcome = await execute_memory_update_job(
                     self._session_factory,
                     task_id,
-                    extract=extract,
-                    index=index,
+                    acquire_stages=self._acquire_stages,
                     stage_timeout_s=self._stage_timeout_s,
                 )
                 attempt = await self._pending_attempt(task_id)
@@ -158,25 +164,12 @@ def current_memory_update_dispatcher() -> MemoryUpdateDispatcher | None:
     return _dispatcher
 
 
-def kick_memory_update_job(
-    task_id: str,
-    *,
-    extract: Extract | None = None,
-    index: Index | None = None,
-) -> bool:
+def kick_memory_update_job(task_id: str) -> bool:
     """Return whether an in-process accelerator accepted the durable job."""
     dispatcher = _dispatcher
     if dispatcher is None:
         return False
-    dispatcher.kick(task_id, extract=extract, index=index)
-    return True
-
-
-def schedule_memory_update_recovery() -> bool:
-    dispatcher = _dispatcher
-    if dispatcher is None:
-        return False
-    dispatcher.resume_soon()
+    dispatcher.kick(task_id)
     return True
 
 

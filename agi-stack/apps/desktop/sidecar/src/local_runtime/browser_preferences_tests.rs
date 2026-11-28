@@ -80,9 +80,15 @@ async fn configured_endpoints_and_default_survive_a_fresh_application_runtime() 
         let root = PathBuf::from(root);
         let app_data = root.join("application");
         let vault = ApplicationCredentialVault::open(&app_data).unwrap();
-        let first = LocalRuntimeService::start(app_data, root.join("workspace"), vault, None)
-            .await
-            .unwrap();
+        let first = LocalRuntimeService::start(
+            app_data,
+            root.join("workspace"),
+            vault,
+            None,
+            crate::sidecar_profile::SidecarProfile::Full,
+        )
+        .await
+        .unwrap();
         let expected = preferences();
         let patch: LocalRuntimeConfigPatch =
             serde_json::from_value(json!({"browser_bridge":expected})).unwrap();
@@ -108,10 +114,15 @@ async fn configured_endpoints_and_default_survive_a_fresh_application_runtime() 
     let expected = preferences();
     let second_workspace = directory.0.join("next-workspace");
     let reopened_vault = ApplicationCredentialVault::open(&app_data).unwrap();
-    let second =
-        LocalRuntimeService::start(app_data, second_workspace.clone(), reopened_vault, None)
-            .await
-            .unwrap();
+    let second = LocalRuntimeService::start(
+        app_data,
+        second_workspace.clone(),
+        reopened_vault,
+        None,
+        crate::sidecar_profile::SidecarProfile::Full,
+    )
+    .await
+    .unwrap();
     let status = second.status();
     assert_eq!(status.config.browser_bridge, expected);
     assert_eq!(status.workspace_root, second_workspace.to_string_lossy());

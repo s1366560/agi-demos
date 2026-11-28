@@ -1,5 +1,12 @@
 import type { ChannelConfig, CreateChannelConfig, UpdateChannelConfig } from '@/types/channel';
 
+export const humanizeChannelType = (channelType: string): string =>
+  channelType
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+
 export const SECRET_UNCHANGED_SENTINEL = '__MEMSTACK_SECRET_UNCHANGED__';
 
 export const CHANNEL_SETTING_FIELDS = new Set([

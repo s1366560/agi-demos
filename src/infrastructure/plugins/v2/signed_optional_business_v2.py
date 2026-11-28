@@ -11,9 +11,11 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jsonschema
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 
 from src.infrastructure.plugins.sdk_path import ensure_plugin_sdk_path
 from src.infrastructure.plugins.v2.plugin_namespace_store_v2 import (
@@ -24,7 +26,13 @@ from src.infrastructure.plugins.v2.plugin_namespace_store_v2 import (
     PluginStorageError,
     assert_supported_schema_v2,
 )
-from src.infrastructure.plugins.wasm_host import WasmHostError, WasmToolHost
+from src.infrastructure.plugins.wasm_host import (
+    DEFAULT_FUEL_BUDGET,
+    DEFAULT_MEMORY_LIMIT_BYTES,
+    DEFAULT_WALL_TIME_MS,
+    WasmHostError,
+    WasmToolHost,
+)
 
 ensure_plugin_sdk_path()
 
@@ -37,6 +45,11 @@ from memstack_plugin_sdk.contract import (
     sha256_digest,
 )
 
+from memstack_plugin_sdk.package_services import ProjectServices
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.oci_mcp_worker import OciWorkerSpec
+
 HIGH_RISK_PERMISSIONS = frozenset({"tools.execute", "storage.write"})
 DEFAULT_CAPABILITY_LEASE = timedelta(minutes=15)
 
@@ -48,8 +61,12 @@ class OptionalBusinessError(RuntimeError):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ScopeBindingV2:
+class TenantBindingV2:
     tenant_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeBindingV2(TenantBindingV2):
     project_id: str
 
 
@@ -64,6 +81,22 @@ class SignedPackageBytesV2:
     contribution: ContributionDocument
     ui_files: dict[str, bytes]
     approved_permissions: frozenset[str]
+    quotas: dict[str, int] = field(default_factory=dict)
+    # Tools from the signed release before project admission drops tenant-only tools.
+    release_tools: tuple[ToolContribution, ...] | None = None
+    entrypoint: str | None = None
+    worker: OciWorkerSpec | None = None
+    storage_limit: int = 16 * 1024 * 1024
+    services: ProjectServices = field(default_factory=ProjectServices)
+
+    kind: str = "business"
+    targets: tuple[str, ...] = ("python",)
+
+    def page_slot(self, target: str) -> str | None:
+        for slot in ("settings_page", "tool_result_renderer"):
+            if any(item.slot == slot and target in item.targets for item in self.contribution.ui):
+                return slot
+        return None
 
 
 @dataclass
@@ -253,7 +286,7 @@ class SignedOptionalBusinessRuntimeV2:
     def invoke(
         self,
         plugin_id: str,
-        scope: ScopeBindingV2,
+        scope: TenantBindingV2,
         tool_name: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
@@ -265,10 +298,16 @@ class SignedOptionalBusinessRuntimeV2:
         if not self._desired_enabled.get(plugin_id, False):
             raise OptionalBusinessError("not_enabled", "disabled package cannot execute")
         try:
-            jsonschema.validate(payload, tool.input_schema)
+            jsonschema.Draft202012Validator(tool.input_schema, registry=Registry()).validate(
+                payload
+            )
+        except Unresolvable as exc:
+            raise OptionalBusinessError("invalid_package", "unresolvable schema reference") from exc
         except jsonschema.ValidationError as exc:
             raise OptionalBusinessError("input_schema", exc.message) from exc
-        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        raw = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
         try:
             if tool.abi == "invoke":
                 produced = active.host.invoke_json(tool_name, raw, tenant_id=scope.tenant_id)
@@ -279,7 +318,11 @@ class SignedOptionalBusinessRuntimeV2:
         except (WasmHostError, json.JSONDecodeError) as exc:
             raise OptionalBusinessError("invoke_failed", str(exc)) from exc
         try:
-            jsonschema.validate(decoded, tool.output_schema)
+            jsonschema.Draft202012Validator(tool.output_schema, registry=Registry()).validate(
+                decoded
+            )
+        except Unresolvable as exc:
+            raise OptionalBusinessError("invalid_package", "unresolvable schema reference") from exc
         except jsonschema.ValidationError as exc:
             raise OptionalBusinessError("output_schema", exc.message) from exc
         if not isinstance(decoded, dict):
@@ -318,36 +361,19 @@ class SignedOptionalBusinessRuntimeV2:
         self._require_permissions(active, frozenset({"skills.register"}))
         return tuple(skill.skill_id for skill in active.package.contribution.skills)
 
+    def mount_page(self, plugin_id: str, target: str) -> dict[str, Any]:
+        package = self._require_active(plugin_id).package
+        slot = package.page_slot(target)
+        if slot is None:
+            raise OptionalBusinessError("ui_unavailable", "this package has no page for the target")
+        return self.mount_ui(plugin_id, slot, target)
+
     def mount_ui(self, plugin_id: str, slot: str, target: str) -> dict[str, Any]:
         active = self._require_active(plugin_id)
         self._require_not_revoked(plugin_id)
-        matches = [
-            item
-            for item in active.package.contribution.ui
-            if item.slot == slot and target in item.targets
-        ]
-        if len(matches) != 1:
-            raise OptionalBusinessError("ui_conflict", "slot contribution must resolve to one ui")
-        ui = matches[0]
-        self._require_permissions(active, ui.permissions)
-        content = active.package.ui_files.get(ui.path)
-        if content is None or sha256_digest(content) != ui.digest:
-            raise OptionalBusinessError("ui_digest", "ui bytes do not match the signed digest")
-        try:
-            document = parse_slot_ui(json.loads(content.decode("utf-8")))
-        except (UnicodeError, json.JSONDecodeError, ContractError) as exc:
-            raise OptionalBusinessError("ui_document", str(exc)) from exc
+        document = signed_ui_resource(active.package, slot, target, active.grant)
         self._ui_mounted[plugin_id] = True
-        return {
-            "slot": slot,
-            "target": target,
-            "title": document.title,
-            "actions": [{"id": action_id, "label": label} for action_id, label in document.actions],
-            "digest": ui.digest,
-            "bytes_base64": base64.b64encode(content).decode("ascii"),
-            "source": f"signed-package://{plugin_id}/{ui.path}",
-            "module_ref": f"signed:{plugin_id}/{slot}",
-        }
+        return document
 
     def dispose_ui(self, plugin_id: str) -> None:
         self._ui_mounted[plugin_id] = False
@@ -363,9 +389,13 @@ class SignedOptionalBusinessRuntimeV2:
             if command.command_id == command_id
         ]
         if len(matches) != 1:
-            raise OptionalBusinessError("command_conflict", "command must resolve to one contribution")
+            raise OptionalBusinessError(
+                "command_conflict", "command must resolve to one contribution"
+            )
         command = matches[0]
         self._require_permissions(active, command.permissions)
+        if command.host_operation:
+            raise OptionalBusinessError("runtime_unavailable", "application capability unavailable")
         return self.invoke(plugin_id, scope, command.tool, dict(command.payload))
 
     def _apply(self, package: SignedPackageBytesV2) -> None:
@@ -404,7 +434,16 @@ class SignedOptionalBusinessRuntimeV2:
     def _compile(self, package: SignedPackageBytesV2) -> WasmToolHost:
         if not package.wasm.startswith(b"\x00asm") and b"(module" not in package.wasm:
             raise OptionalBusinessError("wasm_invalid", "wasm artifact is not a module")
-        return WasmToolHost(package.plugin_id, package.wasm, tenant_id="unscoped")
+        return WasmToolHost(
+            package.plugin_id,
+            package.wasm,
+            tenant_id="unscoped",
+            expected_abi=package.entrypoint,
+            fuel_budget=package.quotas.get("fuel_budget", DEFAULT_FUEL_BUDGET),
+            memory_limit_bytes=package.quotas.get("memory_limit_bytes", DEFAULT_MEMORY_LIMIT_BYTES),
+            wall_time_ms=package.quotas.get("wall_time_ms", DEFAULT_WALL_TIME_MS),
+            max_output_bytes=package.quotas.get("max_output_bytes", 65536),
+        )
 
     def _stop_runtime(self, plugin_id: str) -> None:
         active = self._active.pop(plugin_id, None)
@@ -448,7 +487,7 @@ class SignedOptionalBusinessRuntimeV2:
             )
 
     def _require_grant_subset(self, package: SignedPackageBytesV2) -> None:
-        declared = _declared_permissions(package.contribution)
+        declared = declared_permissions(package.contribution)
         if not declared <= package.approved_permissions:
             missing = ", ".join(sorted(declared - package.approved_permissions))
             raise OptionalBusinessError(
@@ -459,7 +498,9 @@ class SignedOptionalBusinessRuntimeV2:
     def _tool(package: SignedPackageBytesV2, tool_name: str) -> ToolContribution:
         matches = [tool for tool in package.contribution.tools if tool.name == tool_name]
         if len(matches) != 1:
-            raise OptionalBusinessError("tool_conflict", "tool name must resolve to one contribution")
+            raise OptionalBusinessError(
+                "tool_conflict", "tool name must resolve to one contribution"
+            )
         return matches[0]
 
     @staticmethod
@@ -481,12 +522,16 @@ def load_contribution_v2(payload: dict[str, Any]) -> ContributionDocument:
         raise OptionalBusinessError(exc.code, str(exc)) from exc
 
 
-def _declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
-    declared: set[str] = set()
+def declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
+    declared: set[str] = {"ui.slot"} if contribution.pages else set()
+    if any(page.voice_authorization for page in contribution.pages):
+        declared.add("ui.media.microphone")
     for tool in contribution.tools:
         declared |= tool.permissions
     for skill in contribution.skills:
         declared |= skill.permissions
+    for subagent in contribution.subagents:
+        declared |= subagent.permissions
     for ui in contribution.ui:
         declared |= ui.permissions
     for command in contribution.commands:
@@ -494,3 +539,33 @@ def _declared_permissions(contribution: ContributionDocument) -> frozenset[str]:
     if contribution.storage is not None:
         declared |= contribution.storage.permissions
     return frozenset(declared)
+
+
+def signed_ui_resource(
+    package: SignedPackageBytesV2, slot: str, target: str, granted: frozenset[str]
+) -> dict[str, Any]:
+    matches = [
+        item for item in package.contribution.ui if item.slot == slot and target in item.targets
+    ]
+    if len(matches) != 1:
+        raise OptionalBusinessError("ui_conflict", "slot contribution must resolve to one ui")
+    ui = matches[0]
+    if "ui.slot" not in ui.permissions or not ui.permissions <= granted:
+        raise OptionalBusinessError("forbidden", "page is not approved for this package")
+    content = package.ui_files.get(ui.path)
+    if content is None or sha256_digest(content) != ui.digest:
+        raise OptionalBusinessError("ui_digest", "ui bytes do not match the signed digest")
+    try:
+        document = parse_slot_ui(json.loads(content.decode("utf-8")))
+    except (UnicodeError, json.JSONDecodeError, ContractError) as exc:
+        raise OptionalBusinessError("ui_document", str(exc)) from exc
+    return {
+        "slot": slot,
+        "target": target,
+        "title": document.title,
+        "actions": [{"id": action_id, "label": label} for action_id, label in document.actions],
+        "digest": ui.digest,
+        "bytes_base64": base64.b64encode(content).decode("ascii"),
+        "source": f"signed-package://{package.plugin_id}/{ui.path}",
+        "module_ref": f"signed:{package.plugin_id}/{slot}",
+    }

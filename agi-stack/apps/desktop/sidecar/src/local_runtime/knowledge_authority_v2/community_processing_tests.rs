@@ -3,6 +3,7 @@ use agistack_core::knowledge::community::{build::*, result::*, worker::*};
 
 #[path = "community_processing_lifecycle_tests.rs"]
 mod lifecycle;
+#[cfg(feature = "legacy-business")]
 #[path = "community_rpc_tests.rs"]
 mod rpc;
 

@@ -5,7 +5,7 @@ import type {
   BackendStorePlane,
   BackendStoreTestInput,
   BackendStoreUpdateInput,
-} from '../features/backend-stores/backendStoresClient';
+} from '@business/knowledge/ui/desktop/backend-stores/backendStoresClient';
 import type {
   TenantManagementRequestOptions,
   TenantManagementScope,

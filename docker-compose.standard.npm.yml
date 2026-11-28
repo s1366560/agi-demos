@@ -1,0 +1,12 @@
+services:
+  api:
+    environment:
+      PACKAGE_NPM_REGISTRY_URL: http://npm-registry:4873
+    networks:
+      - default
+      - npm-plugins
+
+networks:
+  npm-plugins:
+    name: memstack-plugin-npm
+    external: true

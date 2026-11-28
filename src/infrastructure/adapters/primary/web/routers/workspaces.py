@@ -161,13 +161,22 @@ async def create_workspace(
     raise workspace_core_unavailable_error()
 
 
-@router.get("", response_model=list[WorkspaceResponse])
+@router.get(
+    "", response_model=list[WorkspaceResponse], responses={200: {"content": {"text/csv": {}}}}
+)
 async def list_workspaces(
     tenant_id: str,
     project_id: str,
     request: Request,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    export_package: str | None = Query(
+        None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+        description="Export this page as CSV using an enabled project package",
+    ),
     current_user: User = Depends(get_current_user),
 ) -> list[WorkspaceResponse]:
     raise workspace_core_unavailable_error()

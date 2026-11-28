@@ -8,12 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 import sqlalchemy as sa
 
 from src.application.services.memory_update_jobs import execute_memory_update_job
-from src.infrastructure.adapters.secondary.persistence.models import Memory, Project
+from src.application.services.memory_update_runtime import index_with_session
+from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk, Project
 from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_update,
     _mark_created_memory_processing_status,
 )
 from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
+from src.infrastructure.memory import chunk_sync
 from src.tests.integration.test_knowledge_sync_postgres import (  # noqa: F401
     pg_sync as _pg_sync,
     pytestmark,
@@ -125,3 +127,38 @@ async def test_saved_update_stays_pending_until_the_worker_records_failure(pg_sy
         assert memory.content == "After"
         assert memory.version == 2
         assert memory.processing_status == "PENDING"
+
+
+async def test_chunks_of_superseded_revision_are_rolled_back(pg_sync, monkeypatch):
+    sessions, scope = pg_sync
+    await seed_memory(sessions, scope)
+    payload = {
+        "memory_id": "memory",
+        "project_id": scope.project_id,
+        "tenant_id": scope.tenant_id,
+        "source_revision": 1,
+        "content": "Before",
+    }
+    staged, resume = asyncio.Event(), asyncio.Event()
+    upsert = chunk_sync.upsert_memory_chunks
+
+    async def wait_before_commit(*args, **kwargs):
+        result = await upsert(*args, **kwargs)
+        staged.set()
+        await resume.wait()
+        return result
+
+    monkeypatch.setattr(chunk_sync, "upsert_memory_chunks", wait_before_commit)
+    async with asyncio.timeout(10), asyncio.TaskGroup() as workers:
+        workers.create_task(index_with_session(payload, sessions, None))
+        await staged.wait()
+        async with sessions.begin() as db:
+            await db.execute(
+                sa.update(Memory)
+                .where(Memory.id == "memory", Memory.project_id == scope.project_id)
+                .values(version=2, content="After")
+            )
+        resume.set()
+    async with sessions() as db:
+        assert list(await db.scalars(sa.select(MemoryChunk.content))) == []
+        assert (await db.get(Memory, "memory")).content == "After"

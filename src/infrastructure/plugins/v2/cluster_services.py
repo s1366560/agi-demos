@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.cluster_service import ClusterService
+from plugins.business.environments.backend.cluster_service import ClusterService
 from src.infrastructure.adapters.secondary.persistence.models import (
     ACPRunnerInstanceModel,
     ACPRunnerPoolModel,

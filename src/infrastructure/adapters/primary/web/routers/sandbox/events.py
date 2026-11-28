@@ -13,7 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_from_header_or_query,
     get_db,

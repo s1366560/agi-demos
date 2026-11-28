@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.scoped_installed_bundle_loader_v2 import ScopedInstalledBundleLoaderV2
 from src.domain.model.plugins.generated_v2 import (
+    ApplyStatusV2,
     DesiredBundleSetV2,
     ProfileSourceV2,
     ScopeKindV2,
@@ -65,6 +66,7 @@ async def _read_pending(
     *,
     expected_state: ScopedRecoveryStateV2 | None = None,
     accepted_state: ScopedRecoveryStateV2 | None = None,
+    allow_acknowledged: bool = False,
 ) -> _PendingRootV2 | None:
     root = ScopeV2(kind=ScopeKindV2.ROOT)
     async with session_factory() as session:
@@ -74,7 +76,17 @@ async def _read_pending(
         )
         if expected_state is not None and state not in (expected_state, accepted_state):
             raise RuntimeV2Error("root_recovery_changed", "ROOT request changed during recovery")
-        if state.latest is None or (state.latest_receipt is not None and accepted_state is None):
+        if state.latest is None:
+            return None
+        if (
+            state.latest_receipt is not None
+            and accepted_state is None
+            and not (
+                allow_acknowledged
+                and state.latest_receipt.status is ApplyStatusV2.ACK
+                and state.last_good == state.latest
+            )
+        ):
             return None
         row = (
             await session.scalars(
@@ -136,6 +148,7 @@ async def load_requested_root_recovery_v2(
     trusted_public_keys: tuple[str, ...],
     allowed_registries: frozenset[str],
     publication_policy: PlatformPluginPublicationPolicyV2,
+    allow_acknowledged: bool = False,
 ) -> VerifiedRootRequestRecoveryV2 | None:
     """Load a verified candidate and a recheck bound to its exact durable authority."""
     if (
@@ -144,7 +157,9 @@ async def load_requested_root_recovery_v2(
     ):
         return None
     sources = production_bundle_sources_v2()
-    pending = await _read_pending(session_factory, sources, publication_policy)
+    pending = await _read_pending(
+        session_factory, sources, publication_policy, allow_acknowledged=allow_acknowledged
+    )
     if pending is None:
         return None
     latest = pending.state.latest
@@ -181,7 +196,11 @@ async def load_requested_root_recovery_v2(
     async def check_authority() -> None:
         if (
             await _read_pending(
-                session_factory, sources, publication_policy, expected_state=pending.state
+                session_factory,
+                sources,
+                publication_policy,
+                expected_state=pending.state,
+                allow_acknowledged=allow_acknowledged,
             )
             != pending
         ):

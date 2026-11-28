@@ -146,7 +146,7 @@ class SubAgentToolBuilder:
             return frozenset()
         return capabilities.denied_tools
 
-    def _role_can_spawn(self) -> bool:
+    def role_can_spawn(self) -> bool:
         """Check if the current agent role allows spawning sub-agents."""
         role = self.deps.agent_role
         if role is None:
@@ -185,13 +185,32 @@ class SubAgentToolBuilder:
             available_subagents
             and self.deps.enable_subagent_as_tool
             and delegation_depth < max_delegation_depth
-            and self._role_can_spawn()
+            and self.role_can_spawn()
         ):
             return
 
         nested_candidates = [
             sa for sa in available_subagents if sa.enabled and sa.id != subagent.id
         ]
+        from src.infrastructure.agent.core.project_package_subagents import (
+            SignedProjectSubAgent,
+            subagent_policy_identifiers,
+        )
+
+        policy = subagent.spawn_policy
+        if policy is not None:
+            nested_candidates = [
+                sa
+                for sa in nested_candidates
+                if not isinstance(sa, SignedProjectSubAgent)
+                or (
+                    policy.max_depth > delegation_depth
+                    and (
+                        policy.allowed_subagents is None
+                        or not policy.allowed_subagents.isdisjoint(subagent_policy_identifiers(sa))
+                    )
+                )
+            ]
         if not nested_candidates:
             return
 

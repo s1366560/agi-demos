@@ -11,7 +11,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
@@ -23,7 +22,11 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import
     SqlAgentRegistryRepository,
 )
 from src.infrastructure.i18n import gettext as _
-from src.infrastructure.persistence.llm_providers_models import LLMProvider, TenantProviderMapping
+from src.infrastructure.persistence.llm_providers_models import LLMProvider
+from src.infrastructure.persistence.tenant_model_roster import (
+    declared_provider_models,
+    tenant_chat_providers,
+)
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.workspace_core.autonomy_judge import (
     WorkspaceAutonomyJudgePort,
@@ -343,16 +346,7 @@ async def resolve_workspace_provider_route(
     try:
         result = await db.execute(
             refresh_select_statement(
-                select(LLMProvider)
-                .join(TenantProviderMapping, TenantProviderMapping.provider_id == LLMProvider.id)
-                .where(
-                    TenantProviderMapping.tenant_id == lookup.tenant_id,
-                    TenantProviderMapping.operation_type == "llm",
-                    LLMProvider.id == provider_id,
-                    LLMProvider.operation_type == "llm",
-                    LLMProvider.is_active.is_(True),
-                    LLMProvider.is_enabled.is_(True),
-                )
+                tenant_chat_providers(lookup.tenant_id).where(LLMProvider.id == provider_id)
             )
         )
         provider = result.scalar_one_or_none()
@@ -365,7 +359,7 @@ async def resolve_workspace_provider_route(
             status_code=503,
             content={"detail": _("Workspace Core Provider Registry is unavailable")},
         )
-    if provider is None or lookup.model_id not in _provider_models(provider):
+    if provider is None or lookup.model_id not in declared_provider_models(provider):
         return _unavailable_provider_route()
     return {
         "available": True,
@@ -393,19 +387,7 @@ async def resolve_workspace_provider_default(
         return JSONResponse(status_code=401, content={"detail": _("Unauthorized")})
     try:
         result = await db.execute(
-            refresh_select_statement(
-                select(LLMProvider)
-                .join(TenantProviderMapping, TenantProviderMapping.provider_id == LLMProvider.id)
-                .where(
-                    TenantProviderMapping.tenant_id == lookup.tenant_id,
-                    TenantProviderMapping.operation_type == "llm",
-                    LLMProvider.operation_type == "llm",
-                    LLMProvider.is_active.is_(True),
-                    LLMProvider.is_enabled.is_(True),
-                )
-                .order_by(TenantProviderMapping.priority, LLMProvider.created_at, LLMProvider.id)
-                .limit(1)
-            )
+            refresh_select_statement(tenant_chat_providers(lookup.tenant_id).limit(1))
         )
         provider = result.scalar_one_or_none()
     except Exception:
@@ -535,19 +517,6 @@ def _registry_authorized(
         authorization,
         configured_token.get_secret_value(),
     )
-
-
-def _provider_models(provider: LLMProvider) -> set[str]:
-    models: set[str] = {provider.llm_model} if provider.llm_model else set()
-    if provider.allowed_models:
-        try:
-            values: object = json.loads(provider.allowed_models)
-        except json.JSONDecodeError:
-            values = []
-        if isinstance(values, list):
-            models.update(str(value) for value in cast(list[object], values) if value)
-    models.update(provider.secondary_models or [])
-    return models
 
 
 def _unavailable_provider_route() -> dict[str, object]:

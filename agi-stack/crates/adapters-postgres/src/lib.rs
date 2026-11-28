@@ -34,7 +34,6 @@ mod audit_repo;
 mod auth_store;
 mod automation_permission;
 mod backend_store_repo;
-mod billing_repo;
 mod channel_repo;
 mod checkpoint;
 mod conversation_events_repo;
@@ -100,9 +99,6 @@ pub use automation_permission::{
 pub use backend_store_repo::{
     BackendStoreAccessError, BackendStoreCreate, BackendStoreRecord, BackendStoreUpdate,
     PgGraphStoreRepository, PgRetrievalStoreRepository,
-};
-pub use billing_repo::{
-    BillingTenantRecord, BillingUsageRecord, InvoiceRecord, PgBillingRepository,
 };
 pub use channel_repo::{
     ChannelConfigListQuery, ChannelConfigRecord, ChannelObservabilitySummaryRecord,

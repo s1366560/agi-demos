@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from plugins.business.environments.backend.sandbox.sandbox_http_service_registry import (
+    SANDBOX_HTTP_SERVICE_REGISTRY_MODULE_V2,
+    SANDBOX_HTTP_SERVICE_REGISTRY_SERVICE_V2,
+    SandboxHttpServiceRegistryV2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import load_profile_document_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_http_service_registry import (
-    SANDBOX_HTTP_SERVICE_REGISTRY_MODULE_V2,
-    SANDBOX_HTTP_SERVICE_REGISTRY_SERVICE_V2,
-    SandboxHttpServiceRegistryV2,
-)
 
 pytestmark = pytest.mark.unit
 

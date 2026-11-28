@@ -2,6 +2,7 @@ use super::*;
 use std::sync::atomic::AtomicUsize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[cfg(feature = "legacy-business")]
 #[path = "run_owner_http_tests.rs"]
 mod run_owner_http_tests;
 #[path = "agent_stop_http_tests.rs"]
@@ -356,41 +357,49 @@ async fn interrupt_http_with_handler(stage: ResponseStage, pause: bool, through_
     }
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pause_drops_http_waiting_for_headers_and_can_resume() {
     interrupt_http(ResponseStage::Headers, true).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn cancel_drops_http_waiting_for_headers() {
     interrupt_http(ResponseStage::Headers, false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pause_drops_incomplete_json_response_and_can_resume() {
     interrupt_http(ResponseStage::JsonBody, true).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn cancel_drops_incomplete_json_response() {
     interrupt_http(ResponseStage::JsonBody, false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pause_drops_partial_sse_without_finishing_and_can_resume() {
     interrupt_http(ResponseStage::SseBody, true).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn cancel_drops_partial_sse_without_finishing() {
     interrupt_http(ResponseStage::SseBody, false).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn pause_handler_interrupts_real_sse_and_preserves_a_resumable_checkpoint() {
     interrupt_http_with_handler(ResponseStage::SseBody, true, true).await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn cancel_handler_interrupts_real_http_before_response_headers() {
     interrupt_http_with_handler(ResponseStage::Headers, false, true).await;

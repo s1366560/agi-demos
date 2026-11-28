@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.services.sandbox_health_service import (
+from plugins.business.environments.backend.sandbox.sandbox_health_service import (
     HealthCheckLevel,
     HealthCheckResult,
     HealthStatus,

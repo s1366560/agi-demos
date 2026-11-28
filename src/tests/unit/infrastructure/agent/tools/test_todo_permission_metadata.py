@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.run_context import RunContext, bind_run_context
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.processor.run_context import RunContext, bind_run_context
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.env_var_tools import make_env_var_tools
 from src.infrastructure.agent.tools.memory_tools import make_memory_tools
@@ -199,6 +199,7 @@ async def test_approved_read_only_run_executes_real_converted_read_tools(  # noq
 
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
+    from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
     from src.application.services.approved_run_tool_permission_v2 import (
         prepare_approved_run_guard_v2,
     )
@@ -207,7 +208,6 @@ async def test_approved_read_only_run_executes_real_converted_read_tools(  # noq
     from src.infrastructure.adapters.primary.web.routers.agent import plans
     from src.infrastructure.adapters.secondary.persistence.models import AgentTaskModel
     from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-    from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
     from src.infrastructure.agent.tools.hooks import ToolHookRegistry
     from src.infrastructure.agent.tools.pipeline import ToolPipeline
     from src.infrastructure.agent.tools.truncation import OutputTruncator

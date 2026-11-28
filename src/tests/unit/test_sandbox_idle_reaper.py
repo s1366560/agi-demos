@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.application.services.sandbox_idle_reaper import SandboxIdleReaper
+from plugins.business.environments.backend.sandbox.sandbox_idle_reaper import SandboxIdleReaper
 from src.domain.model.sandbox.project_sandbox import (
     ProjectSandbox,
     ProjectSandboxStatus,
@@ -62,7 +62,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = []
@@ -90,7 +90,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = [assoc1, assoc2]
@@ -120,7 +120,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = [assoc]
@@ -153,7 +153,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = [assoc1, assoc2]
@@ -179,7 +179,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = [assoc]
@@ -204,7 +204,7 @@ class TestSweep:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo.find_stale.return_value = [assoc]
@@ -237,7 +237,7 @@ class TestTerminateOne:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
@@ -266,7 +266,7 @@ class TestTerminateOne:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
@@ -293,7 +293,7 @@ class TestTerminateOne:
         )
 
         with patch(
-            "src.application.services.sandbox_idle_reaper.SqlProjectSandboxRepository"
+            "plugins.business.environments.backend.sandbox.sandbox_idle_reaper.SqlProjectSandboxRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo

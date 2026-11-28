@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, override
 
 from src.domain.llm_providers.llm_types import (
@@ -208,15 +209,17 @@ class PooledLLMClient(LLMClient):
         client = self._get_client(candidate.provider_config)
         async with self._balancer.track(candidate):
             try:
-                async for chunk in client.generate_stream(
+                source = client.generate_stream(
                     messages=messages,
                     max_tokens=max_tokens,
                     model_size=model_size,
                     langfuse_context=langfuse_context,
                     model=candidate.model_name,
                     **kwargs,
-                ):
-                    yield chunk
+                )
+                async with aclosing(source):
+                    async for chunk in source:
+                        yield chunk
                 self._balancer.record_success(candidate)
             except Exception as exc:
                 if is_failover_worthy(exc):

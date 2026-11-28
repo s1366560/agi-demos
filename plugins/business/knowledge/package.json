@@ -1,0 +1,9 @@
+{
+  "plugin_id": "memstack-knowledge",
+  "version": "1.7.1",
+  "kind": "business",
+  "targets": {
+    "python": "workers/graph_projection/plugin.json",
+    "desktop-sidecar": "workers/device_search/plugin.json"
+  }
+}

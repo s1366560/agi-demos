@@ -5,7 +5,7 @@ import type {
   TenantGeneInput,
   TenantGeneReview,
   TenantGenesSnapshot,
-} from '../features/tenant-admin/tenantGenesClient';
+} from '@business/environments/ui/desktop/tenant-admin/tenantGenesClient';
 import type {
   TenantManagementScope,
 } from '../features/tenant-admin/tenantManagementHttp';

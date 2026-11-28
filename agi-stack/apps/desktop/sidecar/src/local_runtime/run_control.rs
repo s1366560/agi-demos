@@ -30,6 +30,7 @@ pub(super) struct RunRevisionBody {
 }
 
 #[cfg(test)]
+#[cfg(feature = "legacy-business")]
 #[path = "run_control_waiting_tests.rs"]
 mod waiting_input_tests;
 

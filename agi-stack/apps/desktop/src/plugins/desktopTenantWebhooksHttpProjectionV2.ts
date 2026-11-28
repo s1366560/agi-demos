@@ -24,7 +24,7 @@ import {
   type TenantWebhook,
   type TenantWebhookInput,
   type TenantWebhooksClient,
-} from '../features/tenant-admin/tenantWebhooksClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksClient';
 
 const ADMIN_ACTIONS = Object.freeze([
   'view',

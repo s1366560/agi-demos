@@ -1,6 +1,6 @@
 """Workspace runtime forwarding tests for the ReAct stream mixin."""
 
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
     _workspace_runtime_forwarded_fields,
     _workspace_runtime_limit_overrides,
 )

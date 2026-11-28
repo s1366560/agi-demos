@@ -9,11 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core.project_react_agent import (
+from plugins.business.agent.engine.react.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
     current_artifact_lifecycle_application_service_v2,
 )
@@ -102,7 +102,7 @@ async def test_project_agent_resolves_artifacts_only_from_the_pinned_generation(
             return_value=MagicMock(),
         ),
         patch(
-            "src.infrastructure.agent.core.project_react_agent."
+            "plugins.business.agent.engine.react.project_react_agent."
             "current_artifact_lifecycle_application_service_v2",
             return_value=lifecycle,
         ),
@@ -128,7 +128,7 @@ async def test_project_agent_propagates_missing_required_artifact_service() -> N
             return_value=_worker_runtime_services(MagicMock(), AsyncMock()),
         ),
         patch(
-            "src.infrastructure.agent.core.project_react_agent."
+            "plugins.business.agent.engine.react.project_react_agent."
             "current_artifact_lifecycle_application_service_v2",
             side_effect=missing,
         ),

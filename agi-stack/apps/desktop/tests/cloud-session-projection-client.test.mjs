@@ -73,6 +73,19 @@ test('renderer decodes a credential-free Cloud identity and workspace projection
   assert.equal(JSON.stringify(projection).includes('oauth-subject-not-for-renderer'), false);
 });
 
+test('Python current-user projection respects the password change requirement', () => {
+  const { decodeCloudSessionProjection } = require(compiledModule);
+  const payload = projectionPayload();
+  const user = { ...payload.user, must_change_password: false };
+  assert.ok(decodeCloudSessionProjection({ ...payload, user }));
+  for (const flag of [true, null, 'false']) {
+    assert.equal(
+      decodeCloudSessionProjection({ ...payload, user: { ...user, must_change_password: flag } }),
+      null,
+    );
+  }
+});
+
 test('renderer rejects projection drift and any top-level credential field', () => {
   const { decodeCloudSessionProjection } = require(compiledModule);
 
@@ -287,13 +300,19 @@ test('main-to-renderer session projection preserves validated knowledge stats th
   const { decodeCloudSessionProjection } = require(compiledModule);
   const { createProjectedCloudSessionState } = require('/tmp/agistack-desktop-test-dist/src/features/auth/nativeOAuthSessionModel.js');
   const payload = projectionPayload();
-  const raw = await projectVaultBoundCloudSession({
+  let historyResponse = () => Response.json({items: [], total: 0});
+  let retirements = 0;
+  const dependencies = {
     async loadTrustedSession() { return {
       version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
       credential_kind: 'cloud_bearer', credential: 'test-only-vault-token', expires_at: '2099-08-10T00:00:00Z',
     }; },
     async fetch(url) {
       const path = new URL(url).pathname;
+      if (path === '/api/v1/agent/conversations') {
+        assert.equal(new URL(url).searchParams.get('project_id'), 'project-1');
+        return historyResponse();
+      }
       let data;
       if (path === '/api/v1/auth/me') data = payload.user;
       else if (path === '/api/v1/workspace-context') data = payload.workspace_context;
@@ -303,7 +322,19 @@ test('main-to-renderer session projection preserves validated knowledge stats th
       } }], total: 1, page: 1, page_size: 100, owner_ids: ['user-1'] };
       return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
     },
-  });
+  };
+  const retire = async () => { retirements++; };
+  const raw = await projectVaultBoundCloudSession(dependencies, retire);
+  assert.equal(retirements, 1);
+  for (const unavailable of [
+    () => new Response(null, {status: 503}),
+    () => Response.json({}),
+    () => { throw new Error('offline'); },
+  ]) {
+    historyResponse = unavailable;
+    assert.ok(await projectVaultBoundCloudSession(dependencies, retire));
+    assert.equal(retirements, 1);
+  }
   const decoded = decodeCloudSessionProjection(raw);
   assert.ok(decoded, 'renderer must accept the current main projection');
   const state = createProjectedCloudSessionState(decoded, {});

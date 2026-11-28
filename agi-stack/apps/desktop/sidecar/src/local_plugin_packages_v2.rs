@@ -97,6 +97,24 @@ pub(crate) fn inspect(
         .map_err(|error| error.to_string())
 }
 
+/// Select the independently signed native target from a reviewed multi-target release.
+pub(crate) fn desktop_target(
+    raw: Vec<u8>,
+    keys: &[TrustedEd25519KeyV2],
+) -> Result<(Vec<u8>, VerifiedBundleArchiveV2), String> {
+    let outer = inspect(&raw, keys)?;
+    let Some(bytes) = outer.artifact_at_path("targets/desktop-sidecar.mspkg") else {
+        return Ok((raw, outer));
+    };
+    let inner = inspect(bytes, keys)?;
+    if inner.reference().bundle_id != outer.reference().bundle_id
+        || inner.reference().version != outer.reference().version
+    {
+        return Err("local plugin desktop target identity mismatch".into());
+    }
+    Ok((bytes.to_vec(), inner))
+}
+
 pub(crate) fn compose(
     base: &ProfileSnapshotV2,
     installations: Vec<InstalledBundleV2>,
@@ -104,6 +122,7 @@ pub(crate) fn compose(
 ) -> Result<(ProfileSnapshotV2, Value, Vec<VerifiedBundleArchiveV2>), String> {
     let mut snapshot = base.clone();
     let mut archives: Vec<VerifiedBundleArchiveV2> = vec![];
+    let mut project_routes = BTreeSet::new();
     for installation in installations {
         let archive = installation.archive;
         let mut local_entries = 0;
@@ -151,6 +170,22 @@ pub(crate) fn compose(
                     }
                 } else {
                     snapshot.manifests.push(manifest.clone());
+                }
+                if original.enabled {
+                    for permission in original
+                        .permissions
+                        .iter()
+                        .filter(|p| p.starts_with("desktop.http."))
+                    {
+                        let identity = (
+                            installation.scope.tenant_id.clone(),
+                            installation.scope.project_id.clone(),
+                            permission.clone(),
+                        );
+                        if !project_routes.insert(identity) {
+                            return Err("duplicate signed project HTTP route".into());
+                        }
+                    }
                 }
                 let mut entry = original.clone();
                 entry.entry_id =

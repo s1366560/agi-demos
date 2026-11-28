@@ -1,0 +1,5 @@
+@import 'tailwindcss' source(none);
+@source '../web/tenant/DeployProgress.tsx';
+@source '../web/tenant/CreateInstance.tsx';
+@source '../web/tenant/InstanceTemplateList.tsx';
+@source '../web/tenant/TemplateDetail.tsx';

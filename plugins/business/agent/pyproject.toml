@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memstack-agent"
+version = "1.0.0"
+description = "Agent operations for skill validation, delegation and execution statistics."
+requires-python = ">=3.12"
+dependencies = ["PyYAML>=6.0,<7"]
+
+[project.optional-dependencies]
+cloud = ["memstack-cli>=0.1,<1"]
+worker = ["mcp==2.3.0"]
+publish = ["memstack-plugin-sdk>=0.1,<1"]
+
+[project.scripts]
+memstack-skill-validate = "plugins.business.agent.skill_validation.cli:main"
+memstack-agent-release = "plugins.business.agent.release:main"
+memstack-agent-worker = "plugins.business.agent.worker:main"
+
+[tool.setuptools]
+packages = [
+    "plugins.business.agent",
+    "plugins.business.agent.backend",
+    "plugins.business.agent.engine",
+    "plugins.business.agent.engine.processor",
+    "plugins.business.agent.engine.react",
+    "plugins.business.agent.skill_validation",
+    "plugins.business.agent.execution_statistics",
+]
+package-dir = {"plugins.business.agent" = "."}
+
+[tool.setuptools.package-data]
+"plugins.business.agent" = ["package.json", "contributions.json", "ui/settings.json", "ui/skill.js", "ui/chat-web.js", "ui/chat-web.css", "ui/web-dashboard.js", "ui/web-dashboard.css"]
+
+[tool.pyright]
+extraPaths = ["../../../sdk/memstack_cli", "../../../sdk/memstack-plugin-sdk/src"]

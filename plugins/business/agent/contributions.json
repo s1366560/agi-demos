@@ -1,0 +1,1283 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "subagents": [
+    {
+      "id": "skill-format-reviewer",
+      "name": "Skill format reviewer",
+      "description": "Review the structure of a supplied SKILL.md document.",
+      "instructions": "Use the package validation tool on the SKILL.md text supplied by the requester. Report its structural errors and warnings with the affected fields. If the document is missing, request its contents.",
+      "tools": [
+        "validate_skill"
+      ],
+      "permissions": [
+        "subagents.register"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "validate_skill",
+      "abi": "mcp.stdio",
+      "description": "Check one SKILL.md document and return structural validation errors and warnings.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 32768
+          },
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "is_valid": {
+            "type": "boolean"
+          },
+          "skill_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "error_count": {
+            "type": "integer"
+          },
+          "warning_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "is_valid",
+          "skill_name",
+          "errors",
+          "warnings",
+          "error_count",
+          "warning_count"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "execution_statistics",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "tool_counts": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "status_counts": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "time_buckets": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "average_duration_ms": {
+            "type": "number"
+          },
+          "completed_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "failed_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "tool_counts",
+          "status_counts",
+          "time_buckets",
+          "average_duration_ms",
+          "completed_count",
+          "failed_count"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "react_loop",
+      "abi": "mcp.stdio",
+      "description": "Select the next ReAct operation from the turn continuation.",
+      "permissions": [
+        "agent.loop.drive",
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stepped",
+              "judged",
+              "observed",
+              "restart"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "stop",
+              "complete",
+              "compact"
+            ]
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "phase",
+          "outcome",
+          "steps"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "step",
+              "judge",
+              "observe",
+              "finish",
+              "stop"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "agent.chat-list",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-list command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.list"
+      ]
+    },
+    {
+      "name": "agent.chat-create",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-create command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.create"
+      ]
+    },
+    {
+      "name": "agent.chat-history",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-history command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.history"
+      ]
+    },
+    {
+      "name": "agent.chat-turn",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-turn command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.turn"
+      ]
+    },
+    {
+      "name": "agent.chat-cancel",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-cancel command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.cancel"
+      ]
+    },
+    {
+      "name": "agent.chat-rename",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-rename command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.rename"
+      ]
+    },
+    {
+      "name": "agent.chat-interactions",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-interactions command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.interactions"
+      ]
+    },
+    {
+      "name": "agent.chat-respond",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-respond command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.respond"
+      ]
+    },
+    {
+      "name": "agent.chat-upload",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-upload command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.attachments"
+      ]
+    },
+    {
+      "name": "agent.chat-attached-turn",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-attached-turn command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.attachments.turn"
+      ]
+    },
+    {
+      "name": "agent.activity-list",
+      "abi": "mcp.stdio",
+      "description": "Run the signed activity-list command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.activity.read"
+      ]
+    },
+    {
+      "name": "agent.activity-mark",
+      "abi": "mcp.stdio",
+      "description": "Run the signed activity-mark command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.activity.receipts"
+      ]
+    },
+    {
+      "name": "agent.review-latest",
+      "abi": "mcp.stdio",
+      "description": "Run the signed review-latest command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.review.latest"
+      ]
+    },
+    {
+      "name": "agent.review-details",
+      "abi": "mcp.stdio",
+      "description": "Run the signed review-details command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.review.details"
+      ]
+    },
+    {
+      "name": "agent.dashboard-read",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.read"
+      ]
+    },
+    {
+      "name": "agent.dashboard-trace",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-trace command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.trace"
+      ]
+    },
+    {
+      "name": "agent.dashboard-configure",
+      "abi": "mcp.stdio",
+      "description": "Run the signed dashboard-configure command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.dashboard.configure"
+      ]
+    },
+    {
+      "name": "agent.chat-composer-read",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-composer-read command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.read"
+      ]
+    },
+    {
+      "name": "agent.chat-composer-save",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-composer-save command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.save"
+      ]
+    },
+    {
+      "name": "agent.chat-models",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-models command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.models"
+      ]
+    },
+    {
+      "name": "agent.chat-project-context",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-project-context command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.context"
+      ]
+    },
+    {
+      "name": "agent.chat-welcome",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-welcome command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.composer.welcome"
+      ]
+    },
+    {
+      "name": "agent.chat-lifecycle-control",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-lifecycle-control command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.lifecycle.control"
+      ]
+    },
+    {
+      "name": "agent.chat-voice-authorize",
+      "abi": "mcp.stdio",
+      "description": "Run the signed chat-voice-authorize command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.voice.authorize"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-list",
+      "abi": "mcp.stdio",
+      "description": "List this caller's sessions in the tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.list"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-create",
+      "abi": "mcp.stdio",
+      "description": "Create a session in a project of this tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.create"
+      ]
+    },
+    {
+      "name": "agent.tenant-session-open",
+      "abi": "mcp.stdio",
+      "description": "Open one session the caller owns in this tenant.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.agent.history"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "validate-skill",
+      "tool": "validate_skill",
+      "payload": {
+        "content": "---\nname: example\ndescription: Validate the document structure.\n---\n# Example"
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "chat-list",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.list"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-list"
+    },
+    {
+      "id": "chat-create",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.create"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-create"
+    },
+    {
+      "id": "chat-history",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.history"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-history"
+    },
+    {
+      "id": "chat-turn",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.turn"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-turn"
+    },
+    {
+      "id": "chat-cancel",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.cancel"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-cancel"
+    },
+    {
+      "id": "chat-rename",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.rename"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-rename"
+    },
+    {
+      "id": "chat-interactions",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.interactions"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-interactions"
+    },
+    {
+      "id": "chat-respond",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.respond"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-respond"
+    },
+    {
+      "id": "chat-upload",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.attachments"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-upload"
+    },
+    {
+      "id": "chat-attached-turn",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.attachments.turn"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-attached-turn"
+    },
+    {
+      "id": "activity-list",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.activity.read"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.activity-list"
+    },
+    {
+      "id": "activity-mark",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.activity.receipts"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.activity-mark"
+    },
+    {
+      "id": "review-latest",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.review.latest"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.review-latest"
+    },
+    {
+      "id": "review-details",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.review.details"
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.review-details"
+    },
+    {
+      "id": "dashboard-read",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.agent.dashboard.read"
+      ],
+      "accepts_input": true,
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.dashboard-read"
+    },
+    {
+      "id": "dashboard-trace",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.agent.dashboard.trace"
+      ],
+      "accepts_input": true,
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.dashboard-trace"
+    },
+    {
+      "id": "dashboard-configure",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.agent.dashboard.configure"
+      ],
+      "accepts_input": true,
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.dashboard-configure"
+    },
+    {
+      "id": "chat-composer-read",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.read"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-composer-read"
+    },
+    {
+      "id": "chat-composer-save",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.save"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-composer-save"
+    },
+    {
+      "id": "chat-models",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.models"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-models"
+    },
+    {
+      "id": "chat-project-context",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.context"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-project-context"
+    },
+    {
+      "id": "chat-welcome",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.composer.welcome"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-welcome"
+    },
+    {
+      "id": "chat-lifecycle-control",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.lifecycle.control"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-lifecycle-control"
+    },
+    {
+      "id": "chat-voice-authorize",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.voice.authorize"
+      ],
+      "scope": "project",
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "agent.chat-voice-authorize"
+    },
+    {
+      "id": "tenant-session-list",
+      "tool": "agent.tenant-session-list",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.list"
+      ],
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "tenant-session-create",
+      "tool": "agent.tenant-session-create",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.create"
+      ],
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "tenant-session-open",
+      "tool": "agent.tenant-session-open",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "permissions": [
+        "app.agent.history"
+      ],
+      "scope": "tenant",
+      "output_schema": {
+        "type": "object"
+      }
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:58d59bbfdaa53b34d570201ae5ca87952af68976d2721189349de6dc44f1db6a",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "skill",
+      "title": "Agent skills",
+      "routes": [
+        "/agent/skills"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/skill.js",
+        "digest": "sha256:e23700c885031b17840724f53b4225fd150e340f6566a15023b10b8a8059cb82"
+      },
+      "commands": [
+        "validate-skill"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "chat",
+      "home": true,
+      "title": "Agent chat",
+      "routes": [
+        "/agent/chat",
+        "/agent/chat/:conversationId",
+        "/tenant/:tenantId/project/:projectId/agent-workspace",
+        "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/chat-web.js",
+        "digest": "sha256:c3fb6ab62ac41dd06de5577c3f73d9942ddab2bf404c7e7903d63125fc71f56c"
+      },
+      "commands": [
+        "chat-list",
+        "chat-create",
+        "chat-history",
+        "chat-turn",
+        "chat-cancel",
+        "chat-rename",
+        "chat-interactions",
+        "chat-respond",
+        "chat-upload",
+        "chat-attached-turn",
+        "activity-list",
+        "activity-mark",
+        "review-latest",
+        "review-details",
+        "chat-composer-read",
+        "chat-composer-save",
+        "chat-models",
+        "chat-project-context",
+        "chat-welcome",
+        "chat-lifecycle-control",
+        "chat-voice-authorize"
+      ],
+      "device_tools": [
+        "local_chat"
+      ],
+      "style": {
+        "path": "ui/chat-web.css",
+        "digest": "sha256:76751fae9078406635e580e473438f16a492f5de4365fbfeed196d429baa0f14"
+      },
+      "workbench": true,
+      "sidebar": {
+        "rows": {
+          "command": "chat-list",
+          "collection": "items",
+          "fields": {
+            "id": "id",
+            "label": "title",
+            "target": "execution_target",
+            "group": "workspace_id",
+            "child": "linked_workspace_task_id",
+            "groupLabel": "workspace_name",
+            "updatedAt": "updated_at",
+            "createdAt": "created_at",
+            "active": "sidebar_active",
+            "role": "sidebar_role",
+            "hidden": "sidebar_hidden"
+          },
+          "route": "/tenant/:tenantId/project/:projectId/agent-workspace",
+          "row_route": "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId",
+          "row_param": "conversationId",
+          "group_query": "workspaceId",
+          "constants": {
+            "workbench": true,
+            "limit": 10
+          }
+        },
+        "create": {
+          "command": "chat-create",
+          "inputs": {
+            "title": "label",
+            "workspace_id": "group"
+          },
+          "fields": {
+            "id": "id"
+          }
+        },
+        "rename": {
+          "command": "chat-rename",
+          "inputs": {
+            "conversation_id": "id",
+            "title": "label"
+          }
+        }
+      },
+      "query_params": [
+        "workspaceId",
+        "conversationId"
+      ],
+      "page_links": [
+        "memstack-environments/sandbox-interaction",
+        "memstack-workspace/workspace-posts"
+      ],
+      "navigation_actions": [
+        "primary-create"
+      ],
+      "anchored_slots": {
+        "code@1": "memstack-environments/agent-code",
+        "collab@1": "memstack-workspace/agent-collab"
+      },
+      "voice_authorization": "chat-voice-authorize"
+    },
+    {
+      "id": "tenant-chat",
+      "title": "Agent chat",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/agent-workspace",
+        "/tenant/:tenantId/agent-workspace/:conversationId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "tenant-session-list",
+        "tenant-session-create",
+        "tenant-session-open"
+      ],
+      "device_tools": [],
+      "entry": {
+        "path": "ui/tenant-scope.js",
+        "digest": "sha256:e4b67445abde8b49bce3f9ea3cc21e57f70a6671d81cc386f33065ed123a0081"
+      },
+      "navigation_routes": [
+        "/tenant/:tenantId/project/:projectId/agent-workspace/:conversationId"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "title": "Multi-agent dashboard",
+      "routes": [
+        "/tenant/:tenantId/agents"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "dashboard-read",
+        "dashboard-trace",
+        "dashboard-configure"
+      ],
+      "device_tools": [],
+      "scope": "tenant",
+      "workbench": true,
+      "entry": {
+        "path": "ui/web-dashboard.js",
+        "digest": "sha256:09374c1f134fe5ebdab5bce569cbaee11a7a1a23f02659d6e8efaa93e60faccc"
+      },
+      "style": {
+        "path": "ui/web-dashboard.css",
+        "digest": "sha256:a32c89968de9f123aa740afea2c3acd6b0eaf82cf5f1d80077f9fd07cd680f9e"
+      }
+    }
+  ]
+}

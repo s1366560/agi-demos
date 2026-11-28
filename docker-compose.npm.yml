@@ -1,0 +1,29 @@
+name: memstack-plugin-npm
+
+services:
+  npm-registry:
+    image: verdaccio/verdaccio:6@sha256:8c9cd40d28ef134140f4f6c4cef2032ac58bd554cce56757048f81b72717c09c
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4873:4873"
+    volumes:
+      - ./docker/npm/config.yaml:/verdaccio/conf/config.yaml:ro
+      - ${MEMSTACK_NPM_STATE:?}/publishers:/verdaccio/conf/publishers:ro
+      - packages:/verdaccio/storage
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4873/-/ping').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+    networks:
+      - host-access
+      - packages
+
+networks:
+  host-access: {}
+  packages:
+    name: memstack-plugin-npm
+    internal: true
+
+volumes:
+  packages:

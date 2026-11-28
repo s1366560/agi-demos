@@ -166,3 +166,20 @@ async def test_root_scope_cannot_prepare_wasm_tools(staged):
         with pytest.raises(RuntimeV2Error, match="scoped session"):
             await prepare_wasm_operation_tools_v2(operation, Authority())
         assert resolve(catalog).definitions == ()
+
+
+@pytest.mark.parametrize("verified", ["invoke"], indirect=True)
+async def test_signed_invoke_reads_content_and_checks_grant(staged):
+    manager, catalog = staged
+    authority = Authority()
+    async with pin_operation_context_v2(manager, operation_id="json", scope=SCOPE) as operation:
+        assert await prepare_wasm_operation_tools_v2(operation, authority) == 1
+        (tool,) = resolve(catalog).definitions
+        for value in ("甲", "乙"):
+            payload = {"query": value, "options": {"limit": 1}}
+            assert json.loads(await tool.execute(**payload)) == payload
+        with pytest.raises(RuntimeV2Error, match="budget"):
+            await tool.execute(query="x" * 65536)
+        authority.allowed = False
+        with pytest.raises(RuntimeV2Error, match="permission"):
+            await tool.execute(query="revoked")

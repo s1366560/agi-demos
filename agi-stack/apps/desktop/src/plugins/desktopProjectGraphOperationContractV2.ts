@@ -2,7 +2,7 @@ import {
   GRAPH_NODE_PROVENANCE_KEYS,
   GRAPH_EDGE_PROVENANCE_KEYS,
   validGraphProvenance,
-} from '../features/project-knowledge/projectGraphProvenance';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphProvenance';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
 import {
@@ -11,8 +11,8 @@ import {
   type ProjectGraphNode,
   type ProjectGraphSnapshot,
   type ProjectGraphSourceQuery,
-} from '../features/project-knowledge/projectGraphClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectGraphClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectGraphOperationInputV2 = Readonly<{

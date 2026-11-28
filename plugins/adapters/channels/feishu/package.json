@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-feishu-timeline",
+  "kind": "adapter",
+  "version": "1.0.0",
+  "target": "python",
+  "tool_name": "render_timeline",
+  "wasm": "timeline.wasm",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/adapters/channels/feishu"
+}

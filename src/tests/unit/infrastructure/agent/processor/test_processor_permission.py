@@ -21,17 +21,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor import processor as processor_mod
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.hitl.coordinator import ResolveResult, resolve_by_request_id
 from src.infrastructure.agent.permission.manager import PermissionManager
 from src.infrastructure.agent.permission.rules import PermissionAction, PermissionRule
-from src.infrastructure.agent.processor import processor as processor_mod
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 
 
 async def async_execute(name: str, **kwargs) -> str:

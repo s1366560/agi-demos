@@ -47,7 +47,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `pnpm exec vite --host 127.0.0.1 --port ${webPort} --strictPort`,
+      command: `pnpm exec vite --config vite.config.ts --mode compat --host 127.0.0.1 --port ${webPort} --strictPort`,
       cwd: webRoot,
       url: webBaseURL,
       reuseExistingServer: false,
@@ -56,6 +56,7 @@ export default defineConfig({
     {
       command: `pnpm exec vite --host 127.0.0.1 --port ${desktopPort} --strictPort`,
       cwd: desktopRoot,
+      env: { AGISTACK_DESKTOP_PROFILE: "compat" },
       url: desktopBaseURL,
       reuseExistingServer: false,
       timeout: 120_000,

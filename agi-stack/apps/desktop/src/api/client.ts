@@ -1,3 +1,5 @@
+import { DesktopApiError } from './desktopApiError';
+export { DesktopApiError } from './desktopApiError';
 import {
   CloudHistoryTransportError,
   localHistoryMustUseCloud,
@@ -326,18 +328,6 @@ const WORKSPACE_AUTHORITY_KEYS = new Set([
   'revision',
   'cursor',
 ]);
-
-export class DesktopApiError extends Error {
-  readonly status: number;
-  readonly payload: unknown;
-
-  constructor(message: string, status: number, payload: unknown) {
-    super(message);
-    this.name = 'DesktopApiError';
-    this.status = status;
-    this.payload = payload;
-  }
-}
 
 export type DeviceTokenErrorClassification =
   | { code: 'authorization_pending'; interval: number }

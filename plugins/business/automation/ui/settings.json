@@ -1,0 +1,20 @@
+{
+  "schema": "memstack.slot-ui/1",
+  "title": "Schedules",
+  "actions": [
+    {
+      "id": "next-scheduled-run",
+      "label": "Preview next run",
+      "input": {
+        "label": "Schedule and start time (JSON)",
+        "initial": {
+          "kind": "every",
+          "config": {
+            "interval_seconds": 60
+          },
+          "start": "2026-01-01T00:00:00Z"
+        }
+      }
+    }
+  ]
+}

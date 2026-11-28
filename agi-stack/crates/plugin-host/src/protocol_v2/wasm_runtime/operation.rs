@@ -1,4 +1,7 @@
-use super::{failure, host::ScoreHost};
+use super::{
+    failure,
+    host::{ToolAbi, WasmHost},
+};
 use crate::protocol_v2::{
     scope_contains, BundleReferenceV2, GenerationLeaseV2, RuntimeV2Error, ScopeV2,
 };
@@ -91,7 +94,7 @@ impl WasmOperationV2 {
 }
 
 struct ToolSource {
-    host: Arc<ScoreHost>,
+    host: Arc<WasmHost>,
     active: Arc<AtomicBool>,
     attribution: WasmToolAttributionV2,
 }
@@ -101,7 +104,7 @@ pub struct WasmToolSetV2 {
 }
 impl WasmToolSetV2 {
     pub(super) fn new(
-        host: Arc<ScoreHost>,
+        host: Arc<WasmHost>,
         active: Arc<AtomicBool>,
         attribution: WasmToolAttributionV2,
     ) -> Self {
@@ -144,6 +147,13 @@ impl AuthorizedWasmToolV2 {
         &self.source.attribution
     }
     pub fn definition(&self) -> ToolDefinition {
+        if self.source.host.abi == ToolAbi::Invoke {
+            return ToolDefinition::new(
+                &self.source.attribution.tool_name,
+                "Runs a pure signed WASM tool with a JSON object request and result.",
+                json!({"type":"object","additionalProperties":true}),
+            );
+        }
         ToolDefinition::new(
             &self.source.attribution.tool_name,
             "Runs an isolated WASM score on the UTF-8 byte length of the input JSON.",
@@ -175,22 +185,24 @@ impl AuthorizedWasmToolV2 {
         let object = input
             .as_object()
             .ok_or_else(|| failure("WASM input object required"))?;
-        let text = object
-            .get("input")
-            .and_then(Value::as_str)
-            .ok_or_else(|| failure("WASM input string required"))?;
-        if object.len() != 1 || text.chars().count() > 65536 {
-            return Err(failure("WASM input exceeds ABI contract"));
+        if self.source.host.abi == ToolAbi::Score {
+            let text = object
+                .get("input")
+                .and_then(Value::as_str)
+                .ok_or_else(|| failure("WASM input string required"))?;
+            if object.len() != 1 || text.chars().count() > 65536 {
+                return Err(failure("WASM input exceeds ABI contract"));
+            }
         }
-        let encoded = serde_json::to_vec(&json!({"input":text}))
-            .map_err(|_| failure("WASM input cannot serialize"))?;
-        let count =
-            i32::try_from(encoded.len()).map_err(|_| failure("WASM input size overflow"))?;
-        let score = self.source.host.invoke(count).await?;
+        let encoded =
+            serde_json::to_vec(&input).map_err(|_| failure("WASM input cannot serialize"))?;
+        if self.source.host.abi == ToolAbi::Invoke && encoded.len() > 65536 {
+            return Err(failure("WASM input exceeds the byte budget"));
+        }
+        let output = self.source.host.invoke(encoded).await?;
         if !valid() {
             return Err(failure("WASM operation disposed during execution"));
         }
-        let output = json!({"score":score,"input_bytes":count});
         if serde_json::to_vec(&output)
             .map_err(|_| failure("WASM output cannot serialize"))?
             .len() as u64

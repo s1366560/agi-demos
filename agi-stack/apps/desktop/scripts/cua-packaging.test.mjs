@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -82,6 +83,9 @@ test('macOS local signing refreshes checksums and seals actual CUA resources', {
   try {
     const appPath = prepared.bundle;
     await cp(join(desktop, 'build/sidecar'), join(appPath, 'Contents/Resources/sidecar'), { recursive: true });
+    const coreResource = join(appPath, 'Contents/Resources/workspace-core');
+    await mkdir(coreResource, { recursive: true });
+    await cp('/usr/bin/true', join(coreResource, 'memstack-workspace-core'));
     const node = await stageNode(join(appPath, 'Contents/Resources/sidecar'));
     await createCuaMacBundle({ executable: join(desktop, 'cua-helper/bin/cua-helper'),
       lockedUse: join(desktop, 'cua-helper/bin/locked-use'), desktopRoot: desktop,
@@ -89,6 +93,8 @@ test('macOS local signing refreshes checksums and seals actual CUA resources', {
     await signLocalCuaMacos({ electronPlatformName: 'darwin', appOutDir: dirname(appPath),
       packager: { appInfo: { productFilename: 'ComputerUseFixture' }, projectDir: desktop } });
     await verifyCuaRuntime(join(appPath, 'Contents/Resources/sidecar'), { platform: 'darwin' });
+    const coreDigest = createHash('sha256').update(await readFile(join(coreResource, 'memstack-workspace-core'))).digest('hex');
+    assert.equal(await readFile(join(coreResource, 'SHA256SUMS'), 'utf8'), coreDigest + '  memstack-workspace-core\n');
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath]);
     assert.equal(execFileSync(node, ['-e', 'process.stdout.write(String(new Function("return 6 * 7")()))'],
       { encoding: 'utf8' }), '42');

@@ -10,6 +10,10 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
+    SandboxOperationApplicationResolverProtocolV2,
+)
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import Project, ProjectSandbox
@@ -24,10 +28,6 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_operation_services import (
-    SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
-    SandboxOperationApplicationResolverProtocolV2,
-)
 
 logger = logging.getLogger(__name__)
 

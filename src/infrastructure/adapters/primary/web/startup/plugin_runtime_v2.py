@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.types import Scope
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import SandboxRuntimeFactoryV2
 from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
 from src.domain.model.plugins.generated_v2 import (
     ControlPlaneEnvelopeV2,
@@ -44,14 +45,15 @@ from src.infrastructure.plugins.v2.boundary import (
     install_process_generation_host_v2,
 )
 from src.infrastructure.plugins.v2.builtin_http_routes import (
-    REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+    KERNEL_ROUTE_GROUPS_V2,
     build_builtin_route_graph_v2,
+    generation_route_definitions_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.channel_runtime import ChannelRuntimeManagerV2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.graph_runtime import GraphRuntimeFactoryV2
-from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2, RouteTableRegistryV2
+from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
 from src.infrastructure.plugins.v2.protocol import (
     control_envelope_v2,
     parse_control_envelope_v2,
@@ -66,13 +68,11 @@ from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeFact
 from src.infrastructure.plugins.v2.root_background_activation_v2 import (
     activate_root_background_services_v2,
 )
-from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginPublicationV2,
     PlatformPluginRuntimeHostV2,
 )
-from src.infrastructure.plugins.v2.sandbox_runtime import SandboxRuntimeFactoryV2
 from src.infrastructure.plugins.v2.target_profiles import (
     PRODUCTION_TARGET_MANIFEST_V2_PATHS,
     compose_production_target_upgrade_v2,
@@ -125,6 +125,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
     )
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
+            billing_schema_sessions=session_factory,
             agent_lifecycle_connection_manager=agent_lifecycle_connection_manager,
             agent_pool_runtime_factory=agent_pool_runtime_factory,
             graph_runtime_factory=graph_runtime_factory,
@@ -151,20 +152,16 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
             generation: RuntimeGenerationV2,
         ) -> PreparedGenerationPublicationV2:
             nonlocal route_graph, route_publication
-            route_builder = generation.resolve(
-                ROUTE_TABLE_BUILDER_SERVICE_V2,
-                ScopeV2(kind=ScopeKindV2.ROOT),
+            contributed_routes = generation_route_definitions_v2(
+                generation, ScopeV2(kind=ScopeKindV2.ROOT)
             )
-            if not isinstance(route_builder, RouteTableBuilderV2):
-                raise TypeError("plugin runtime v2 staged an invalid route table builder")
-            contributed_routes = route_builder.seal()
             graph = build_builtin_route_graph_v2(
                 workspace_core_settings=workspace_core_settings,
-                route_definitions=contributed_routes,
-                required_v2_row_ids=REQUIRED_V2_BUILTIN_ROUTE_ROW_IDS,
+                route_definitions=contributed_routes or (),
+                required_v2_row_ids=KERNEL_ROUTE_GROUPS_V2,
                 dependency_overrides=app.dependency_overrides,
             )
-            staged = route_registry.stage(generation.descriptor, graph.table)
+            staged = route_registry.stage_root(generation, graph.table)
             route_graph = graph
             route_publication = staged
             return PreparedGenerationPublicationV2(

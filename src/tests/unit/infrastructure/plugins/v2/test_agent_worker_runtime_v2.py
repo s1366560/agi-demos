@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.react import react_agent_profile, react_agent_prompt_mixin
+from plugins.business.environments.backend.sandbox.sandbox_runtime import SANDBOX_RUNTIME_MODULE_V2
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
@@ -18,7 +20,6 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MC
 from src.infrastructure.agent.actor import execution, local_chat_worker, project_agent_actor
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.canvas.tools import get_canvas_manager
-from src.infrastructure.agent.core import react_agent_profile, react_agent_prompt_mixin
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.state import agent_worker_state
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -42,7 +43,6 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_prof
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.sandbox_runtime import SANDBOX_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.subagent_run_registry_service import (
     SUBAGENT_RUN_REGISTRY_MODULE_V2,
 )

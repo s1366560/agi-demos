@@ -87,12 +87,22 @@ impl TerminalHub {
             "origin",
             HeaderValue::from_str(&input.origin).map_err(|_| TerminalV2Error::internal())?,
         );
+        let initial = ttyd_initial_terminal_message(TerminalSize::default(), &input.auth_header)
+            .ok_or_else(TerminalV2Error::internal)?;
+        request
+            .headers_mut()
+            .insert("sec-websocket-protocol", HeaderValue::from_static("tty"));
         request
             .headers_mut()
             .insert(AUTHORIZATION, input.auth_header);
-        let (upstream, _) = tokio::time::timeout(Duration::from_secs(10), connect_async(request))
+        let (mut upstream, _) =
+            tokio::time::timeout(Duration::from_secs(10), connect_async(request))
+                .await
+                .map_err(|_| TerminalV2Error::internal())?
+                .map_err(|_| TerminalV2Error::internal())?;
+        upstream
+            .send(initial)
             .await
-            .map_err(|_| TerminalV2Error::internal())?
             .map_err(|_| TerminalV2Error::internal())?;
         let (input_tx, input_rx) = mpsc::channel(INPUT_BUFFER_MESSAGES);
         let (events, _) = broadcast::channel(OUTPUT_BUFFER_MESSAGES);
@@ -274,14 +284,6 @@ impl TerminalHub {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
         let (mut upstream_tx, mut upstream_rx) = upstream.split();
-        if upstream_tx
-            .send(ttyd_initial_terminal_message(TerminalSize::default()))
-            .await
-            .is_err()
-        {
-            self.finalize_lost("terminal_session_lost").await;
-            return;
-        }
         let enter_cwd = format!(
             "cd -- {} && printf '\\033[2J\\033[H'\r",
             shell_single_quote(&cwd)
@@ -888,7 +890,12 @@ mod tests {
         let (frames_tx, mut frames_rx) = mpsc::channel::<Vec<u8>>(4);
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept mock ttyd");
-            let mut ttyd = tokio_tungstenite::accept_async(stream)
+            #[allow(clippy::result_large_err)]
+            let mut ttyd = tokio_tungstenite::accept_hdr_async(stream, |request: &tokio_tungstenite::tungstenite::handshake::server::Request, mut response: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                assert_eq!(request.headers()["sec-websocket-protocol"], "tty");
+                response.headers_mut().insert("sec-websocket-protocol", HeaderValue::from_static("tty"));
+                Ok(response)
+            })
                 .await
                 .expect("upgrade mock ttyd");
             for _ in 0..2 {
@@ -928,7 +935,10 @@ mod tests {
         assert_eq!(output["sequence"], 1);
         assert_eq!(output["data"], "ready\n");
         let initial = frames_rx.recv().await.expect("ttyd initial frame");
-        assert!(initial.starts_with(b"{"));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&initial).unwrap()["AuthToken"],
+            "dGVzdA=="
+        );
         let cwd = frames_rx.recv().await.expect("ttyd cwd frame");
         assert_eq!(cwd.first().copied(), Some(TTYD_INPUT_COMMAND));
         assert!(String::from_utf8_lossy(&cwd[1..]).starts_with("cd -- '/workspace'"));

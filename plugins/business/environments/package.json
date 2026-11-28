@@ -1,0 +1,10 @@
+{
+  "kind": "business",
+  "plugin_id": "memstack-environments",
+  "version": "1.6.4",
+  "target": "python",
+  "tool_name": "cluster_health",
+  "worker": "worker.json",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/business/environments"
+}

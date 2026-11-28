@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ToolDefinition
 from src.infrastructure.agent.core.subagent_tools import (
     SubAgentToolBuilder,
     SubAgentToolBuilderDeps,
 )
-from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools import (
     delegate_subagent as delegate_subagent_module,

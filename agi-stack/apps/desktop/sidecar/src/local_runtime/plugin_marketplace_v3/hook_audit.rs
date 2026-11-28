@@ -12,6 +12,10 @@ pub(super) struct Record {
     pub plugin_id: String,
     pub version: String,
     pub event: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invocation_id: Option<String>,
     pub success: bool,
     pub latency_ms: u64,
 }
@@ -55,6 +59,8 @@ mod tests {
             plugin_id: "plugin".into(),
             version: "1.0.0".into(),
             event: "session_start".into(),
+            delivery_id: None,
+            invocation_id: None,
             success: true,
             latency_ms: 1,
         }

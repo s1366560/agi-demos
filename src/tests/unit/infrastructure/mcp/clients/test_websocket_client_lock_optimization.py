@@ -255,3 +255,32 @@ class TestWebSocketClientMinimalLockImplementation:
 
         # Lock should have been released before send
         assert lock_released_before_send, "Lock was held during send operation"
+
+
+async def test_cancelled_tool_forwards_only_its_request_id_on_the_original_socket():
+    from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+    client = MCPWebSocketClient(url="ws://localhost:8765")
+    sent = asyncio.Event()
+    messages = []
+
+    async def record(message):
+        messages.append(message)
+        sent.set()
+
+    socket = MagicMock(closed=False, send_json=record)
+    client._ws = socket
+    active = asyncio.create_task(client.call_tool("mcp_server_call_tool", {}, progress_token="job"))
+    await sent.wait()
+    client._ws = MagicMock(closed=False, send_json=AsyncMock())
+    active.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await active
+    assert messages[0]["params"]["_meta"]["progressToken"] == "job"
+    assert messages[1] == {
+        "jsonrpc": "2.0",
+        "method": "notifications/cancelled",
+        "params": {"requestId": messages[0]["id"]},
+    }
+    assert not client._pending_requests
+    client._ws.send_json.assert_not_called()

@@ -84,6 +84,7 @@ async fn respond(
     (response.status(), response_json(response).await)
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn hitl_identity_formal_http_resumes_only_the_selected_scoped_request_once() {
     let state = test_state(TOKEN);

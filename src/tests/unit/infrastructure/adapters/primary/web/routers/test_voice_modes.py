@@ -72,3 +72,17 @@ async def test_provider_final_is_dispatched_once_and_interim_is_not_a_turn() -> 
     )
     assert queue.qsize() == 1
     assert queue.get_nowait() == "hello"
+
+
+@pytest.mark.unit
+async def test_foreign_conversation_rejected_before_voice_accept(monkeypatch) -> None:
+    socket = AsyncMock()
+    socket.headers = {"authorization": "Bearer ms_sk_fixture"}
+    db = AsyncMock()
+    db.scalar.return_value = None
+    monkeypatch.setattr(
+        voice_websocket, "authenticate_websocket", AsyncMock(return_value=("u", "t"))
+    )
+    await voice_websocket.voice_chat_endpoint(socket, None, "p", "foreign", db)
+    socket.accept.assert_not_awaited()
+    socket.close.assert_awaited_once_with(code=4003, reason="Conversation unavailable")

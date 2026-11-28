@@ -10,9 +10,14 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager import (
+    SandboxMCPServerManager,
+)
+from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
+    SandboxOperationApplicationResolverProtocolV2,
+)
 from src.application.services.mcp_app_service import MCPAppService
 from src.application.services.mcp_runtime_service import MCPRuntimeService
-from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 from src.domain.model.mcp.server import MCPServer
 from src.domain.ports.repositories.mcp_server_repository import MCPServerRepositoryPort
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -42,7 +47,6 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .sandbox_operation_services import SandboxOperationApplicationResolverProtocolV2
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis

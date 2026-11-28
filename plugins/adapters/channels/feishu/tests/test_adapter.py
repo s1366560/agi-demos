@@ -1,0 +1,1390 @@
+"""Unit tests for Feishu adapter message normalization."""
+
+import json
+import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from src.application.services.channels.hitl_responder import HITLChannelResponseOutcome
+from src.domain.model.channels.message import ChannelConfig, ChatType
+from src.infrastructure.adapters.secondary.channels.channel_plugin_loader import load_channel_module
+
+FeishuAdapter = load_channel_module("feishu", "adapter").FeishuAdapter
+
+
+@pytest.fixture
+def adapter() -> FeishuAdapter:
+    """Create adapter with minimal valid config."""
+    return FeishuAdapter(ChannelConfig(app_id="cli_test", app_secret="secret"))
+
+
+@pytest.mark.unit
+def test_parse_message_handles_none_mentions(adapter: FeishuAdapter) -> None:
+    """Parser should tolerate null mentions payload from Feishu events."""
+    message = adapter._parse_message(
+        message_data={
+            "chat_type": "group",
+            "chat_id": "chat-1",
+            "content": '{"text":"hello"}',
+            "message_type": "text",
+            "mentions": None,
+        },
+        sender_data={"sender_id": {"open_id": "ou_sender"}, "sender_type": "user"},
+    )
+
+    assert message.sender.id == "ou_sender"
+    assert message.chat_type == ChatType.GROUP
+    assert message.mentions == []
+
+
+@pytest.mark.unit
+def test_parse_message_handles_object_mentions(adapter: FeishuAdapter) -> None:
+    """Parser should extract mentions from SDK object-shaped payloads."""
+
+    class _SenderId:
+        def __init__(self, open_id: str) -> None:
+            self.open_id = open_id
+
+    class _MentionId:
+        def __init__(self, open_id: str) -> None:
+            self.open_id = open_id
+
+    class _Mention:
+        def __init__(self, open_id: str) -> None:
+            self.id = _MentionId(open_id)
+
+    message = adapter._parse_message(
+        message_data={
+            "chat_type": "group",
+            "chat_id": "chat-1",
+            "content": '{"text":"hello"}',
+            "message_type": "text",
+            "mentions": [_Mention("ou_mention_1"), {"id": {"open_id": "ou_mention_2"}}],
+        },
+        sender_data={"sender_id": _SenderId("ou_sender"), "sender_type": "user"},
+    )
+
+    assert message.sender.id == "ou_sender"
+    assert message.mentions == ["ou_mention_1", "ou_mention_2"]
+
+
+@pytest.mark.unit
+def test_parse_message_fallback_for_unknown_chat_type(adapter: FeishuAdapter) -> None:
+    """Unknown chat_type should fallback to p2p instead of raising."""
+    message = adapter._parse_message(
+        message_data={
+            "chat_type": "unknown",
+            "chat_id": "chat-1",
+            "content": {"text": "hello"},
+            "message_type": "text",
+            "mentions": [],
+        },
+        sender_data={"sender_id": {"open_id": "ou_sender"}, "sender_type": "user"},
+    )
+
+    assert message.chat_type == ChatType.P2P
+    assert message.content.text == "hello"
+
+
+@pytest.mark.unit
+def test_parse_message_fallback_for_invalid_chat_type_shape(adapter: FeishuAdapter) -> None:
+    """Malformed chat_type payload should fallback safely."""
+    message = adapter._parse_message(
+        message_data={
+            "chat_type": {"bad": "shape"},
+            "chat_id": "chat-1",
+            "content": '{"text":"hello"}',
+            "message_type": "text",
+            "mentions": [],
+        },
+        sender_data={"sender_id": {"open_id": "ou_sender"}, "sender_type": "user"},
+    )
+
+    assert message.chat_type == ChatType.P2P
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "raw_content,expected_text",
+    [
+        ('["a", "b"]', "['a', 'b']"),
+        ("123", "123"),
+        ('"hello"', "hello"),
+    ],
+)
+def test_parse_message_handles_non_object_json_content(
+    adapter: FeishuAdapter, raw_content: str, expected_text: str
+) -> None:
+    """Text parser should handle valid JSON scalars/arrays without crashing."""
+    message = adapter._parse_message(
+        message_data={
+            "chat_type": "p2p",
+            "chat_id": "chat-1",
+            "content": raw_content,
+            "message_type": "text",
+            "mentions": [],
+        },
+        sender_data={"sender_id": {"open_id": "ou_sender"}, "sender_type": "user"},
+    )
+
+    assert message.content.text == expected_text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_websocket_starts_dedicated_thread(adapter: FeishuAdapter) -> None:
+    """WebSocket connect should start lark client in dedicated daemon thread."""
+
+    class _Builder:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def register_p2_im_message_receive_v1(self, _handler):
+            return self
+
+        def register_p2_im_message_recalled_v1(self, _handler):
+            return self
+
+        def register_p2_im_message_message_read_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_member_bot_added_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_member_bot_deleted_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(self, _handler):
+            return self
+
+        def register_p2_card_action_trigger(self, _handler):
+            return self
+
+        def build(self):
+            return object()
+
+    class _FakeThread:
+        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None) -> None:
+            self.target = target
+            self.kwargs = kwargs or {}
+            self.name = name
+            self.daemon = daemon
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    with (
+        pytest.MonkeyPatch.context() as monkeypatch,
+        patch(
+            "memstack_plugins_feishu.adapter.threading.Thread",
+            new=_FakeThread,
+        ),
+        patch.object(adapter, "_wait_for_websocket_ready", new=AsyncMock()),
+    ):
+        monkeypatch.setitem(sys.modules, "lark_oapi", SimpleNamespace())
+        monkeypatch.setitem(sys.modules, "lark_oapi.event", SimpleNamespace())
+        monkeypatch.setitem(
+            sys.modules,
+            "lark_oapi.event.dispatcher_handler",
+            SimpleNamespace(EventDispatcherHandlerBuilder=_Builder),
+        )
+        await adapter._connect_websocket()
+
+    assert adapter._ws_thread is not None
+    assert adapter._ws_thread.started is True
+    assert adapter._ws_thread.daemon is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_websocket_cleans_up_when_wait_fails(
+    adapter: FeishuAdapter,
+) -> None:
+    """WebSocket startup wait failure should trigger cleanup."""
+
+    class _Builder:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def register_p2_im_message_receive_v1(self, _handler):
+            return self
+
+        def register_p2_im_message_recalled_v1(self, _handler):
+            return self
+
+        def register_p2_im_message_message_read_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_member_bot_added_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_member_bot_deleted_v1(self, _handler):
+            return self
+
+        def register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(self, _handler):
+            return self
+
+        def register_p2_card_action_trigger(self, _handler):
+            return self
+
+        def build(self):
+            return object()
+
+    class _FakeThread:
+        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None) -> None:
+            self.target = target
+            self.kwargs = kwargs or {}
+            self.name = name
+            self.daemon = daemon
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    with (
+        pytest.MonkeyPatch.context() as monkeypatch,
+        patch(
+            "memstack_plugins_feishu.adapter.threading.Thread",
+            new=_FakeThread,
+        ),
+        patch.object(
+            adapter,
+            "_wait_for_websocket_ready",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ),
+        patch.object(adapter, "disconnect", new=AsyncMock()) as disconnect_mock,
+    ):
+        monkeypatch.setitem(sys.modules, "lark_oapi", SimpleNamespace())
+        monkeypatch.setitem(sys.modules, "lark_oapi.event", SimpleNamespace())
+        monkeypatch.setitem(
+            sys.modules,
+            "lark_oapi.event.dispatcher_handler",
+            SimpleNamespace(EventDispatcherHandlerBuilder=_Builder),
+        )
+        with pytest.raises(RuntimeError, match="boom"):
+            await adapter._connect_websocket()
+
+    disconnect_mock.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_raises_when_websocket_thread_not_alive(
+    adapter: FeishuAdapter,
+) -> None:
+    """connect should fail when websocket thread is not alive after startup."""
+
+    class _DeadThread:
+        @staticmethod
+        def is_alive() -> bool:
+            return False
+
+    adapter._ws_thread = _DeadThread()
+    adapter._ws_ready.set()
+
+    with (
+        patch.object(adapter, "_connect_websocket", new=AsyncMock()),
+        pytest.raises(RuntimeError, match="failed to stay alive"),
+    ):
+        await adapter.connect()
+
+    assert adapter.connected is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_wait_for_websocket_ready_raises_startup_error(adapter: FeishuAdapter) -> None:
+    """Startup waiter should fail fast when websocket thread reported an error."""
+    adapter._ws_start_error = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="startup failed"):
+        await adapter._wait_for_websocket_ready()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_wait_for_websocket_ready_returns_when_ready_event_set(
+    adapter: FeishuAdapter,
+) -> None:
+    """Startup waiter should succeed when readiness event is set."""
+
+    class _AliveThread:
+        @staticmethod
+        def is_alive() -> bool:
+            return True
+
+    adapter._ws_thread = _AliveThread()
+    adapter._ws_ready.set()
+
+    await adapter._wait_for_websocket_ready()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_disconnect_stops_thread_and_clears_runtime_state(adapter: FeishuAdapter) -> None:
+    """disconnect should stop websocket loop, join thread, and reset runtime refs."""
+
+    class _FakeFuture:
+        def result(self, timeout=None):
+            return None
+
+    class _FakeLoop:
+        def __init__(self) -> None:
+            self.stopped = False
+
+        @staticmethod
+        def is_running() -> bool:
+            return True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+        def call_soon_threadsafe(self, _fn) -> None:
+            self.stopped = True
+
+    class _FakeThread:
+        def __init__(self) -> None:
+            self.joined = False
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+        def join(self, timeout=None) -> None:
+            self.joined = True
+            self._alive = False
+
+    class _FakeClient:
+        async def _disconnect(self) -> None:
+            return None
+
+    def _run_coroutine_threadsafe(coro, _loop):
+        coro.close()
+        return _FakeFuture()
+
+    fake_loop = _FakeLoop()
+    fake_thread = _FakeThread()
+
+    adapter._connected = True
+    adapter._ws_client = _FakeClient()
+    adapter._ws_loop = fake_loop
+    adapter._ws_thread = fake_thread
+    adapter._ws_start_error = RuntimeError("old error")
+
+    with patch(
+        "memstack_plugins_feishu.adapter.asyncio.run_coroutine_threadsafe",
+        side_effect=_run_coroutine_threadsafe,
+    ):
+        await adapter.disconnect()
+
+    assert adapter.connected is False
+    assert adapter._ws_stop_requested is True
+    assert fake_thread.joined is True
+    assert fake_loop.stopped is True
+    assert adapter._ws_client is None
+    assert adapter._ws_thread is None
+    assert adapter._ws_loop is None
+    assert adapter._ws_ready.is_set() is False
+    assert adapter._ws_start_error is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_disconnect_raises_when_thread_does_not_stop(adapter: FeishuAdapter) -> None:
+    """disconnect should fail loudly when websocket thread cannot be stopped."""
+
+    class _FakeLoop:
+        @staticmethod
+        def is_running() -> bool:
+            return False
+
+    class _StuckThread:
+        def __init__(self) -> None:
+            self.joined = False
+
+        @staticmethod
+        def is_alive() -> bool:
+            return True
+
+        def join(self, timeout=None) -> None:
+            self.joined = True
+
+    stuck_thread = _StuckThread()
+    adapter._ws_loop = _FakeLoop()
+    adapter._ws_thread = stuck_thread
+
+    with pytest.raises(RuntimeError, match="did not stop"):
+        await adapter.disconnect()
+
+    assert adapter._ws_thread is stuck_thread
+    assert stuck_thread.joined is True
+
+
+# -- Helpers for mocking lark_oapi v2 SDK response objects -----------------
+
+
+class _FakeResponseData:
+    """Mimics the SDK response data object with a message_id attribute."""
+
+    def __init__(self, message_id: str | None = None) -> None:
+        self.message_id = message_id
+
+
+class _FakeResponse:
+    """Mimics CreateMessageResponse / ReplyMessageResponse."""
+
+    def __init__(
+        self,
+        code: int = 0,
+        msg: str = "ok",
+        message_id: str | None = None,
+    ) -> None:
+        self.code = code
+        self.msg = msg
+        self.data = _FakeResponseData(message_id) if message_id else None
+
+    def success(self) -> bool:
+        return self.code == 0
+
+
+class _FakeMessageAPI:
+    """Mimics client.im.v1.message with async a-prefixed methods."""
+
+    def __init__(
+        self,
+        create_response: _FakeResponse | None = None,
+        reply_response: _FakeResponse | None = None,
+        patch_response: _FakeResponse | None = None,
+        update_response: _FakeResponse | None = None,
+        delete_response: _FakeResponse | None = None,
+        *,
+        has_reply: bool = True,
+    ) -> None:
+        self.create_called = False
+        self.reply_called = False
+        self.patch_called = False
+        self.update_called = False
+        self.delete_called = False
+        self.create_request = None
+        self.reply_request = None
+        self.patch_request = None
+        self.update_request = None
+        self.delete_request = None
+        self._create_response = create_response or _FakeResponse(message_id="om_default")
+        self._reply_response = reply_response
+        self._patch_response = patch_response or _FakeResponse()
+        self._update_response = update_response or _FakeResponse()
+        self._delete_response = delete_response or _FakeResponse()
+        self._has_reply = has_reply
+
+    async def acreate(self, request, option=None):
+        self.create_called = True
+        self.create_request = request
+        return self._create_response
+
+    async def areply(self, request, option=None):
+        if not self._has_reply:
+            raise AttributeError("no reply")
+        self.reply_called = True
+        self.reply_request = request
+        return self._reply_response or _FakeResponse(message_id="om_reply_default")
+
+    async def apatch(self, request, option=None):
+        self.patch_called = True
+        self.patch_request = request
+        return self._patch_response
+
+    async def aupdate(self, request, option=None):
+        self.update_called = True
+        self.update_request = request
+        return self._update_response
+
+    async def adelete(self, request, option=None):
+        self.delete_called = True
+        self.delete_request = request
+        return self._delete_response
+
+
+def _build_fake_client(message_api: _FakeMessageAPI) -> SimpleNamespace:
+    """Build a fake client matching client.im.v1.message structure."""
+    return SimpleNamespace(im=SimpleNamespace(v1=SimpleNamespace(message=message_api)))
+
+
+# -- send_message tests using v2 SDK builder pattern -----------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_accepts_object_response_payload(adapter: FeishuAdapter) -> None:
+    """send_message should parse SDK response objects (response.data.message_id)."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_123"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_text("oc_chat_1", "hello")
+
+    assert message_id == "om_123"
+    assert msg_api.create_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_raises_on_non_zero_response_code(adapter: FeishuAdapter) -> None:
+    """send_message should raise if Feishu API returns an error code."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(code=99991663, msg="forbidden"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    with pytest.raises(RuntimeError, match="Feishu send failed"):
+        await adapter.send_text("oc_chat_1", "hello")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_uses_reply_api_when_reply_to_provided(adapter: FeishuAdapter) -> None:
+    """send_message should use reply API when reply_to is available."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(message_id="om_reply_1"),
+        create_response=_FakeResponse(message_id="om_create_1"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
+
+    assert message_id == "om_reply_1"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_falls_back_to_create_when_reply_api_missing(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_message should fallback to create when reply raises an error."""
+    msg_api = _FakeMessageAPI(
+        create_response=_FakeResponse(message_id="om_create_2"),
+        has_reply=False,
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
+
+    assert message_id == "om_create_2"
+    assert msg_api.create_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_falls_back_to_create_when_reply_returns_error(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_message should fallback to create when reply API returns non-zero code."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(code=999, msg="reply failed"),
+        create_response=_FakeResponse(message_id="om_create_fallback"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
+
+    assert message_id == "om_create_fallback"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is True
+
+
+# -- patch_card tests -------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_patch_card_success(adapter: FeishuAdapter) -> None:
+    """patch_card should call patch API and return True on success."""
+    msg_api = _FakeMessageAPI(patch_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.patch_card("om_card_1", '{"elements": []}')
+
+    assert result is True
+    assert msg_api.patch_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_patch_card_returns_false_on_failure(adapter: FeishuAdapter) -> None:
+    """patch_card should return False when Feishu API returns error."""
+    msg_api = _FakeMessageAPI(patch_response=_FakeResponse(code=999, msg="patch failed"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.patch_card("om_card_1", '{"elements": []}')
+
+    assert result is False
+    assert msg_api.patch_called is True
+
+
+# -- edit_message tests (v2 SDK) -------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_edit_message_success(adapter: FeishuAdapter) -> None:
+    """edit_message should use UpdateMessageRequest via v2 SDK."""
+    msg_api = _FakeMessageAPI(update_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    from src.domain.model.channels.message import MessageContent, MessageType
+
+    result = await adapter.edit_message(
+        "om_1", MessageContent(type=MessageType.TEXT, text="updated")
+    )
+
+    assert result is True
+    assert msg_api.update_called is True
+
+
+# -- delete_message tests (v2 SDK) -----------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_message_success(adapter: FeishuAdapter) -> None:
+    """delete_message should use DeleteMessageRequest via v2 SDK."""
+    msg_api = _FakeMessageAPI(delete_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.delete_message("om_1")
+
+    assert result is True
+    assert msg_api.delete_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_message_returns_false_on_failure(adapter: FeishuAdapter) -> None:
+    """delete_message should return False when API returns error."""
+    msg_api = _FakeMessageAPI(delete_response=_FakeResponse(code=999, msg="not found"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.delete_message("om_1")
+
+    assert result is False
+
+
+# -- send_streaming_card tests ---------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_streaming_card_returns_message_id(adapter: FeishuAdapter) -> None:
+    """send_streaming_card should send a card and return its message_id."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_stream_1"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    msg_id = await adapter.send_streaming_card("oc_chat_1")
+
+    assert msg_id == "om_stream_1"
+    assert msg_api.create_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_streaming_card_returns_none_on_error(adapter: FeishuAdapter) -> None:
+    """send_streaming_card should return None when send fails."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(code=999, msg="fail"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    msg_id = await adapter.send_streaming_card("oc_chat_1")
+
+    assert msg_id is None
+
+
+# -- _build_streaming_card tests -------------------------------------------
+
+
+@pytest.mark.unit
+def test_build_streaming_card_without_loading(adapter: FeishuAdapter) -> None:
+    """_build_streaming_card should produce a card JSON without loading indicator."""
+    import json
+
+    card_json = adapter._build_streaming_card("Hello world")
+    card = json.loads(card_json)
+
+    assert card["schema"] == "2.0"
+    assert card["body"]["elements"][0]["content"] == "Hello world"
+
+
+@pytest.mark.unit
+def test_build_streaming_card_with_loading(adapter: FeishuAdapter) -> None:
+    """_build_streaming_card should append loading indicator when loading=True."""
+    import json
+
+    card_json = adapter._build_streaming_card("Partial text", loading=True)
+    card = json.loads(card_json)
+
+    assert card["schema"] == "2.0"
+    assert "Generating..." in card["body"]["elements"][0]["content"]
+    assert "Partial text" in card["body"]["elements"][0]["content"]
+
+
+# ------------------------------------------------------------------
+# Card action handler tests
+# ------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_extract_selected_label_answer(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should extract 'answer' field."""
+    assert adapter._extract_selected_label({"answer": "PostgreSQL"}) == "PostgreSQL"
+
+
+@pytest.mark.unit
+def test_extract_selected_label_action(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should extract 'action' field."""
+    assert adapter._extract_selected_label({"action": "allow"}) == "Allow"
+
+
+@pytest.mark.unit
+def test_extract_selected_label_empty(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should return empty for empty dict."""
+    assert adapter._extract_selected_label({}) == ""
+
+
+@pytest.mark.unit
+def test_build_responded_card(adapter: FeishuAdapter) -> None:
+    """_build_responded_card should return green card with selected label."""
+    card = adapter._build_responded_card("decision", "Option A")
+    assert card is not None
+    assert card["schema"] == "2.0"
+    assert card["header"]["template"] == "green"
+    assert card["header"]["title"]["content"] == "Decision Made"
+    assert "**Selected**: Option A" in card["body"]["elements"][0]["content"]
+    assert card["config"] == {"wide_screen_mode": True}
+
+
+@pytest.mark.unit
+def test_on_card_action_with_typed_event(adapter: FeishuAdapter) -> None:
+    """_on_card_action should parse typed P2CardActionTriggerData objects."""
+    # Build typed SDK objects
+    operator = SimpleNamespace(
+        open_id="ou_user123",
+        user_id="uid_123",
+        union_id="un_123",
+        tenant_key="tk_123",
+    )
+    action = SimpleNamespace(
+        value={
+            "hitl_request_id": "req-001",
+            "hitl_type": "decision",
+            "response_data": '{"answer": "Option B"}',
+        },
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    context = SimpleNamespace(
+        open_message_id="om_msg123",
+        open_chat_id="oc_chat456",
+        url=None,
+        preview_token=None,
+    )
+    event_data = SimpleNamespace(
+        operator=operator,
+        action=action,
+        token="card-token",
+        context=context,
+        host="im_message",
+        delivery_type=None,
+    )
+    event = SimpleNamespace(event=event_data)
+
+    # Patch the HITL responder to prevent actual Redis calls
+    with patch(
+        "src.application.services.channels.hitl_responder.HITLChannelResponder.respond",
+        new_callable=AsyncMock,
+        return_value=HITLChannelResponseOutcome.QUEUED,
+    ):
+        response = adapter._on_card_action(event)
+
+    # Should return response with toast and updated card
+    assert response is not None
+    assert response.toast is not None
+    assert response.toast.type == "info"
+    assert response.card is not None
+    assert response.card.type == "raw"
+    assert response.card.data["header"]["title"]["content"] == "Decision Pending"
+
+
+@pytest.mark.unit
+def test_on_card_action_marshals_hitl_response_to_app_loop(adapter: FeishuAdapter) -> None:
+    """Card actions should schedule DB work onto the main app loop, not the websocket loop."""
+
+    class _FakeLoop:
+        @staticmethod
+        def is_running() -> bool:
+            return True
+
+    class _FakeFuture:
+        def add_done_callback(self, callback) -> None:
+            callback(self)
+
+        @staticmethod
+        def result(timeout: float | None = None) -> HITLChannelResponseOutcome:
+            return HITLChannelResponseOutcome.QUEUED
+
+    scheduled_loops = []
+
+    def _run_coroutine_threadsafe(coro, loop):
+        scheduled_loops.append(loop)
+        coro.close()
+        return _FakeFuture()
+
+    operator = SimpleNamespace(open_id="ou_user123", user_id="uid_123", union_id="un_123")
+    action = SimpleNamespace(
+        value={
+            "hitl_request_id": "req-001",
+            "hitl_type": "decision",
+            "response_data": '{"answer": "Option B"}',
+        },
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    context = SimpleNamespace(open_message_id="om_msg123", open_chat_id="oc_chat456")
+    event = SimpleNamespace(
+        event=SimpleNamespace(
+            operator=operator,
+            action=action,
+            token="card-token",
+            context=context,
+            host="im_message",
+            delivery_type=None,
+        )
+    )
+
+    adapter._app_loop = _FakeLoop()
+
+    with (
+        patch(
+            "memstack_plugins_feishu.adapter.asyncio.get_running_loop",
+            return_value=_FakeLoop(),
+        ),
+        patch(
+            "memstack_plugins_feishu.adapter.asyncio.run_coroutine_threadsafe",
+            side_effect=_run_coroutine_threadsafe,
+        ),
+        patch(
+            "src.application.services.channels.hitl_responder.HITLChannelResponder.respond",
+            new_callable=AsyncMock,
+            return_value=HITLChannelResponseOutcome.QUEUED,
+        ),
+    ):
+        adapter._on_card_action(event)
+
+    assert scheduled_loops == [adapter._app_loop]
+
+
+@pytest.mark.unit
+def test_on_card_action_does_not_log_secret_values(adapter: FeishuAdapter) -> None:
+    """Card action logs should include variable names, not submitted secret values."""
+    operator = SimpleNamespace(open_id="ou_user123", user_id="uid_123", union_id="un_123")
+    action = SimpleNamespace(
+        value={
+            "hitl_request_id": "req-001",
+            "hitl_type": "env_var",
+            "response_data": '{"values": {"OPENAI_API_KEY": "super-secret"}}',
+        },
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    context = SimpleNamespace(open_message_id="om_msg123", open_chat_id="oc_chat456")
+    event = SimpleNamespace(
+        event=SimpleNamespace(
+            operator=operator,
+            action=action,
+            token="card-token",
+            context=context,
+            host="im_message",
+            delivery_type=None,
+        )
+    )
+
+    with (
+        patch("memstack_plugins_feishu.adapter.logger.info") as info_mock,
+        patch(
+            "src.application.services.channels.hitl_responder.HITLChannelResponder.respond",
+            new_callable=AsyncMock,
+            return_value=HITLChannelResponseOutcome.QUEUED,
+        ),
+    ):
+        adapter._on_card_action(event)
+
+    logged_output = " ".join(str(call) for call in info_mock.call_args_list)
+    assert "super-secret" not in logged_output
+    assert "OPENAI_API_KEY" in logged_output
+
+
+@pytest.mark.unit
+def test_on_card_action_returns_neutral_state_when_running_on_active_loop(
+    adapter: FeishuAdapter,
+) -> None:
+    operator = SimpleNamespace(open_id="ou_user123", user_id="uid_123", union_id="un_123")
+    action = SimpleNamespace(
+        value={
+            "hitl_request_id": "req-001",
+            "hitl_type": "decision",
+            "response_data": '{"answer": "Option B"}',
+        },
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    context = SimpleNamespace(open_message_id="om_msg123", open_chat_id="oc_chat456")
+    event = SimpleNamespace(
+        event=SimpleNamespace(
+            operator=operator,
+            action=action,
+            token="card-token",
+            context=context,
+            host="im_message",
+            delivery_type=None,
+        )
+    )
+
+    class _FakeLoop:
+        @staticmethod
+        def is_running() -> bool:
+            return True
+
+        @staticmethod
+        def create_task(coro):
+            coro.close()
+            task = MagicMock()
+            task.add_done_callback = MagicMock()
+            return task
+
+    adapter._app_loop = _FakeLoop()
+
+    with (
+        patch(
+            "memstack_plugins_feishu.adapter.asyncio.get_running_loop",
+            return_value=adapter._app_loop,
+        ),
+        patch(
+            "src.application.services.channels.hitl_responder.HITLChannelResponder.respond",
+            new_callable=AsyncMock,
+            return_value=HITLChannelResponseOutcome.QUEUED,
+        ),
+    ):
+        response = adapter._on_card_action(event)
+
+    assert response.toast is not None
+    assert response.toast.type == "info"
+    assert response.card is None
+
+
+@pytest.mark.unit
+def test_on_card_action_without_hitl_request_id(adapter: FeishuAdapter) -> None:
+    """_on_card_action should ignore events without hitl_request_id."""
+    action = SimpleNamespace(
+        value={"key": "some_other_value"},
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    event_data = SimpleNamespace(
+        operator=SimpleNamespace(open_id="ou_x", user_id=None, union_id=None, tenant_key=None),
+        action=action,
+        token="t",
+        context=None,
+        host="im_message",
+        delivery_type=None,
+    )
+    event = SimpleNamespace(event=event_data)
+
+    response = adapter._on_card_action(event)
+    assert response is not None
+    # Should return empty response (no toast, no card update)
+    assert response.toast is None
+    assert response.card is None
+
+
+@pytest.mark.unit
+def test_on_card_action_with_none_event(adapter: FeishuAdapter) -> None:
+    """_on_card_action should handle None event data gracefully."""
+    event = SimpleNamespace(event=None)
+    response = adapter._on_card_action(event)
+    assert response is not None
+
+
+# ------------------------------------------------------------------
+# CardKit API method tests
+# ------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_create_card_entity_success(adapter: FeishuAdapter) -> None:
+    """create_card_entity should return card_id on success."""
+    mock_response = SimpleNamespace(
+        success=lambda: True,
+        data=SimpleNamespace(card_id="card_123456"),
+        code=0,
+        msg="success",
+    )
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
+        adapter._connected = True
+
+        card_id = await adapter.create_card_entity(
+            {
+                "schema": "2.0",
+                "header": {"title": {"tag": "plain_text", "content": "Test"}},
+                "body": {"elements": []},
+            }
+        )
+        assert card_id == "card_123456"
+        cardkit_mock.card.acreate.assert_called_once()
+
+
+@pytest.mark.unit
+async def test_create_card_entity_failure(adapter: FeishuAdapter) -> None:
+    """create_card_entity should return None on API failure."""
+    mock_response = SimpleNamespace(success=lambda: False, code=400, msg="bad request", data=None)
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
+        result = await adapter.create_card_entity({"schema": "2.0"})
+        assert result is None
+
+
+@pytest.mark.unit
+async def test_add_card_elements_success(adapter: FeishuAdapter) -> None:
+    """add_card_elements should return True on success."""
+    mock_response = SimpleNamespace(success=lambda: True, code=0, msg="success")
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card_element.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
+        result = await adapter.add_card_elements(
+            "card_123",
+            [
+                {
+                    "tag": "button",
+                    "element_id": "btn1",
+                    "text": {"tag": "plain_text", "content": "Click"},
+                }
+            ],
+            position="append",
+            sequence=1,
+        )
+        assert result is True
+
+
+@pytest.mark.unit
+async def test_add_card_elements_with_target(adapter: FeishuAdapter) -> None:
+    """add_card_elements should pass target_element_id when specified."""
+    mock_response = SimpleNamespace(success=lambda: True, code=0, msg="success")
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card_element.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
+        result = await adapter.add_card_elements(
+            "card_123",
+            [{"tag": "button", "element_id": "btn2"}],
+            position="insert_after",
+            target_element_id="question_md",
+            sequence=2,
+        )
+        assert result is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_uses_card_msg_type_for_reply(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should send card_id via msg_type=card on reply path."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(message_id="om_reply_card"),
+        create_response=_FakeResponse(message_id="om_create_card"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_001", reply_to="om_parent")
+
+    assert message_id == "om_reply_card"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is False
+    assert msg_api.reply_request.request_body.msg_type == "card"
+    assert msg_api.reply_request.request_body.content == json.dumps({"card_id": "ck_001"})
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_uses_card_msg_type_for_create(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should send card_id via msg_type=card on create path."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_create_card"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_002")
+
+    assert message_id == "om_create_card"
+    assert msg_api.create_called is True
+    assert msg_api.create_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.content == json.dumps({"card_id": "ck_002"})
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_reply_fallback_still_uses_card_msg_type(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should fallback to create with msg_type=card."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(code=999, msg="reply failed"),
+        create_response=_FakeResponse(message_id="om_create_fallback"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_003", reply_to="om_parent")
+
+    assert message_id == "om_create_fallback"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is True
+    assert msg_api.reply_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.content == json.dumps({"card_id": "ck_003"})
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_success(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should orchestrate create+add+send."""
+    adapter._connected = True
+
+    with (
+        patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_001"),
+        patch.object(adapter, "add_card_elements", new_callable=AsyncMock, return_value=True),
+        patch.object(
+            adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_001"
+        ),
+    ):
+        msg_id = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1",
+            "decision_asked",
+            "req-001",
+            {"question": "Which approach?", "options": ["A", "B"]},
+        )
+        assert msg_id == "msg_001"
+        adapter.create_card_entity.assert_called_once()
+        adapter.add_card_elements.assert_called_once()
+        adapter.send_card_entity_message.assert_called_once_with("oc_chat1", "ck_001", None)
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_env_var_with_form(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should send card with form for env_var."""
+    adapter._connected = True
+
+    with (
+        patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_002"),
+        patch.object(adapter, "add_card_elements", new_callable=AsyncMock) as mock_add,
+        patch.object(
+            adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_002"
+        ),
+    ):
+        msg_id = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1",
+            "env_var",
+            "req-002",
+            {"tool_name": "gh", "fields": [{"name": "TOKEN"}]},
+        )
+        assert msg_id == "msg_002"
+        # env_var now adds a form element
+        mock_add.assert_called_once()
+        call_args = mock_add.call_args
+        assert call_args[0][0] == "ck_002"
+        elements = call_args[0][1]
+        assert len(elements) == 1
+        assert elements[0]["tag"] == "form"
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_entity_fails(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should return None if entity creation fails."""
+    adapter._connected = True
+
+    with patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value=None):
+        result = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1",
+            "clarification",
+            "req-003",
+            {"question": "What?", "options": ["A"]},
+        )
+        assert result is None
+
+
+# ------------------------------------------------------------------
+# CardKit streaming adapter methods
+# ------------------------------------------------------------------
+
+
+def _mock_cardkit_response(success: bool = True, code: int = 0, msg: str = "success"):
+    """Build a mock response for CardKit SDK calls."""
+    resp = SimpleNamespace()
+    resp.success = lambda: success
+    resp.code = code
+    resp.msg = msg
+    resp.data = SimpleNamespace()
+    return resp
+
+
+@pytest.mark.unit
+async def test_update_card_settings_success(adapter: FeishuAdapter) -> None:
+    """update_card_settings should call asettings and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card = SimpleNamespace()
+    mock_client.cardkit.v1.card.asettings = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.update_card_settings(
+            "card_001", {"config": {"streaming_mode": True}}, sequence=1
+        )
+        assert result is True
+        mock_client.cardkit.v1.card.asettings.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_update_card_settings_failure(adapter: FeishuAdapter) -> None:
+    """update_card_settings returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False, code=400, msg="bad")
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card = SimpleNamespace()
+    mock_client.cardkit.v1.card.asettings = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.update_card_settings("card_001", {}, sequence=1)
+        assert result is False
+
+
+@pytest.mark.unit
+async def test_stream_text_content_success(adapter: FeishuAdapter) -> None:
+    """stream_text_content should call acontent and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.acontent = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.stream_text_content("card_001", "content", "Hello world", sequence=2)
+        assert result is True
+        mock_client.cardkit.v1.card_element.acontent.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_stream_text_content_failure(adapter: FeishuAdapter) -> None:
+    """stream_text_content returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False, code=300309, msg="closed")
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.acontent = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.stream_text_content("card_001", "content", "Hi", sequence=1)
+        assert result is False
+
+
+@pytest.mark.unit
+async def test_delete_card_element_success(adapter: FeishuAdapter) -> None:
+    """delete_card_element should call adelete and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.adelete = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.delete_card_element("card_001", "btn_1", sequence=3)
+        assert result is True
+
+
+@pytest.mark.unit
+async def test_delete_card_element_failure(adapter: FeishuAdapter) -> None:
+    """delete_card_element returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.adelete = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.delete_card_element("card_001", "btn_1", sequence=3)
+        assert result is False

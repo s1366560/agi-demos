@@ -1,0 +1,19 @@
+storage: /verdaccio/storage
+auth:
+  htpasswd:
+    file: /verdaccio/conf/publishers
+    max_users: -1
+web:
+  enable: false
+uplinks: {}
+packages:
+  '@memstack/*':
+    access: $all
+    publish: publisher
+  '**':
+    access: $authenticated
+log:
+  type: stdout
+  format: pretty
+  level: warn
+listen: 0.0.0.0:4873

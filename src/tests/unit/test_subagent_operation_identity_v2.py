@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_run import SubAgentRun
 from src.infrastructure.adapters.primary.web.routers.agent.trace_router import run_to_response
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.subagent.context_bridge import SubAgentContext
 from src.infrastructure.agent.subagent.process import SubAgentProcess
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import _validate_event_scope_v2

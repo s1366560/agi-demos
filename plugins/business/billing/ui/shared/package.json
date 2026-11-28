@@ -1,0 +1,23 @@
+{
+  "name": "@memstack/billing-pages",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "i18next": "25.7.3",
+    "react-i18next": "16.5.1",
+    "lucide-react": "0.562.0",
+    "antd": "6.1.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.2",
+    "postcss": "8.5.6",
+    "@tailwindcss/postcss": "4.1.18",
+    "tailwindcss": "4.1.18"
+  }
+}

@@ -20,7 +20,7 @@ Completed a major refactoring of the sandbox lifecycle management system to supp
 - **Database Model** (`src/infrastructure/adapters/secondary/persistence/models.py`)
 
 #### 3. Service Layer (New)
-- **ProjectSandboxLifecycleService** (`src/application/services/project_sandbox_lifecycle_service.py`)
+- **ProjectSandboxLifecycleService** (`plugins/business/environments/backend/sandbox/project_sandbox_lifecycle_service.py`)
   - `get_or_create_sandbox()` - Lazy initialization
   - `ensure_sandbox_running()` - Guarantee running state
   - `execute_tool()` - Project-scoped tool execution
@@ -159,7 +159,7 @@ uv run pytest src/tests/unit/services/test_project_sandbox_lifecycle_service.py 
 1. `src/domain/model/sandbox/project_sandbox.py`
 2. `src/domain/ports/repositories/project_sandbox_repository.py`
 3. `src/infrastructure/adapters/secondary/persistence/sql_project_sandbox_repository.py`
-4. `src/application/services/project_sandbox_lifecycle_service.py`
+4. `plugins/business/environments/backend/sandbox/project_sandbox_lifecycle_service.py`
 5. `src/infrastructure/adapters/primary/web/routers/project_sandbox.py`
 6. `src/tests/unit/domain/model/test_project_sandbox.py`
 7. `src/tests/unit/repositories/test_project_sandbox_repository.py`

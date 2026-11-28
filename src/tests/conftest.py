@@ -142,6 +142,11 @@ def _compile_jsonb_for_sqlite(_type, _compiler, **_kw) -> str:
 @pytest.fixture
 async def test_engine():
     """Create a test database engine."""
+    # Register the run-pinned package and release tables before creating the test schema.
+    from src.infrastructure.adapters.secondary.persistence import (
+        project_plugin_installation,  # noqa: F401
+    )
+
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         echo=False,

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { Badge, Button, Empty, Popconfirm, Space, Table, Tag, Typography } from 'antd';
 import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 
+import { humanizeChannelType } from '@/utils/channelConfigSanitizers';
+
 import type { ChannelConfig, ChannelPluginCatalogItem } from '@/types/channel';
 import type { PaginationProps, TableColumnsType } from 'antd';
 
@@ -28,13 +30,6 @@ interface ChannelConfigSectionProps {
   readonly onTest: (configId: string) => Promise<void>;
   readonly onDelete: (configId: string) => Promise<void>;
 }
-
-const humanizeChannelType = (channelType: string): string =>
-  channelType
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
 
 export const ChannelConfigSection: React.FC<ChannelConfigSectionProps> = ({
   selectedProjectId,

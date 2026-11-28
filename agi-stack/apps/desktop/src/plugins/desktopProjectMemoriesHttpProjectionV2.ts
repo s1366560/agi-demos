@@ -9,16 +9,16 @@ import type {
   CloudMemoryCommand,
   CloudMemoryOptions,
   CloudMemoryResponse,
-} from '../features/project-knowledge/cloudMemoryClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import { createDesktopCloudMemoryHttpV2 } from './desktopCloudMemoryHttpV2';
-import { parseMemoryV2 } from '../features/project-knowledge/cloudMemoryProjection';
+import { parseMemoryV2 } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryProjection';
 import {
   PROJECT_MEMORIES_DEGRADED_REASON,
   PROJECT_MEMORIES_LOCAL_REASON,
   type ProjectMemoriesSnapshot,
   type ProjectMemory,
   type ProjectMemoriesPageOptions,
-} from '../features/project-knowledge/projectMemoriesClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
 import {
   isRecord,
   observeProjectKnowledgeScope,
@@ -28,7 +28,7 @@ import {
   requireNonnegativeInteger,
   requireProjectKnowledgeScope,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { DesktopApiError } from '../api/client';
 import { parseCloudMemoryCapabilities } from '../features/project-knowledge/cloudMemoryCapabilities';

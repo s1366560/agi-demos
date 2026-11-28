@@ -7,7 +7,7 @@
 
 import axios, { type AxiosRequestConfig } from 'axios';
 
-import i18n from '@/i18n/config';
+import i18n from 'i18next';
 import { getAuthToken, clearAuthState } from '@/utils/tokenResolver';
 
 import { parseAxiosError } from './ApiError';

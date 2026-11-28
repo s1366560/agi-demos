@@ -21,6 +21,7 @@ from src.domain.model.auth.workspace_context import (
 from src.domain.ports.repositories.workspace_context_repository import (
     WorkspaceContextRepository,
 )
+from src.host.identity.workspace_selection import get_or_initialize
 from src.infrastructure.adapters.secondary.persistence.sql_desktop_workspace_context_repository import (
     SqlDesktopWorkspaceContextRepository,
 )
@@ -90,19 +91,7 @@ class WorkspaceContextApplicationServiceV2:
         user_id: str,
         observed_at: datetime,
     ) -> WorkspaceContextAccess:
-        accessible = await self.persistence.get_accessible(user_id)
-        if accessible is not None:
-            return accessible
-
-        candidates = await self.persistence.list_candidates(user_id)
-        if not candidates:
-            raise WorkspaceContextError(WorkspaceContextErrorCode.UNAVAILABLE)
-        selected = candidates[0] if len(candidates) == 1 else await self._judge(user_id, candidates)
-        return await self.persistence.initialize(
-            user_id,
-            candidate=selected,
-            observed_at=observed_at,
-        )
+        return await get_or_initialize(self.persistence, user_id, observed_at, self._judge)
 
     async def switch(
         self,

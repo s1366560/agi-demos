@@ -256,7 +256,9 @@ async def test_project_terminal_websocket_disconnect_log_omits_session_id(
     assert "session-secret" not in caplog.text
 
 
+@pytest.mark.parametrize("ephemeral", [True, False])
 async def test_project_terminal_websocket_error_log_omits_exception_text(
+    ephemeral: bool,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -267,7 +269,9 @@ async def test_project_terminal_websocket_error_log_omits_exception_text(
         rows=24,
         is_active=False,
     )
-    proxy = SimpleNamespace(create_session=AsyncMock(return_value=session))
+    proxy = SimpleNamespace(
+        create_session=AsyncMock(return_value=session), close_session=AsyncMock()
+    )
     websocket = _FakeWebSocket()
     service = SimpleNamespace(
         get_project_sandbox=AsyncMock(
@@ -302,11 +306,16 @@ async def test_project_terminal_websocket_error_log_omits_exception_text(
         websocket=cast("project_sandbox.WebSocket", websocket),
         project_id="project-1",
         session_id=None,
+        ephemeral=ephemeral,
         current_user=cast("project_sandbox.User", SimpleNamespace(id="user-1")),
         db=cast("project_sandbox.AsyncSession", SimpleNamespace()),
         service=cast("project_sandbox.ProjectSandboxLifecycleService", service),
     )
 
+    if ephemeral:
+        proxy.close_session.assert_awaited_once_with(session.session_id)
+    else:
+        proxy.close_session.assert_not_awaited()
     assert websocket.sent_json == [
         {
             "type": "connected",

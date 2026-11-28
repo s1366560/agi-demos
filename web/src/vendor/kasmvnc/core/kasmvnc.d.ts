@@ -77,6 +77,7 @@ declare module '@/vendor/kasmvnc/core/rfb.js' {
     clipViewport: boolean;
     background: string;
     qualityLevel: number;
+    enableWebRTC: boolean;
     mouseButtonMapper: MouseButtonMapper;
 
     // Internal state (accessed for cleanup)

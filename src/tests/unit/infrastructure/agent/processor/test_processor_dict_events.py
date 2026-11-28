@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentErrorEvent, AgentObserveEvent
-from src.infrastructure.agent.processor import (
+from plugins.business.agent.engine.processor import (
     GoalCheckResult,
     ProcessorConfig,
     SessionProcessor,
 )
+from src.domain.events.agent_events import AgentErrorEvent, AgentObserveEvent
 from src.infrastructure.plugins.v2.agent_loop import (
     AgentLoopRunContextV2,
     BuiltinAgentLoopResolverV2,

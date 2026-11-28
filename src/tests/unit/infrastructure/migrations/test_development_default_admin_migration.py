@@ -262,11 +262,8 @@ class EnvironmentOptionsTests(unittest.TestCase):
         )
         scope = {
             "context": context,
-            "settings": SimpleNamespace(
-                environment="development",
-                postgres_url="postgresql+asyncpg://localhost/fixture",
-            ),
-            "make_url": sa.engine.make_url,
+            "settings": SimpleNamespace(environment="development"),
+            "database_url": sa.engine.make_url("postgresql+asyncpg://localhost/fixture"),
         }
         # Execute only the parsed local helper; importing env.py would start migrations.
         exec(  # noqa: S102

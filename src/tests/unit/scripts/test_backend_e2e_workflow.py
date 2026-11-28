@@ -300,7 +300,9 @@ def test_full_sandbox_runtime_has_scheduled_release_gate() -> None:
     assert job["timeout-minutes"] >= 60
     steps = job["steps"]
     build_step = next(step for step in steps if step.get("uses") == "docker/build-push-action@v6")
-    assert build_step["with"]["file"] == "sandbox-mcp-server/Dockerfile"
+    sandbox = "plugins/business/environments/sandbox-mcp-server"
+    assert build_step["with"]["context"] == sandbox
+    assert build_step["with"]["file"] == f"{sandbox}/Dockerfile"
     assert build_step["with"]["load"] is True
     commands = "\n".join(str(step.get("run", "")) for step in steps)
     assert "playwright install --with-deps chromium" in commands

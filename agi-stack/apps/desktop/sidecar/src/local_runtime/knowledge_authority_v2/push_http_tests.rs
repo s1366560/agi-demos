@@ -196,6 +196,7 @@ pub(super) async fn push(state: Arc<LocalRuntimeState>, body: Value) -> (StatusC
     )
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn trusted_http_replays_after_lost_response_without_overwriting_later_local_edit() {
     let directory = TestDirectory::new();
@@ -279,6 +280,7 @@ async fn trusted_http_replays_after_lost_response_without_overwriting_later_loca
     task.abort();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn cloud_conflict_snapshot_is_fetched_and_other_objects_can_continue() {
     let directory = TestDirectory::new();

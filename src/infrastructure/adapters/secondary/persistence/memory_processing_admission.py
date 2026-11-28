@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.memory.processing import MemoryProcessingSource
+from src.infrastructure.adapters.secondary.persistence.graph_discovery_session import bind_discovery
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel as Enrollment,
 )
@@ -39,7 +40,10 @@ async def legacy_graph_write(
             project_id=project_id, tenant_id=tenant_id, memory_id=memory_id
         ),
     ):
-        yield session
+        owner = tenant_id or await canonical_graph_tenant(session, project_id)
+        with bind_discovery(session, project=project_id, tenant=owner) as discovery:
+            yield session
+    await discovery.persist()
 
 
 async def graph_write_lease_kind(
@@ -100,7 +104,9 @@ async def derived_graph_write(
             current = await session.scalar(select(Memory.project_id).where(Memory.id == memory_id))
             if current is not None and current != project_id:
                 raise KnowledgeSyncError("knowledge_sync_write_conflict")
-        yield session
+        with bind_discovery(session, project=project_id, tenant=project.tenant_id) as discovery:
+            yield session
+    await discovery.persist()
 
 
 async def require_processing_source(

@@ -97,7 +97,11 @@ pub fn signed_fixture_with_bytes(
         &raw,
         &reference,
         std::slice::from_ref(&key),
-        &BTreeSet::from(["tools.execute".into()]),
+        &manifest
+            .manifests
+            .iter()
+            .flat_map(|item| item.permissions.iter().cloned())
+            .collect::<BTreeSet<_>>(),
     )
     .unwrap();
     let mut snapshot = json!({"schema_version":2,"profile_id":"signed-local-wasm", "generation":1,

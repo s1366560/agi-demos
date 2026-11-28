@@ -491,7 +491,7 @@ test('Electron exposes named safe bridge methods without a renderer URL paramete
   assert.match(preloadSource, /openWebControlPlane/u);
   assert.match(preloadSource, /destination,\s*tenantId,\s*projectId/u);
   assert.doesNotMatch(preloadSource, /openWebControlPlane[\s\S]{0,240}\burl\b/u);
-  assert.match(preloadSource, /files:\s*fileBridge/u);
+  assert.match(preloadSource, /files:\s*fullDesktop \? fileBridge : Object\.freeze\(\{ open: openNativeFile \}\)/u);
   assert.match(preloadSource, /Object\.freeze\(\{[\s\S]*save:\s*saveNativeFile/u);
   assert.match(preloadSource, /Object\.freeze\(\{[\s\S]*open:\s*openNativeFile/u);
 

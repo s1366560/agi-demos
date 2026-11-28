@@ -41,9 +41,7 @@ class TestTopLevel:
         assert res.exit_code == 0
         assert "memstack" in res.output.lower()
 
-    def test_missing_api_key_exits_2(
-        self, runner: CliRunner, fake_request: FakeRequest
-    ) -> None:
+    def test_missing_api_key_exits_2(self, runner: CliRunner, fake_request: FakeRequest) -> None:
         res = runner.invoke(cli, ["whoami"])
         assert res.exit_code == 2
 
@@ -90,9 +88,7 @@ class TestProjects:
         self, runner: CliRunner, fake_request: FakeRequest
     ) -> None:
         fake_request.responses[("GET", "/auth/me")] = {"tenant_id": "t99"}
-        fake_request.responses[("GET", "/projects/")] = {
-            "items": [{"id": "p1", "name": "Alpha"}]
-        }
+        fake_request.responses[("GET", "/projects/")] = {"items": [{"id": "p1", "name": "Alpha"}]}
         res = runner.invoke(cli, ["--api-key", "k", "projects"])
         assert res.exit_code == 0, res.stderr
         assert "p1" in res.output
@@ -103,18 +99,14 @@ class TestProjects:
 
     def test_tenant_override(self, runner: CliRunner, fake_request: FakeRequest) -> None:
         fake_request.responses[("GET", "/projects/")] = []
-        res = runner.invoke(
-            cli, ["--api-key", "k", "projects", "--tenant", "t42"]
-        )
+        res = runner.invoke(cli, ["--api-key", "k", "projects", "--tenant", "t42"])
         assert res.exit_code == 0
         assert len(fake_request.calls) == 1
         assert fake_request.calls[0]["params"] == {"tenant_id": "t42"}
 
     def test_empty_list(self, runner: CliRunner, fake_request: FakeRequest) -> None:
         fake_request.responses[("GET", "/projects/")] = {"items": []}
-        res = runner.invoke(
-            cli, ["--api-key", "k", "projects", "--tenant", "t1"]
-        )
+        res = runner.invoke(cli, ["--api-key", "k", "projects", "--tenant", "t1"])
         assert res.exit_code == 0
         assert "(no projects)" in res.output
 
@@ -124,9 +116,7 @@ class TestConversations:
         fake_request.responses[("GET", "/agent/conversations")] = {
             "items": [{"id": "c1", "title": "hello"}]
         }
-        res = runner.invoke(
-            cli, ["--api-key", "k", "conversations", "--project", "p1"]
-        )
+        res = runner.invoke(cli, ["--api-key", "k", "conversations", "--project", "p1"])
         assert res.exit_code == 0
         assert "c1" in res.output
         assert fake_request.calls[0]["params"]["project_id"] == "p1"
@@ -165,27 +155,53 @@ class TestLogs:
                 {"sequence_number": 2, "event_type": "tool_call", "data": {}},
             ],
         }
-        res = runner.invoke(
-            cli, ["--api-key", "k", "logs", "c1", "--type", "tool_call"]
-        )
+        res = runner.invoke(cli, ["--api-key", "k", "logs", "c1", "--type", "tool_call"])
         assert res.exit_code == 0
         assert "tool_call" in res.output
         assert "assistant_message" not in res.output
 
     def test_empty(self, runner: CliRunner, fake_request: FakeRequest) -> None:
-        fake_request.responses[("GET", "/agent/conversations/c1/events")] = {
-            "events": []
-        }
+        fake_request.responses[("GET", "/agent/conversations/c1/events")] = {"events": []}
         res = runner.invoke(cli, ["--api-key", "k", "logs", "c1"])
         assert res.exit_code == 0
         assert "(no events)" in res.output
 
 
 class TestLogout:
-    def test_removes_file_when_present(
-        self, runner: CliRunner, isolated_home: Path
-    ) -> None:
+    def test_removes_file_when_present(self, runner: CliRunner, isolated_home: Path) -> None:
         save_api_key("k")
         res = runner.invoke(cli, ["logout"])
         assert res.exit_code == 0
         assert "Removed" in res.output
+
+
+def test_signed_project_command_uses_advertised_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    from click.testing import CliRunner
+
+    from memstack_cli.cli import cli
+    from memstack_cli.commands import plugin_cmd
+
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def transport(method: str, path: str, **kwargs: object) -> dict[str, object]:
+        calls.append((method, path, kwargs))
+        if method == "GET":
+            return {
+                "commands": ["quote"],
+                "actual_digest": "sha256:" + "a" * 64,
+                "running_version": "2.0.0",
+            }
+        return {"quota": 42}
+
+    monkeypatch.setattr(plugin_cmd, "request", transport)
+    monkeypatch.setattr(plugin_cmd, "resolve_api_key", lambda _: "unit-test")
+    args = ["plugin", "unknown.billing", "--tenant", "t", "--project", "p"]
+    runner = CliRunner()
+    assert "quote" in runner.invoke(cli, args).output
+    assert runner.invoke(cli, [*args, "unknown"]).exit_code != 0
+    result = runner.invoke(cli, [*args, "quote"])
+    assert result.exit_code == 0 and "42" in result.output
+    assert [item[0] for item in calls] == ["GET", "GET", "GET", "POST"]
+    payload = calls[-1][2]["json"]
+    assert isinstance(payload, dict)
+    assert payload["expected_digest"] == "sha256:" + "a" * 64

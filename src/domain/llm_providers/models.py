@@ -1009,6 +1009,13 @@ class ProviderConfigUpdate(BaseModel):
         return self
 
 
+def model_allowed_by_prefix(model_id: str, allowed: list[str], blocked: list[str]) -> bool:
+    name = model_id.lower()
+    return not any(name.startswith(item.lower()) for item in blocked) and (
+        not allowed or any(name.startswith(item.lower()) for item in allowed)
+    )
+
+
 class ProviderConfig(ProviderConfigBase):
     """Complete provider configuration (as stored in database)"""
 
@@ -1034,19 +1041,7 @@ class ProviderConfig(ProviderConfigBase):
         Returns:
             True if the model is allowed, False otherwise.
         """
-        model_lower = model_id.lower()
-
-        # Blacklist takes precedence
-        if self.blocked_models:
-            for pattern in self.blocked_models:
-                if model_lower.startswith(pattern.lower()):
-                    return False
-
-        # Whitelist check (empty = all allowed)
-        if self.allowed_models:
-            return any(model_lower.startswith(p.lower()) for p in self.allowed_models)
-
-        return True
+        return model_allowed_by_prefix(model_id, self.allowed_models, self.blocked_models)
 
     class Config:
         from_attributes = True

@@ -204,6 +204,7 @@ async def test_two_tenants_projects_real_signed_wasm_restart_and_disappearance( 
                     lifecycle.mutations,
                     FakeArtifactClient(archive),
                     trusted_public_keys=(key,),
+                    allowed_registries=frozenset({"https://registry.memstack.test"}),
                 ).request_install(request=request, actor_id=user.id)
                 assert decision.status == "approved", decision.reason
                 result = await lifecycle.publish(

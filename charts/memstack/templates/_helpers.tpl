@@ -12,7 +12,7 @@ Development may leave the roster empty so the application selects its local Pyth
 {{- define "memstack.pluginV2RequiredDataPlaneIds" -}}
 {{- $environment := lower (trim (toString .Values.config.environment)) -}}
 {{- $roster := trim (toString .Values.config.pluginV2RequiredDataPlaneIds) -}}
-{{- if and (or (eq $environment "production") (eq $environment "prod")) (empty $roster) -}}
+{{- if and (not .Values.api.packageKernel) (or (eq $environment "production") (eq $environment "prod")) (empty $roster) -}}
 {{- fail "production requires config.pluginV2RequiredDataPlaneIds" -}}
 {{- end -}}
 {{- $roster -}}
@@ -184,4 +184,20 @@ bolt
         echo "waiting for {{ .name }} at {{ .host }}:{{ .port }}"
         sleep 2
       done
+{{- end -}}
+
+{{- define "memstack.apiPostgresEnvironment" -}}
+- name: POSTGRES_HOST
+  value: {{ include "memstack.postgresHost" . | quote }}
+- name: POSTGRES_PORT
+  value: {{ .Values.postgres.service.port | quote }}
+- name: POSTGRES_DB
+  value: {{ .Values.postgres.auth.database | quote }}
+- name: POSTGRES_USER
+  value: {{ .Values.postgres.auth.username | quote }}
+- name: POSTGRES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "memstack.postgresPasswordSecretName" . }}
+      key: {{ include "memstack.postgresPasswordSecretKey" . }}
 {{- end -}}

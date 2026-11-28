@@ -25,6 +25,12 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
+from src.infrastructure.adapters.secondary.cache.redis_pool import (
+    close_redis_pool as close_redis_pool,
+    get_redis_client as get_redis_client,
+    get_redis_pool as get_redis_pool,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -110,7 +116,6 @@ __all__ = [  # noqa: RUF022
 ]
 
 # Global state for agent worker
-_redis_pool: redis.ConnectionPool | None = None
 
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
@@ -162,48 +167,6 @@ def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
             "agent worker runtime resolved an invalid sandbox adapter",
         )
     return adapter
-
-
-async def get_redis_pool() -> redis.ConnectionPool:
-    """Get or create the Redis connection pool for agent worker.
-
-    Returns:
-        The Redis connection pool
-    """
-    global _redis_pool
-    if _redis_pool is None:
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        _redis_pool = redis.ConnectionPool.from_url(
-            settings.redis_url,
-            decode_responses=True,
-            max_connections=50,
-        )
-        logger.info("Agent Worker: Redis connection pool created")
-    return _redis_pool
-
-
-async def get_redis_client() -> redis.Redis:
-    """Get a Redis client from the connection pool.
-
-    Returns:
-        A Redis client connected to the pool
-    """
-    pool = await get_redis_pool()
-    return redis.Redis(connection_pool=pool)
-
-
-async def close_redis_pool() -> None:
-    """Close the Redis connection pool.
-
-    Called during Agent Worker shutdown for cleanup.
-    """
-    global _redis_pool
-    if _redis_pool is not None:
-        await _redis_pool.aclose()
-        _redis_pool = None
-        logger.info("Agent Worker: Redis connection pool closed")
 
 
 def clear_state() -> None:
@@ -1151,7 +1114,7 @@ async def _recover_existing_project_sandbox(project_id: str, tenant_id: str) -> 
         return None
 
     try:
-        from src.application.services.project_sandbox_lifecycle_service import (
+        from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
             ProjectSandboxLifecycleService,
         )
         from src.infrastructure.adapters.secondary.persistence.database import (

@@ -11,9 +11,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from plugins.business.automation.workflow.contract import WorkflowEnginePort
 from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.ports.services.graph_store_port import GraphStorePort as GraphServicePort
-from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -28,6 +28,8 @@ from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 i
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.memory_processing_admission import (
+    derived_graph_write,
+    graph_write_lease_kind,
     legacy_graph_write,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -878,6 +880,7 @@ async def delete_memory(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     expected_revision: Annotated[str | None, Header(alias="X-Memory-Expected-Revision")] = None,
     project_id: str | None = None,
+    version: int | None = None,
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     db = memory_application.db
@@ -895,9 +898,12 @@ async def delete_memory(
     if admitted is not None:
         return admitted
     # 1. Get memory to check permissions and project_id
-    result = await db.execute(
-        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
-    )
+    statement = select(Memory).where(Memory.id == memory_id)
+    if project_id:
+        statement = statement.where(Memory.project_id == project_id)
+    if version is not None:
+        statement = statement.with_for_update()
+    result = await db.execute(refresh_select_statement(statement))
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -907,6 +913,9 @@ async def delete_memory(
     if memory.author_id != current_user.id:
         if not await _has_project_admin_access(cast(Memory, memory), current_user, db):
             raise HTTPException(status_code=403, detail=_("Permission denied"))
+
+    if version is not None and version != memory.version:
+        raise HTTPException(409, _("Memory changed. Reload before editing again."))
 
     # 3. Delete from Graphiti/Neo4j using GraphitiAdapter
     # This ensures proper cleanup of orphaned entities and edges
@@ -963,6 +972,23 @@ async def delete_memory(
     return Response(status_code=204)
 
 
+async def _require_projection_retry_available(db: AsyncSession, memory: Memory) -> None:
+    from src.infrastructure.adapters.secondary.persistence.graph_projection_job_model import (
+        GraphProjectionJob,
+    )
+
+    if memory.task_id:
+        job = await db.get(GraphProjectionJob, memory.task_id, populate_existing=True)
+        if (
+            job
+            and job.source_revision == memory.version
+            and job.phase in {"extracting", "pending", "review"}
+        ):
+            raise HTTPException(
+                409, _("Graph projection for this memory is already pending or awaiting recovery")
+            )
+
+
 @router.post("/memories/{memory_id}/reprocess", response_model=MemoryResponse)
 async def reprocess_memory(
     memory_id: str,
@@ -984,28 +1010,17 @@ async def reprocess_memory(
     if not memory:
         raise HTTPException(status_code=404, detail=_("Memory not found"))
 
-    # 2. Check permissions
-    if memory.author_id != current_user.id:
-        if not await _has_memory_share_edit_permission(memory_id, current_user.id, db):
-            # Check project owner
-            user_project_result = await db.execute(
-                refresh_select_statement(
-                    select(UserProject).where(
-                        UserProject.user_id == current_user.id,
-                        UserProject.project_id == memory.project_id,
-                        UserProject.role.in_(["owner", "admin"]),
-                    )
-                )
-            )
-            if not user_project_result.scalar_one_or_none():
-                raise HTTPException(status_code=403, detail=_("Permission denied"))
-
+    await _check_memory_edit_permission(memory, current_user, db)
+    sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False)
+    project = await db.get(Project, memory.project_id)
+    selected = bool(project and (project.graph_config or {}).get("sync_projection"))
+    derived = (
+        selected
+        and await graph_write_lease_kind(sessions, project_id=memory.project_id) == "derived"
+    )
     try:
-        async with legacy_graph_write(
-            async_sessionmaker(bind=db.bind, expire_on_commit=False),
-            project_id=memory.project_id,
-            memory_id=memory_id,
-        ):
+        admission = derived_graph_write if derived else legacy_graph_write
+        async with admission(sessions, project_id=memory.project_id, memory_id=memory_id):
             await db.refresh(memory)
             await _check_memory_edit_permission(memory, current_user, db)
             if memory.processing_status in {"PENDING", "PROCESSING"}:
@@ -1013,15 +1028,20 @@ async def reprocess_memory(
                     status_code=409,
                     detail=_("Memory is already being processed. Please wait for completion."),
                 )
-            # 3. Clean up old episode data before reprocessing
-            try:
-                logger.info(
-                    f"Cleaning up old episode data for memory {memory_id} before reprocessing"
-                )
-                await graph_service.delete_episode_by_memory_id(memory_id)
-            except Exception as e:
-                logger.warning(f"Failed to clean up old episode data for memory {memory_id}: {e}")
-                # Continue with reprocessing even if cleanup fails
+            if derived:
+                await _require_projection_retry_available(db, memory)
+            if not derived:
+                # 3. Clean up old episode data before reprocessing
+                try:
+                    logger.info(
+                        f"Cleaning up old episode data for memory {memory_id} before reprocessing"
+                    )
+                    await graph_service.delete_episode_by_memory_id(memory_id)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to clean up old episode data for memory {memory_id}: {e}"
+                    )
+                    # Continue with reprocessing even if cleanup fails
 
             # 4. Trigger processing
             try:

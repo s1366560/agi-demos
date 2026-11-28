@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import override
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory
@@ -35,6 +35,21 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
+
+    async def measure_usage(self, project_ids: list[str]) -> tuple[int, int]:
+        """Return counts and stored text length for the authorized project set."""
+        counts = storage = 0
+        for start in range(0, len(project_ids), 500):
+            row = (
+                await self._session.execute(
+                    select(func.count(DBMemory.id), func.sum(func.length(DBMemory.content)))
+                    .where(DBMemory.project_id.in_(project_ids[start : start + 500]))
+                    .execution_options(populate_existing=True)
+                )
+            ).one()
+            counts += int(row[0])
+            storage += int(row[1] or 0)
+        return counts, storage
 
     @asynccontextmanager
     async def legacy_write(

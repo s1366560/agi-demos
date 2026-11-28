@@ -364,8 +364,32 @@ async def test_orphaned_owned_children_require_stop_before_new_start(harness):
     assert 999 not in processes.processes
 
 
+@pytest.mark.parametrize(
+    ("web_command_args", "expected"),
+    [
+        (
+            [],
+            (
+                "node_modules/.bin/vite",
+                "--config",
+                "vite.config.ts",
+                "--mode",
+                "full",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "3000",
+                "--strictPort",
+            ),
+        ),
+        (
+            ["--web-command", "node custom-vite --port 3000"],
+            ("node", "custom-vite", "--port", "3000", "--strictPort"),
+        ),
+    ],
+)
 def test_cli_preserves_timeout_and_web_command_without_shell_execution(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, web_command_args, expected
 ):
     from scripts.dev import services
 
@@ -389,8 +413,7 @@ def test_cli_preserves_timeout_and_web_command_without_shell_execution(
                 str(tmp_path),
                 "--timeout",
                 "1.5",
-                "--web-command",
-                "node custom-vite --port 3000",
+                *web_command_args,
                 "--service",
                 "web",
             ]
@@ -398,7 +421,7 @@ def test_cli_preserves_timeout_and_web_command_without_shell_execution(
         == 0
     )
     assert captured["timeout"] == 1.5
-    assert captured["specs"][0].command == ("node", "custom-vite", "--port", "3000", "--strictPort")
+    assert captured["specs"][0].command == expected
     assert "ready" in capsys.readouterr().out
 
 

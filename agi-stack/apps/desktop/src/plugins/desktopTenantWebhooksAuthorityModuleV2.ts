@@ -9,7 +9,7 @@ import type {
   TenantWebhook,
   TenantWebhooksClient,
   TenantWebhooksSnapshot,
-} from '../features/tenant-admin/tenantWebhooksClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantWebhooksClient';
 import type {
   TenantManagementRequestOptions,
   TenantManagementScope,

@@ -65,6 +65,8 @@ async def test_graph_runtime_effect_owns_service_and_disposes_it() -> None:
     await host.close()
 
     assert graph_service.close_calls == 1
+    assert not runtime.available
+    assert runtime.unavailable_code == "graph_runtime_retired"
 
 
 async def test_graph_runtime_failed_candidate_retains_last_good_service() -> None:

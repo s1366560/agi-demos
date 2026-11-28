@@ -4,8 +4,8 @@ import type {
   RuntimePoolQuery,
   RuntimePoolScope,
   RuntimePoolStatus,
-} from '../features/runtime-pool/runtimePoolClient';
-import { createRuntimePoolHttpClient } from '../features/runtime-pool/runtimePoolClient';
+} from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
+import { createRuntimePoolHttpClient } from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import { DESKTOP_RUNTIME_POOL_CLOUD_ACTIONS_V2 } from './desktopRuntimePoolContractV2';

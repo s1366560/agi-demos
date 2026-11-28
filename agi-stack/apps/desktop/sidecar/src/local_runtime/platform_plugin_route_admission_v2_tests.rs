@@ -30,6 +30,7 @@ const BOOTSTRAP: &str =
     include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
 const GENERATION_DIGEST: HeaderName = HeaderName::from_static("x-test-generation-digest");
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn automation_capabilities_report_the_admitted_generation_revision() {
     let credential = "automation-generation-test";
@@ -161,6 +162,7 @@ async fn required_admission_rejects_business_requests_without_a_v2_generation() 
     assert_eq!(payload["error"]["generation"], Value::Null);
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn security_kernel_routes_remain_available_without_a_business_generation() {
     let state = test_state("kernel-route-secret");
@@ -324,6 +326,7 @@ async fn derived_agent_operation_retains_and_records_the_request_generation() {
     drop(lease);
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn hitl_continuation_keeps_original_generation_and_message_after_publication() {
     let credential = "hitl-generation-secret";

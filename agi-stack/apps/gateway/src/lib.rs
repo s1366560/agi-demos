@@ -46,6 +46,7 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
+mod package_mcp;
 mod routing;
 
 pub use routing::{
@@ -175,7 +176,7 @@ pub async fn websocket_proxy(
     uri: Uri,
     ws: WebSocketUpgrade,
 ) -> Response<Body> {
-    websocket_proxy_to_upstream(&state.upstreams.rust, headers, uri, ws, false).await
+    websocket_proxy_to_upstream(&state.upstreams.rust, headers, uri, ws, false, None).await
 }
 
 async fn websocket_proxy_to_upstream(
@@ -184,6 +185,7 @@ async fn websocket_proxy_to_upstream(
     uri: Uri,
     ws: WebSocketUpgrade,
     preserve_host: bool,
+    packages: Option<package_mcp::Authority>,
 ) -> Response<Body> {
     let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
     let upstream_url = websocket_url(upstream, path_and_query);
@@ -202,11 +204,33 @@ async fn websocket_proxy_to_upstream(
     };
 
     ws.protocols(WEBSOCKET_SUBPROTOCOLS)
-        .on_upgrade(move |socket| pump_websockets(socket, upstream))
+        .on_upgrade(move |socket| pump_websockets(socket, upstream, packages))
         .into_response()
 }
 
-async fn pump_websockets(mut client: WebSocket, mut upstream: UpstreamWs) {
+async fn sandbox_mcp_proxy(
+    State(state): State<GatewayState>,
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    uri: Uri,
+    ws: WebSocketUpgrade,
+) -> Response<Body> {
+    let authority = package_mcp::Authority::for_project(
+        &project_id,
+        &headers,
+        &state.upstreams.python,
+        state.client,
+    );
+    websocket_proxy_to_upstream(&state.upstreams.rust, headers, uri, ws, false, authority).await
+}
+
+async fn pump_websockets(
+    mut client: WebSocket,
+    mut upstream: UpstreamWs,
+    authority: Option<package_mcp::Authority>,
+) {
+    let mut packages = authority.map(package_mcp::Session::new);
+    let mut calls = package_mcp::Calls::default();
     loop {
         tokio::select! {
             incoming = client.recv() => {
@@ -214,6 +238,18 @@ async fn pump_websockets(mut client: WebSocket, mut upstream: UpstreamWs) {
                     let _ = upstream.close(None).await;
                     break;
                 };
+                if let (Some(session), AxumWsMessage::Text(text)) = (packages.as_mut(), &message) {
+                    match calls.receive(session, text) {
+                        package_mcp::Dispatch::Forward => {}
+                        package_mcp::Dispatch::Accepted => continue,
+                        package_mcp::Dispatch::Error(error) => {
+                            if client.send(AxumWsMessage::Text(error)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
+                    }
+                }
                 let should_close = matches!(message, AxumWsMessage::Close(_));
                 if upstream.send(axum_to_tungstenite(message)).await.is_err() {
                     break;
@@ -222,11 +258,26 @@ async fn pump_websockets(mut client: WebSocket, mut upstream: UpstreamWs) {
                     break;
                 }
             }
+            reply = calls.next(), if !calls.is_empty() => {
+                if let Some(reply) = reply {
+                    if client.send(AxumWsMessage::Text(reply)).await.is_err() {
+                        break;
+                    }
+                }
+            }
             incoming = upstream.next() => {
                 let Some(Ok(message)) = incoming else {
                     let _ = client.send(AxumWsMessage::Close(None)).await;
                     break;
                 };
+                if let (Some(session), TungsteniteMessage::Text(text)) = (packages.as_mut(), &message) {
+                    if let Some(merged) = session.response(text).await {
+                        if client.send(AxumWsMessage::Text(merged)).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
                 let should_close = matches!(message, TungsteniteMessage::Close(_));
                 if let Some(message) = tungstenite_to_axum(message) {
                     if client.send(message).await.is_err() {
@@ -347,8 +398,15 @@ pub async fn fallback_proxy(
 ) -> Response<Body> {
     if let Some(ws) = ws {
         if is_preview_host_headers(&headers) {
-            return websocket_proxy_to_upstream(&state.upstreams.rust, headers, uri, ws, true)
-                .await;
+            return websocket_proxy_to_upstream(
+                &state.upstreams.rust,
+                headers,
+                uri,
+                ws,
+                true,
+                None,
+            )
+            .await;
         }
     }
     proxy(State(state), req).await
@@ -387,7 +445,7 @@ pub fn app(state: GatewayState) -> axum::Router {
         )
         .route(
             "/api/v1/projects/:project_id/sandbox/mcp/proxy",
-            get(websocket_proxy),
+            get(sandbox_mcp_proxy),
         )
         .route(
             "/api/v1/projects/:project_id/sandbox/http-services/:service_id/proxy/ws",

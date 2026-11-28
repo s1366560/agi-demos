@@ -26,7 +26,7 @@ import {
 import './LoginScreen.css';
 
 type LoginScreenProps = {
-  auth: AuthState;
+  auth: Pick<AuthState, 'status' | 'error'>;
   onRetrySavedSession?: () => void;
   legacyLocalLoginNotice?: boolean;
   cloudApiBaseUrl: string;

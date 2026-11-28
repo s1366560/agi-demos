@@ -149,7 +149,7 @@ async def test_tenant_delete_v2_unavailable_leaves_all_project_rows_unmodified(
 ) -> None:
     from fastapi import HTTPException
 
-    from src.infrastructure.plugins.v2 import sandbox_projection
+    from plugins.business.environments.backend.sandbox import sandbox_projection
     from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
     db = SimpleNamespace(execute=AsyncMock(), delete=AsyncMock(), commit=AsyncMock())

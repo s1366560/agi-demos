@@ -81,9 +81,11 @@ test('workload credential control commands stay outside the renderer command sur
   const preloadSource = readFileSync(join(process.cwd(), 'electron/preload/index.ts'), 'utf8');
   const mainAllowlist = mainSource.match(/const SIDECAR_COMMANDS = new Set\(\[[\s\S]*?\]\);/u)?.[0];
   const preloadAllowlist = preloadSource.match(
-    /const allowedCommands = new Set\(\[[\s\S]*?\]\);/u,
+    /const allowedCommands = fullDesktop \? new Set\(\[[\s\S]*?\]\) : packageCommands;/u,
   )?.[0];
 
+  const profile = readFileSync(join(process.cwd(), 'electron/desktopProfile.ts'), 'utf8');
+  assert.doesNotMatch(profile, /plugin_data_plane_credential/u);
   assert.ok(mainAllowlist);
   assert.ok(preloadAllowlist);
   assert.doesNotMatch(mainAllowlist, /plugin_data_plane_credential/u);

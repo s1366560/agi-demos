@@ -173,8 +173,8 @@ jobs:
       - name: Check retired Rust Server surface
         run: cargo check --manifest-path agi-stack/Cargo.toml -p agistack-server
 
-      - name: Test Desktop authority and cutover surface
-        run: cargo test --manifest-path agi-stack/Cargo.toml -p agistack-desktop-sidecar
+      - name: Test Desktop compatibility authority and cutover surface
+        run: cargo test --manifest-path agi-stack/Cargo.toml -p agistack-desktop-sidecar --features legacy-business
 
       - name: Verify migration unit contracts
         run: >-

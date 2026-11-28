@@ -15,12 +15,12 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ToolDefinition
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.domain.model.agent.subagent import SubAgent
-from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.core.subagent_runner import SubAgentRunnerDeps
 from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.core.subagent_tools import SubAgentToolBuilderDeps
-from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
@@ -513,11 +513,11 @@ def test_react_agent_has_no_construction_time_registry_authority() -> None:
     runner_fields = {field.name for field in fields(SubAgentRunnerDeps)}
     builder_fields = {field.name for field in fields(SubAgentToolBuilderDeps)}
     constructor_fields = set(signature(ReActAgent.__init__).parameters)
-    react_source = (_ROOT / "src/infrastructure/agent/core/react_agent.py").read_text(
+    react_source = (_ROOT / "plugins/business/agent/engine/react/react_agent.py").read_text(
         encoding="utf-8"
     )
     lifecycle_source = (
-        _ROOT / "src/infrastructure/agent/core/react_agent_lifecycle_mixin.py"
+        _ROOT / "plugins/business/agent/engine/react/react_agent_lifecycle_mixin.py"
     ).read_text(encoding="utf-8")
 
     assert "subagent_run_registry" not in runner_fields

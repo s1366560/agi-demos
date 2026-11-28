@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { NewTaskFlow } from '../features/task/NewTaskFlow';
+import { NewTaskFlow } from '@business/agent/ui/desktop/task/NewTaskFlow';
 
 export type DesktopNewTaskFlowInputV2 = Readonly<ComponentProps<typeof NewTaskFlow>>;
 

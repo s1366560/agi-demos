@@ -1885,6 +1885,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
                         "type": event.get("type"),
                         "conversation_id": conversation_id,
                         "data": event_data,
+                        "run_id": execution_message_id,
                         "seq": event.get("id"),
                         "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
                         "event_time_us": event.get("event_time_us"),

@@ -27,7 +27,9 @@ def _load_migration():
     return module
 
 
-def _bind(migration, *, has_table: bool, columns: list[str], checks: list[str]) -> Mock:
+def _bind(
+    migration, monkeypatch, *, has_table: bool, columns: list[str], checks: list[str]
+) -> Mock:
     operation = Mock()
     inspector = SimpleNamespace(
         has_table=lambda _name: has_table,
@@ -35,13 +37,13 @@ def _bind(migration, *, has_table: bool, columns: list[str], checks: list[str]) 
         get_check_constraints=lambda _name: [{"name": name} for name in checks],
     )
     migration.op = operation
-    migration.sa.inspect = lambda _bind: inspector
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: inspector)
     return operation
 
 
-def test_upgrade_skips_when_authority_table_is_absent() -> None:
+def test_upgrade_skips_when_authority_table_is_absent(monkeypatch) -> None:
     migration = _load_migration()
-    operation = _bind(migration, has_table=False, columns=[], checks=[])
+    operation = _bind(migration, monkeypatch, has_table=False, columns=[], checks=[])
 
     migration.upgrade()
 
@@ -50,9 +52,9 @@ def test_upgrade_skips_when_authority_table_is_absent() -> None:
     operation.create_check_constraint.assert_not_called()
 
 
-def test_upgrade_adds_columns_backfills_cloud_and_checks_the_closed_set() -> None:
+def test_upgrade_adds_columns_backfills_cloud_and_checks_the_closed_set(monkeypatch) -> None:
     migration = _load_migration()
-    operation = _bind(migration, has_table=True, columns=["id"], checks=[])
+    operation = _bind(migration, monkeypatch, has_table=True, columns=["id"], checks=[])
 
     migration.upgrade()
 
@@ -76,10 +78,11 @@ def test_upgrade_adds_columns_backfills_cloud_and_checks_the_closed_set() -> Non
     )
 
 
-def test_downgrade_drops_constraint_and_columns() -> None:
+def test_downgrade_drops_constraint_and_columns(monkeypatch) -> None:
     migration = _load_migration()
     operation = _bind(
         migration,
+        monkeypatch,
         has_table=True,
         columns=[
             "execution_target",
@@ -106,9 +109,9 @@ def test_downgrade_drops_constraint_and_columns() -> None:
     ]
 
 
-def test_downgrade_skips_when_authority_table_is_absent() -> None:
+def test_downgrade_skips_when_authority_table_is_absent(monkeypatch) -> None:
     migration = _load_migration()
-    operation = _bind(migration, has_table=False, columns=[], checks=[])
+    operation = _bind(migration, monkeypatch, has_table=False, columns=[], checks=[])
 
     migration.downgrade()
 

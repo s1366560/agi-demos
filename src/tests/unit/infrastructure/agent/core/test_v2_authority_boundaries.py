@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
+from plugins.business.agent.engine.processor.processor import ProcessorConfig
 from src.infrastructure.agent.core.subagent_runner import SubAgentRunnerDeps
-from src.infrastructure.agent.processor.factory import ProcessorFactory
-from src.infrastructure.agent.processor.processor import ProcessorConfig
 
 _ROOT = Path(__file__).resolve().parents[6]
-_REACT_AGENT_SOURCE = _ROOT / "src/infrastructure/agent/core/react_agent.py"
+_REACT_AGENT_SOURCE = _ROOT / "plugins/business/agent/engine/react/react_agent.py"
 _SUBAGENT_RUNNER_SOURCE = _ROOT / "src/infrastructure/agent/core/subagent_runner.py"
 
 

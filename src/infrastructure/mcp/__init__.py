@@ -26,19 +26,12 @@ Ports (src.domain.ports.mcp):
 - MCPTransportPort, MCPTransportFactoryPort
 """
 
-# Tools layer
-from src.infrastructure.mcp.tools import (
-    BaseMCPToolAdapter,
-    MCPToolFactory,
-)
+from importlib import import_module
+from typing import TYPE_CHECKING
 
-# Transport layer
-from src.infrastructure.mcp.transport import (
-    HTTPTransport,
-    StdioTransport,
-    TransportFactory,
-    WebSocketTransport,
-)
+if TYPE_CHECKING:
+    from .tools import BaseMCPToolAdapter, MCPToolFactory
+    from .transport import HTTPTransport, StdioTransport, TransportFactory, WebSocketTransport
 
 __all__ = [
     "BaseMCPToolAdapter",
@@ -48,3 +41,10 @@ __all__ = [
     "TransportFactory",
     "WebSocketTransport",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name not in __all__:
+        raise AttributeError(name)
+    module = ".tools" if name in {"BaseMCPToolAdapter", "MCPToolFactory"} else ".transport"
+    return getattr(import_module(module, __name__), name)

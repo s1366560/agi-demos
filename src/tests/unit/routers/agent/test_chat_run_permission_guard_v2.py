@@ -282,23 +282,23 @@ async def test_protocol_tool_factories_obey_sql_backed_chat_permission_modes(
 async def test_real_permission_coordinator_publishes_request_before_waiting_for_response(
     chat_guard_case, monkeypatch, tmp_path
 ):
+    from plugins.business.agent.engine.processor.processor import (
+        ProcessorConfig,
+        SessionProcessor,
+        ToolDefinition,
+    )
     from src.domain.events.agent_events import (
         AgentPermissionAskedEvent,
         AgentPermissionRepliedEvent,
     )
     from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
     from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveResult
-    from src.infrastructure.agent.processor.processor import (
-        ProcessorConfig,
-        SessionProcessor,
-        ToolDefinition,
-    )
 
     monkeypatch.setattr(
         "src.infrastructure.agent.hitl.coordinator._persist_hitl_request", AsyncMock()
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.complete_hitl_request", AsyncMock()
+        "plugins.business.agent.engine.processor.processor.complete_hitl_request", AsyncMock()
     )
     destination = tmp_path / "confirmed-write"
 

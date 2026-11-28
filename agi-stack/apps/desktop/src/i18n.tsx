@@ -8,24 +8,15 @@ import {
   nativeKnowledgeCommunityEnUS,
   nativeKnowledgeCommunityZhCN,
 } from './features/project-knowledge/locales/nativeKnowledgeCommunityMessages';
-import { projectGraphEnUS, projectGraphZhCN } from './features/project-knowledge/locales/projectGraphMessages';
-import { type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import {
   I18nContext,
   type DesktopLocale,
   type I18nContextValue,
-  type TranslationValues,
+  interpolate,
 } from './i18nContext';
 
-import {
-  projectOverviewEnUS,
-  projectOverviewZhCN,
-} from './features/project/locales/projectOverviewMessages';
-import {
-  projectSupportEnUS,
-  projectSupportZhCN,
-} from './features/project-support/locales/projectSupportMessages';
 import {
   deadLetterQueueEnUS,
   deadLetterQueueZhCN,
@@ -42,30 +33,6 @@ import {
   invitationAcceptanceEnUS,
   invitationAcceptanceZhCN,
 } from './features/invitation-acceptance/locales/invitationAcceptanceMessages';
-import {
-  instanceTemplatesEnUS,
-  instanceTemplatesZhCN,
-} from './features/instance-templates/locales/instanceTemplatesMessages';
-import {
-  runtimePoolEnUS,
-  runtimePoolZhCN,
-} from './features/runtime-pool/locales/runtimePoolMessages';
-import {
-  runtimeInstancesEnUS,
-  runtimeInstancesZhCN,
-} from './features/runtime-instances/locales/runtimeInstancesMessages';
-import {
-  runtimeClustersEnUS,
-  runtimeClustersZhCN,
-} from './features/runtime-clusters/locales/runtimeClustersMessages';
-import {
-  runtimeDeploymentsEnUS,
-  runtimeDeploymentsZhCN,
-} from './features/runtime-deployments/locales/runtimeDeploymentsMessages';
-import {
-  unifiedRuntimesEnUS,
-  unifiedRuntimesZhCN,
-} from './features/unified-runtimes/locales/unifiedRuntimesMessages';
 import {
   nativeUnavailableRouteEnUS,
   nativeUnavailableRouteZhCN,
@@ -100,17 +67,9 @@ import {
 } from './features/tenant/locales/tenantProjectsMessages';
 import { tenantTasksEnUS, tenantTasksZhCN } from './features/tenant/locales/tenantTasksMessages';
 import {
-  tenantWorkspacesEnUS,
-  tenantWorkspacesZhCN,
-} from './features/tenant/locales/tenantWorkspacesMessages';
-import {
   nativeMemoriesEnUS,
   nativeMemoriesZhCN,
 } from './features/project-knowledge/locales/nativeMemoriesMessages';
-import {
-  cloudMemoriesEnUS,
-  cloudMemoriesZhCN,
-} from './features/project-knowledge/locales/cloudMemoriesMessages';
 
 import {
   nativeKnowledgeCloudConnectionEnUS,
@@ -131,30 +90,21 @@ const enUS: Record<string, string> = {
   ...nativeKnowledgeCommunityEnUS,
   ...nativeKnowledgeGraphEnUS,
   ...nativeKnowledgeCloudConnectionEnUS,
-  ...cloudMemoriesEnUS,
-  ...projectGraphEnUS,
   ...deadLetterQueueEnUS,
   ...deviceApprovalEnUS,
   ...tenantCreationEnUS,
   ...invitationAcceptanceEnUS,
   ...desktopProductionRouterEnUS,
-  ...instanceTemplatesEnUS,
   ...nativeUnavailableRouteEnUS,
-  ...projectOverviewEnUS,
-  ...projectSupportEnUS,
-  ...runtimeClustersEnUS,
-  ...runtimeDeploymentsEnUS,
-  ...runtimeInstancesEnUS,
-  ...runtimePoolEnUS,
   ...tenantAdminEnUS,
-  ...unifiedRuntimesEnUS,
   ...tenantAnalyticsEnUS,
   ...tenantAgentDashboardEnUS,
   ...tenantAgentBindingsEnUS,
   ...tenantOverviewEnUS,
   ...tenantProjectsEnUS,
   ...tenantTasksEnUS,
-  ...tenantWorkspacesEnUS,
+  'projectSupport.title': 'Project Support',
+  'projectSupport.subtitle': 'Create and track support tickets owned by your account in this tenant.',
   'common.close': 'Close',
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
@@ -296,6 +246,15 @@ const enUS: Record<string, string> = {
   'nav.evolution': 'Evolution',
   'nav.patterns': 'Patterns',
   'nav.plugins': 'Plugins',
+  'fullHost.unavailable': 'This page is not installed for the current scope.',
+  'fullHost.backToMarket': 'Back to marketplace',
+  'fullHost.project.id': 'ID',
+  'fullHost.project.public': 'Public',
+  'fullHost.project.private': 'Private',
+  'fullHost.project.usage': 'Usage',
+  'fullHost.project.memories': 'memories',
+  'fullHost.project.nodes': 'nodes',
+  'fullHost.project.members': 'members',
   'nav.mcpServers': 'MCP Servers',
   'nav.acp': 'ACP',
   'nav.templates': 'Templates',
@@ -317,6 +276,15 @@ const enUS: Record<string, string> = {
   'nav.billing': 'Billing',
   'nav.orgSettings': 'Organization Settings',
   'nav.settings': 'Settings',
+  'nav.coreOperations': 'Core Operations',
+  'nav.agentBuilding': 'Agent Building',
+  'nav.extensionsIntegrations': 'Extensions & Integrations',
+  'nav.runtimeInfrastructure': 'Runtime & Infrastructure',
+  'nav.governanceManagement': 'Governance & Management',
+  'nav.projectWorkspace': 'Project Workspace',
+  'nav.knowledgeBase': 'Knowledge Base',
+  'nav.discovery': 'Discovery',
+  'nav.configuration': 'Configuration',
   'nav.blackboard': 'Blackboard',
   'nav.team': 'Team',
   'nav.memories': 'Memories',
@@ -582,6 +550,7 @@ const enUS: Record<string, string> = {
   'executionPlacement.loadingDirectory': 'This computer',
   'executionPlacement.directoryUnavailable': 'This directory is not available on this computer.',
   'executionPlacement.localExecutionUnavailable': 'Local execution did not start. The run was not sent to the cloud.',
+  'executionPlacement.localTurnFailed': 'The local run failed. Open the conversation record for details.',
   'executionPlacement.localUploadPending': 'This computer is executing the run. The cloud record is not synced yet.',
   'executionPlacement.localUploadSynced': 'The local run record is on the cloud.',
   'executionPlacement.localUploadFailed': 'Local execution did not finish uploading. Nothing was marked synced.',
@@ -3600,13 +3569,6 @@ const enUS: Record<string, string> = {
   'chat.modelNotConfigured': 'No model configured',
   'chat.resetModelOverride': 'Reset',
   'chat.searchModels': 'Search models',
-  'chat.search.label': 'Search conversation',
-  'chat.search.placeholder': 'Search in conversation…',
-  'chat.search.resultCount': '{current}/{total}',
-  'chat.search.noResults': '0 results',
-  'chat.search.previousResult': 'Previous result',
-  'chat.search.nextResult': 'Next result',
-  'chat.search.close': 'Close search',
   'chat.noModelsFound': 'No matching models',
   'chat.switchingModel': 'Switching model…',
   'chat.selectedModelUnavailable': 'The selected model is no longer available in this workspace.',
@@ -4680,22 +4642,12 @@ const zhCN: Record<string, string> = {
   ...nativeKnowledgeCommunityZhCN,
   ...nativeKnowledgeGraphZhCN,
   ...nativeKnowledgeCloudConnectionZhCN,
-  ...cloudMemoriesZhCN,
-  ...projectGraphZhCN,
   ...tenantCreationZhCN,
   ...invitationAcceptanceZhCN,
   ...deadLetterQueueZhCN,
   ...deviceApprovalZhCN,
   ...desktopProductionRouterZhCN,
-  ...instanceTemplatesZhCN,
   ...nativeUnavailableRouteZhCN,
-  ...projectOverviewZhCN,
-  ...projectSupportZhCN,
-  ...runtimeClustersZhCN,
-  ...runtimeDeploymentsZhCN,
-  ...runtimeInstancesZhCN,
-  ...runtimePoolZhCN,
-  ...unifiedRuntimesZhCN,
   ...tenantAnalyticsZhCN,
   ...tenantAgentDashboardZhCN,
   ...tenantAgentBindingsZhCN,
@@ -4703,7 +4655,8 @@ const zhCN: Record<string, string> = {
   ...tenantAdminZhCN,
   ...tenantProjectsZhCN,
   ...tenantTasksZhCN,
-  ...tenantWorkspacesZhCN,
+  'projectSupport.title': '项目支持',
+  'projectSupport.subtitle': '创建并跟踪当前账号在此租户下持有的支持工单。',
   'common.close': '关闭',
   'common.cancel': '取消',
   'common.delete': '删除',
@@ -4831,6 +4784,15 @@ const zhCN: Record<string, string> = {
   'nav.evolution': '演进',
   'nav.patterns': '模式',
   'nav.plugins': '插件',
+  'fullHost.unavailable': '当前范围尚未安装此页面',
+  'fullHost.backToMarket': '返回插件市场',
+  'fullHost.project.id': 'ID',
+  'fullHost.project.public': '公开',
+  'fullHost.project.private': '私有',
+  'fullHost.project.usage': '用量',
+  'fullHost.project.memories': '记忆',
+  'fullHost.project.nodes': '节点',
+  'fullHost.project.members': '成员',
   'nav.mcpServers': 'MCP 服务',
   'nav.acp': 'ACP',
   'nav.templates': '模板',
@@ -4852,6 +4814,15 @@ const zhCN: Record<string, string> = {
   'nav.billing': '账单',
   'nav.orgSettings': '组织设置',
   'nav.settings': '设置',
+  'nav.coreOperations': '核心运营',
+  'nav.agentBuilding': '智能体构建',
+  'nav.extensionsIntegrations': '扩展与集成',
+  'nav.runtimeInfrastructure': '运行时与基础设施',
+  'nav.governanceManagement': '治理与管理',
+  'nav.projectWorkspace': '项目工作区',
+  'nav.knowledgeBase': '知识库',
+  'nav.discovery': '发现',
+  'nav.configuration': '配置',
   'nav.blackboard': '黑板',
   'nav.team': '团队',
   'nav.memories': '记忆',
@@ -5097,6 +5068,7 @@ const zhCN: Record<string, string> = {
   'executionPlacement.loadingDirectory': '此计算机',
   'executionPlacement.directoryUnavailable': '此目录在这台计算机上不可用。',
   'executionPlacement.localExecutionUnavailable': '本地执行没有启动。本次没有改到云端执行。',
+  'executionPlacement.localTurnFailed': '本机运行失败。请查看会话记录中的错误。',
   'executionPlacement.localUploadPending': '此计算机正在执行。云端记录尚未同步。',
   'executionPlacement.localUploadSynced': '本地运行记录已在云端。',
   'executionPlacement.localUploadFailed': '本地执行记录没有上传完成。没有被标成已同步。',
@@ -7872,13 +7844,6 @@ const zhCN: Record<string, string> = {
   'chat.modelNotConfigured': '未配置模型',
   'chat.resetModelOverride': '重置',
   'chat.searchModels': '搜索模型',
-  'chat.search.label': '搜索会话',
-  'chat.search.placeholder': '在会话中搜索…',
-  'chat.search.resultCount': '{current}/{total}',
-  'chat.search.noResults': '0 个结果',
-  'chat.search.previousResult': '上一个结果',
-  'chat.search.nextResult': '下一个结果',
-  'chat.search.close': '关闭搜索',
   'chat.noModelsFound': '没有匹配的模型',
   'chat.switchingModel': '正在切换模型…',
   'chat.selectedModelUnavailable': '所选模型已无法在此工作空间中使用。',
@@ -8930,16 +8895,4 @@ function readStoredLocale(): string | null {
   }
 }
 
-export function useI18n(): I18nContextValue {
-  const context = useContext(I18nContext);
-  if (!context) throw new Error('useI18n must be used inside I18nProvider');
-  return context;
-}
-
-function interpolate(value: string, values?: TranslationValues): string {
-  if (!values) return value;
-  return Object.entries(values).reduce(
-    (result, [key, replacement]) => result.replaceAll(`{${key}}`, String(replacement)),
-    value,
-  );
-}
+export { useI18n } from './i18nContext';

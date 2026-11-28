@@ -9,7 +9,7 @@ import {
   requireText,
   type ProjectKnowledgeReadOptions,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import {
   PROJECT_PLAYBOOKS_LOCAL_REASON,
   type ProjectPlaybook,
@@ -18,7 +18,7 @@ import {
   type ProjectPlaybookStep,
   type ProjectReflectionVerdict,
   type ReflectionVerdictAction,
-} from '../features/project-playbooks/projectPlaybooksClient';
+} from '@business/automation/ui/desktop/project-playbooks/projectPlaybooksClient';
 
 const ACTIONS = Object.freeze(['view', 'list', 'refresh', 'review-verdicts']);
 const VERDICT_ACTIONS = new Set<ReflectionVerdictAction>([

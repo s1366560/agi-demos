@@ -24,6 +24,7 @@ pub(super) async fn assert_graph_routing(ctx: &StranglerHttpContext) {
         ("GET", "/api/v1/graph/import", ""),
         ("GET", "/api/v1/graph/export/extra", ""),
         ("POST", "/api/v1/graph/import/extra", "{}"),
+        ("POST", "/api/v1/search-enhanced/advanced", "{}"),
         ("POST", "/api/v1/search-enhanced/capabilities", "{}"),
         ("POST", "/api/v1/graph/communities/rebuild/jobs/job-1", "{}"),
         (

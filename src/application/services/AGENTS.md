@@ -12,29 +12,18 @@ Services own business workflows; repositories own persistence.
 | `project_service.py` | ProjectRepo, UserRepo | Project CRUD + member management. Validates owner exists before creation. |
 | `skill_service.py` | SkillRepo, TenantSkillConfigRepo, FileSystemSkillLoader | Three-level skill scoping: system < tenant < project. Progressive loading tiers (metadata/triggers/full content). |
 | `search_service.py` | GraphServicePort | Hybrid search (semantic + keyword + graph). |
-| `sandbox_orchestrator.py` | SandboxPort, SandboxEventPublisher | Unified sandbox lifecycle used by both REST API and Agent tools. |
+| [Sandbox orchestrator](../../../plugins/business/environments/backend/sandbox/sandbox_orchestrator.py) | SandboxPort, SandboxEventPublisher | Unified sandbox lifecycle used by both REST API and Agent tools. |
 | `subagent_service.py` | SubAgentRepo | SubAgent CRUD and configuration. |
 | `auth_service_v2.py` | UserRepo, ApiKeyRepo | Auth operations, token management. |
 | `llm_provider_manager.py` | - | Multi-provider LLM key management, encryption/decryption. |
 | `mcp_app_service.py` | MCPAppRepo | MCP server app registration and discovery. |
 | `task_service.py` | TaskRepo | Background task tracking via TaskLog. |
 | `tenant_service.py` | TenantRepo | Tenant CRUD. |
-| `workflow_learner.py` | PatternRepo | Extracts reusable patterns from successful agent interactions. |
+| [Workflow learner](../../../plugins/business/automation/backend/workflow_learner.py) | PatternRepo | Extracts reusable patterns from successful agent interactions. |
 
-## Sandbox Service Cluster (12 files)
+## Sandbox ownership
 
-- `sandbox_orchestrator.py` -- top-level facade, all sandbox ops route through here
-- `sandbox_event_service.py` -- publishes sandbox lifecycle events to Redis
-- `sandbox_health_service.py` -- periodic health checks on running sandboxes
-- `sandbox_idle_reaper.py` -- reaps idle sandboxes past their TTL
-- `sandbox_mcp_server_manager.py` -- manages MCP servers within sandboxes
-- `sandbox_profile.py` -- sandbox resource profile definitions
-- `sandbox_status_sync_service.py` -- syncs sandbox state between DB and runtime
-- `sandbox_token_service.py` -- JWT tokens for sandbox WebSocket auth
-- `sandbox_tool_registry.py` -- registers sandbox-provided tools into agent tool set
-- `sandbox_url_service.py` -- resolves sandbox endpoint URLs (Docker/local)
-- `unified_sandbox_service.py` -- legacy unified facade (being replaced by orchestrator)
-- `project_sandbox_lifecycle_service.py` -- project-level sandbox provisioning/teardown
+[Environments](../../../plugins/business/environments/) owns provisioning, leases, health, idle reaping, image management and MCP tools. The host issues scoped WebSocket credentials through `sandbox_token_service.py`.
 
 ## agent/ Subdirectory
 

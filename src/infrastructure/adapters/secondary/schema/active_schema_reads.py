@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
 from src.domain.model.project_schema.document import ProjectSchemaDocument
 from src.domain.model.project_schema.validation import ProjectSchemaError
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -34,13 +35,17 @@ class SchemaCommandRequiredV2(ProjectSchemaError):
         super().__init__("project_schema_command_required")
 
 
-async def require_legacy_schema(session: AsyncSession, project_id: str) -> None:
+async def require_legacy_schema(
+    session: AsyncSession, project_id: str, *, tenant_id: str | None = None
+) -> None:
     with session.no_autoflush:
         # Bootstrap takes the same project lock. A writer cannot pass the mode
         # check and then race enrollment before its legacy transaction finishes.
-        _ = await session.scalar(
-            select(Project.id).where(Project.id == project_id).with_for_update()
+        owner = await session.scalar(
+            select(Project.tenant_id).where(Project.id == project_id).with_for_update()
         )
+        if tenant_id is not None and tenant_id != owner:
+            raise KnowledgeSyncError("knowledge_sync_forbidden")
         active = await session.scalar(
             select(ProjectSchemaHeadModel.project_id).where(
                 ProjectSchemaHeadModel.project_id == project_id,

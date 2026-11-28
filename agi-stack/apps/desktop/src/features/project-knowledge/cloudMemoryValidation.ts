@@ -1,6 +1,6 @@
-import type { CloudMemoryCommand, CloudMemoryOptions } from './cloudMemoryClient';
+import type { CloudMemoryCommand, CloudMemoryOptions } from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import { requireCloudMemoryMutation } from '../../api/cloudMemoryCommandContract';
-import { projectKnowledgeError } from './projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 
 /** Protocol validation only. Preserve the exact draft and idempotency key across a retry. */
 export function prepareCloudMemoryCommand<C extends CloudMemoryCommand>(input: C): C {

@@ -9,6 +9,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.domain.events.agent_events import AgentErrorEvent, ToolPolicyDeniedEvent
 from src.domain.events.types import AgentEventType
 from src.domain.model.agent.identity import AgentIdentity
@@ -30,11 +35,6 @@ from src.domain.model.agent.tool_policy import (
     ToolPolicyPrecedence,
 )
 from src.domain.ports.agent.control_channel_port import ControlMessage
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 from src.infrastructure.agent.tools import subagent_sessions as subagent_sessions_module
 
 
@@ -590,7 +590,7 @@ class TestControlMessageProtocol:
 @pytest.mark.unit
 class TestProcessorFactoryWiresControlChannel:
     def test_react_agent_wires_root_control_dependencies(self) -> None:
-        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from plugins.business.agent.engine.react.react_agent import ReActAgent
 
         channel = AsyncMock()
         message_bus = MagicMock()
@@ -607,7 +607,7 @@ class TestProcessorFactoryWiresControlChannel:
         assert agent._processor_factory.control_channel is channel
 
     def test_factory_wires_channel_to_subagent_config(self) -> None:
-        from src.infrastructure.agent.processor.factory import ProcessorFactory
+        from plugins.business.agent.engine.processor.factory import ProcessorFactory
 
         channel = AsyncMock()
         factory = ProcessorFactory(
@@ -618,7 +618,7 @@ class TestProcessorFactoryWiresControlChannel:
         assert factory.control_channel is channel
 
     def test_factory_defaults_to_no_channel(self) -> None:
-        from src.infrastructure.agent.processor.factory import ProcessorFactory
+        from plugins.business.agent.engine.processor.factory import ProcessorFactory
 
         factory = ProcessorFactory(
             base_model="test-model",

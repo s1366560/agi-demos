@@ -5,11 +5,11 @@ import {
   type PluginDefinitionV2,
 } from '@agistack/plugin-runtime';
 
-import type { ProjectAgentScope } from '../features/project-agent/projectAgentClient';
+import type { ProjectAgentScope } from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import type {
   ProjectAgentLogsClient,
   ProjectAgentLogsSnapshot,
-} from '../features/project-agent/projectAgentLogsClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentLogsClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectAgentLogsHttpAuthorityV2 } from './desktopProjectAgentLogsHttpProjectionV2';
 import {

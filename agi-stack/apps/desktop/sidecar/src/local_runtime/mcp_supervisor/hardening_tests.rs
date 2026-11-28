@@ -1077,7 +1077,13 @@ async fn local_runtime_listener_starts_before_bad_remote_recovery_finishes() {
     let started = tokio::time::Instant::now();
     let runtime = tokio::time::timeout(
         Duration::from_secs(2),
-        LocalRuntimeService::start(app_data, workspace, vault, None),
+        LocalRuntimeService::start(
+            app_data,
+            workspace,
+            vault,
+            None,
+            crate::sidecar_profile::SidecarProfile::Full,
+        ),
     )
     .await
     .expect("local runtime startup deadline")

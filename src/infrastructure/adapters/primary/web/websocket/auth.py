@@ -96,11 +96,12 @@ async def authenticate_websocket(token: str, db: AsyncSession) -> tuple[str, str
             return None
 
         # Get tenant_id from UserTenant table
-        result = await db.execute(
-            refresh_select_statement(
-                select(UserTenant.tenant_id).where(UserTenant.user_id == user.id).limit(1)
-            )
-        )
+        from src.host.identity.application_scope import application_tenant_for
+
+        statement = select(UserTenant.tenant_id).where(UserTenant.user_id == user.id)
+        if tenant := application_tenant_for(user.id):
+            statement = statement.where(UserTenant.tenant_id == tenant)
+        result = await db.execute(refresh_select_statement(statement.limit(1)))
         tenant_id = result.scalar_one_or_none()
 
         if not tenant_id:

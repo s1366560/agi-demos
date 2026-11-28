@@ -1059,6 +1059,9 @@ class LiteLLMClient(LLMClient):
             **kwargs,
         )
 
+        from src.infrastructure.llm.project_chat_stream_adapter import adapt_project_chat_request
+
+        adapter = await adapt_project_chat_request(self.provider_config, completion_kwargs)
         rate_limiter = get_provider_rate_limiter()
         circuit_breaker_registry = get_circuit_breaker_registry()
         provider_type = self.provider_config.provider_type
@@ -1072,6 +1075,8 @@ class LiteLLMClient(LLMClient):
 
         try:
             async with audio.admission(lambda: rate_limiter.acquire(provider_type)):
+                if adapter:
+                    await adapter.authority.authorize()
                 from src.infrastructure.plugins.v2.model_request_log import (
                     recorded_completion_stream_v2,
                 )
@@ -1080,10 +1085,13 @@ class LiteLLMClient(LLMClient):
                     litellm.acompletion,
                     completion_kwargs,
                     request_recorder,
-                    owned_transport=bool(audio.references),
+                    owned_transport=bool(audio.references) or adapter is not None,
                 )
                 async with aclosing(source):
                     async for chunk in audio.stream(source):
+                        if adapter:
+                            await adapter.authority.authorize()
+                            adapter.filter_chunk(chunk)
                         choices = getattr(chunk, "choices", None)
                         if choices:
                             check_completion_finish_reason(

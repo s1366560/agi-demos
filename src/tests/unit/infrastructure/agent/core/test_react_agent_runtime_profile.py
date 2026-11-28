@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.spawn_policy import SpawnPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
@@ -11,7 +12,6 @@ from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.core.processor import ToolDefinition
-from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.sisyphus.builtin_agent import (

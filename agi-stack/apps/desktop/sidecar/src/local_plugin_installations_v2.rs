@@ -28,6 +28,23 @@ pub(crate) fn initialize(db: &Connection) -> Result<(), String> {
         revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
         PRIMARY KEY (tenant_id, project_id, bundle_id)
     );
+    CREATE TABLE IF NOT EXISTS desktop_local_route_epochs (
+        tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, bundle_id TEXT NOT NULL, epoch INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id,project_id,bundle_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS local_route_authority_update AFTER UPDATE ON desktop_local_plugin_installations_v2
+    WHEN NEW.enabled != OLD.enabled OR NEW.revoked != OLD.revoked OR NEW.permissions_json != OLD.permissions_json BEGIN
+      INSERT INTO desktop_local_route_epochs VALUES(OLD.tenant_id,OLD.project_id,OLD.bundle_id,1)
+        ON CONFLICT(tenant_id,project_id,bundle_id) DO UPDATE SET epoch=epoch+1;
+    END;
+    CREATE TRIGGER IF NOT EXISTS local_route_authority_delete AFTER DELETE ON desktop_local_plugin_installations_v2 BEGIN
+      INSERT INTO desktop_local_route_epochs VALUES(OLD.tenant_id,OLD.project_id,OLD.bundle_id,1)
+        ON CONFLICT(tenant_id,project_id,bundle_id) DO UPDATE SET epoch=epoch+1;
+    END;
+    CREATE TABLE IF NOT EXISTS desktop_local_plugin_workspace_roots (
+        tenant_id TEXT NOT NULL, project_id TEXT NOT NULL, bundle_id TEXT NOT NULL, root TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, project_id, bundle_id)
+    );
     CREATE TABLE IF NOT EXISTS desktop_local_plugin_revision_v2 (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
     INSERT OR IGNORE INTO desktop_local_plugin_revision_v2 VALUES(1,0);
     CREATE TRIGGER IF NOT EXISTS local_plugin_insert_v2 AFTER INSERT ON desktop_local_plugin_installations_v2 BEGIN UPDATE desktop_local_plugin_revision_v2 SET revision=revision+1 WHERE id=1; END;
@@ -274,12 +291,23 @@ pub(crate) fn authorizes(
     scope: &ScopeV2,
     tool: &agistack_plugin_host::protocol_v2::wasm_runtime::WasmToolAttributionV2,
 ) -> bool {
+    authorizes_permission(db, keys, scope, tool, "tools.execute")
+}
+
+pub(crate) fn authorizes_permission(
+    db: &Connection,
+    keys: &[TrustedEd25519KeyV2],
+    scope: &ScopeV2,
+    tool: &agistack_plugin_host::protocol_v2::wasm_runtime::WasmToolAttributionV2,
+    permission: &str,
+) -> bool {
     let Ok(row) = stored(db, scope, &tool.bundle) else {
         return false;
     };
     if row.revoked
         || !row.enabled
         || !row.permissions.contains("tools.execute")
+        || !row.permissions.contains(permission)
         || tool.entry_scope != *scope
     {
         return false;
@@ -306,6 +334,7 @@ pub(crate) fn authorizes(
             .flat_map(|layer| &layer.entries)
             .any(|entry| {
                 entry.enabled
+                    && entry.permissions.iter().any(|grant| grant == permission)
                     && entry.plugin_ref == tool.plugin_id
                     && entry.module_ref == tool.module_ref
                     && entry_id(scope, &tool.bundle, &entry.entry_id) == tool.entry_id
@@ -315,6 +344,17 @@ pub(crate) fn authorizes(
                         .and_then(serde_json::Value::as_str)
                         == Some(tool.tool_name.as_str())
             })
+}
+
+/// Stable across a version change with identical approval. Withdrawals and removals advance it.
+pub(crate) fn route_epoch(db: &Connection, scope: &ScopeV2, bundle: &str) -> Option<u64> {
+    let (tenant, project) = scope_ids(scope).ok()?;
+    db.query_row(
+        "SELECT COALESCE(e.epoch,0) FROM desktop_local_plugin_installations_v2 i
+         LEFT JOIN desktop_local_route_epochs e USING (tenant_id,project_id,bundle_id)
+         WHERE i.tenant_id=?1 AND i.project_id=?2 AND i.bundle_id=?3 AND i.enabled=1 AND i.revoked=0",
+        params![tenant,project,bundle], |row| row.get(0),
+    ).optional().ok().flatten()
 }
 
 pub(crate) fn revision(db: &Connection) -> Result<u64, String> {

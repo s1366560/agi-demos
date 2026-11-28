@@ -98,7 +98,7 @@ def device_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
         return redis
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+        "src.infrastructure.adapters.secondary.cache.redis_pool.get_redis_client",
         get_redis_client,
     )
     return redis

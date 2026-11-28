@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from plugins.business.agent.engine.processor import ToolDefinition
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.core.subagent_tool_set_v2 import (
@@ -19,7 +20,6 @@ from src.infrastructure.agent.core.subagent_tool_set_v2 import (
 from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPManager
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
-from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
@@ -102,7 +102,7 @@ def _make_subagent(name: str = "test-agent") -> SubAgent:
 
 def _make_react_agent(**kwargs):
     """Create a ReActAgent with minimal config for testing."""
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
     defaults = {
         "model": "test-model",
@@ -132,8 +132,8 @@ def _make_processor_mock() -> MagicMock:
 
 
 def _make_runtime_profile(**overrides):
+    from plugins.business.agent.engine.react.react_agent import AgentRuntimeProfile
     from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-    from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
 
     defaults = {
         "selected_agent": None,
@@ -477,8 +477,8 @@ class TestReActAgentBackgroundExecutor:
 @pytest.mark.unit
 class TestReActAgentWorkspaceDelegation:
     @pytest.fixture(autouse=True)
-    def _allow_stream_without_a_database_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """These tests pin an operation but do not persist a plan or chat run."""
+    def _admit_workspace_test_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Workspace delegation runs against a pinned chat turn with no installed packages."""
 
         async def _prepare(*_args: object, **_kwargs: object) -> None:
             return None
@@ -489,7 +489,11 @@ class TestReActAgentWorkspaceDelegation:
         )
         monkeypatch.setattr(
             "src.application.services.chat_run_tool_permission_v2.current_chat_run_guard_v2",
-            lambda: None,
+            lambda: SimpleNamespace(run_id="test-run", sessions=None),
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.core.project_package_tools.bind_project_packages",
+            AsyncMock(return_value=SimpleNamespace(skills={}, subagents={})),
         )
         monkeypatch.setattr(
             "src.application.services.approved_run_tool_permission_v2.prepare_approved_run_guard_v2",
@@ -510,7 +514,7 @@ class TestReActAgentWorkspaceDelegation:
 
         with (
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_agent_capabilities_from_runtime_v2",
                 new=AsyncMock(side_effect=_resolve),
             ),
@@ -777,7 +781,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(),
             ),
@@ -892,7 +896,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(),
             ),
@@ -1032,7 +1036,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(),
             ),
@@ -1080,8 +1084,8 @@ class TestReActAgentWorkspaceDelegation:
         assert config.runtime_context["code_context"]["sandbox_code_root"] == "/workspace/my-game"
 
     async def test_leader_replan_runtime_context_restricts_tools_to_task_ledger(self):
+        from plugins.business.agent.engine.react.react_agent import AgentRuntimeProfile
         from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-        from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
         from src.infrastructure.agent.workspace.runtime_role_contract import (
             WORKSPACE_ROLE_LEADER,
             WORKSPACE_SESSION_ROLE_KEY,
@@ -1182,7 +1186,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(
                     "bash",
@@ -1310,7 +1314,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(),
             ),
@@ -1405,7 +1409,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_current_tools_from_runtime_v2",
                 return_value=_turn_tool_set(),
             ),

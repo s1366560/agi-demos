@@ -29,7 +29,7 @@ pub(super) async fn get(
     )))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod tests {
     use super::*;
     use tower::ServiceExt;

@@ -1,0 +1,11 @@
+{
+  "kind": "business",
+  "plugin_id": "memstack-billing",
+  "services": {},
+  "version": "1.4.0",
+  "provenance": "repo://memstack/plugins/business/billing",
+  "target": "python",
+  "tool_name": "quote",
+  "wasm": "quote.wasm",
+  "contribution": "contributions.json"
+}

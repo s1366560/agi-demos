@@ -27,8 +27,8 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 ## Quick Start
 
 ```bash
-make init          # First run: deps + infra + DB
-make dev           # Start full stack (API + Ray actor worker + infra + web :3000)
+make init          # Fresh checkout: prepare the local publisher and signed business packages
+make dev           # Fresh checkout: start the empty host, install six packages, serve Web on :3000
 make dev-web       # Start frontend on :3000 (new terminal)
 make status        # Check services
 make stop          # Stop all           (alias: dev-stop)
@@ -41,6 +41,11 @@ make fresh         # reset + init + dev
 
 - Agents **MUST** launch the native desktop client from the repository root with
   `make -C agi-stack run-desktop`.
+  This development command follows the same profile as `make dev`. Existing full-stack
+  checkouts open the full client, and standard projects open the package host. Override with
+  `AGISTACK_DESKTOP_PROFILE=package-host` or `AGISTACK_DESKTOP_PROFILE=full`.
+  Unset uses the same package-host behavior. `compat` is the legacy shell and does not
+  enable the full-desktop flag.
 - The desktop shell is Electron and starts the independently built Rust sidecar through its private
   authenticated control pipe. Do not launch the sidecar directly when validating the native client.
 - Do not treat `pnpm run dev` in `agi-stack/apps/desktop` as a native-client launch. It starts only
@@ -52,7 +57,9 @@ make fresh         # reset + init + dev
   agents must not add `keyring`, macOS Keychain, Windows Credential Manager, or Linux Secret Service
   dependencies back into the desktop credential path.
 
-**Default credentials** (auto-created):
+The standard project owner credentials are generated in `.memstack/standard/owner.json`. An existing checkout with a full-stack `.env` continues to use that profile. To select it explicitly, use `MEMSTACK_DEV_PROFILE=full make dev`.
+
+**Full-stack development credentials** (auto-created):
 
 | User | Email | Password |
 |------|-------|----------|
@@ -278,8 +285,8 @@ Patterns for new domain/application/infrastructure layers follow standard DDD; e
 |---|---|
 | API entry | `src/infrastructure/adapters/primary/web/main.py` |
 | Config | `src/configuration/config.py`, `di_container.py` |
-| ReAct agent | `src/infrastructure/agent/core/react_agent.py` |
-| Session processor | `src/infrastructure/agent/processor/processor.py` |
+| ReAct agent | `plugins/business/agent/engine/react/react_agent.py` |
+| Session processor | `plugins/business/agent/engine/processor/processor.py` |
 | Tool wrapping | `src/infrastructure/agent/core/tool_converter.py` |
 | Tools | `src/infrastructure/agent/tools/` (see `todo_tools.py` for pending-events pattern) |
 | Skill resources | `src/infrastructure/agent/skill/` (`skill_resource_loader.py`, `types.py`) |
@@ -287,7 +294,7 @@ Patterns for new domain/application/infrastructure layers follow standard DDD; e
 | Events | `src/domain/events/{agent_events,types}.py`, `src/infrastructure/agent/events/converter.py` |
 | Actor exec | `src/infrastructure/agent/actor/execution.py` |
 | Graph | `src/infrastructure/graph/native_graph_adapter.py`, `extraction/entity_extractor.py`, `search/hybrid_search.py` |
-| Frontend | `web/src/App.tsx`, `pages/tenant/AgentWorkspace.tsx`, `stores/agent/`, `services/agentService.ts` |
+| Frontend | Default hosts: `web/src/projectPackages/` and `agi-stack/apps/desktop/src/packageHost/`. Agent: `plugins/business/agent/ui/web/tenant/AgentWorkspace.tsx` and `plugins/business/agent/ui/web/stores/agent/`. Cloud transport: `web/src/services/agentService.ts`. |
 
 ## API Testing
 
@@ -326,4 +333,4 @@ Cloud Agent VMs do not run systemd as PID 1, and `/usr/sbin/policy-rc.d` rejects
 
 `docker compose` still names the object-storage images `minio/minio:latest` and `minio/mc:latest`. Those Docker Hub repositories are gone. Pull `pgsty/minio:latest` and `pgsty/mc:latest`, then tag them onto the compose names before `docker compose up`. Workspace Core (`Dockerfile.workspace-core`) needs Docker Buildx because the Dockerfile uses BuildKit cache mounts. The API process exits on startup unless Workspace Core is healthy and `.env` contains the tokens from `uv run python scripts/workspace-core/bootstrap-local-env.py --env-file .env`.
 
-The checked-out cloud start path brings up Postgres, Redis, Neo4j, MinIO, Workspace Core, the API on port 8000, and the web console on port 3000. It does not start the Ray head and worker: each is configured for about 4GB plus a 1GB object store. `AGENT_RUNTIME_MODE=auto` keeps the API on the local runtime when Ray is absent. `make dev` still tries to build and start Ray; use that only when the machine can afford it. Sign in at http://localhost:3000 with `admin@memstack.ai` / `adminpassword`. Health check: `curl -fsS http://127.0.0.1:8000/health`.
+The full-stack cloud start path brings up Postgres, Redis, Neo4j, MinIO, Workspace Core, the API on port 8000, and the web console on port 3000. It does not start the Ray head and worker: each is configured for about 4GB plus a 1GB object store. `AGENT_RUNTIME_MODE=auto` keeps the API on the local runtime when Ray is absent. `MEMSTACK_DEV_PROFILE=full make dev` also tries to build and start Ray; use that only when the machine can afford it. Sign in at http://localhost:3000 with `admin@memstack.ai` / `adminpassword`. Health check: `curl -fsS http://127.0.0.1:8000/health`.

@@ -110,3 +110,16 @@ class MarketplacePackageUninstallResponse(BaseModel):
     status: Literal["uninstalled"]
     desired_removed: bool
     revoked_permissions: int
+
+
+class MarketplaceScope(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=64)
+    project_id: str | None = Field(default=None, max_length=64)
+
+
+class MarketplaceMutationRequest(MarketplaceScope):
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    preflight_id: str | None = None
+    approved_permissions: list[str] = Field(default_factory=list)
+    credentials: dict[str, str] = Field(default_factory=dict)

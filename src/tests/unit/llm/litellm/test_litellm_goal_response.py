@@ -8,12 +8,12 @@ from uuid import uuid4
 import pytest
 from litellm import ModelResponse
 
-from src.domain.llm_providers.llm_types import LLMConfig
-from src.domain.llm_providers.models import ProviderConfig, ProviderType
-from src.infrastructure.agent.processor.goal_evaluator import (
+from plugins.business.agent.engine.processor.goal_evaluator import (
     GOAL_COMPLETION_JUDGE_TOOL_V2,
     GoalEvaluator,
 )
+from src.domain.llm_providers.llm_types import LLMConfig
+from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
 
 

@@ -5,6 +5,8 @@
  * Single source of truth for auth token access across httpClient, apiFetch, and services.
  */
 
+import type { User } from '../types/memory';
+
 const ZUSTAND_AUTH_STORAGE_KEY = 'memstack-auth-storage';
 
 type AuthStateClearer = () => void;
@@ -68,6 +70,29 @@ export function getAuthToken(): string | null {
   return null;
 }
 
+export function persistCloudIdentity(token: string, user: User): void {
+  localStorage.setItem(
+    ZUSTAND_AUTH_STORAGE_KEY,
+    JSON.stringify({
+      state: { token, user, isAuthenticated: true },
+      version: 0,
+    })
+  );
+  window.dispatchEvent(new Event('memstack-cloud-identity'));
+}
+
+export function subscribeCloudIdentity(listener: () => void): () => void {
+  function storage(event: StorageEvent) {
+    if (event.key === null || event.key === ZUSTAND_AUTH_STORAGE_KEY) listener();
+  }
+  window.addEventListener('storage', storage);
+  window.addEventListener('memstack-cloud-identity', listener);
+  return () => {
+    window.removeEventListener('storage', storage);
+    window.removeEventListener('memstack-cloud-identity', listener);
+  };
+}
+
 export function registerAuthStateClearer(clearer: AuthStateClearer): () => void {
   authStateClearer = clearer;
 
@@ -88,4 +113,5 @@ export function clearAuthState(): void {
   localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
 
   authStateClearer?.();
+  window.dispatchEvent(new Event('memstack-cloud-identity'));
 }

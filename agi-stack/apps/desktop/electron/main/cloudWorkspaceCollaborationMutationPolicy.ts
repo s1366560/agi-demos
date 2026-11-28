@@ -1,4 +1,4 @@
-import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../../src/features/workspace/workspaceCollaborationHttpMutations';
+import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../../../../../sdk/memstack-plugin-sdk/src/workspaceMutationActions';
 
 const ENVELOPE_KEYS = new Set([
   'contract_version', 'surface', 'action', 'expected_revision', 'idempotency_key', 'payload',

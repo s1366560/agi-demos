@@ -17,6 +17,7 @@ from src.domain.model.plugins.generated_v2 import (
     EventContractV2,
     EventModeV2,
     PluginContractV2,
+    ScopeKindV2,
     ScopeV2,
 )
 
@@ -336,6 +337,35 @@ async def _invoke(handler: Callable[..., Any], *args: object) -> object:
     if inspect.isawaitable(result):
         return await result
     return result
+
+
+def operation_scope_chain_v2(scope: ScopeV2) -> tuple[ScopeV2, ...]:
+    root = ScopeV2(kind=ScopeKindV2.ROOT)
+    if scope.kind is ScopeKindV2.ROOT:
+        return (root,)
+    if scope.tenant_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "tenant scope identifier is required")
+    tenant = ScopeV2(kind=ScopeKindV2.TENANT, tenant_id=scope.tenant_id)
+    if scope.kind is ScopeKindV2.TENANT:
+        return root, tenant
+    if scope.project_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "project scope identifier is required")
+    project = ScopeV2(
+        kind=ScopeKindV2.PROJECT,
+        tenant_id=scope.tenant_id,
+        project_id=scope.project_id,
+    )
+    if scope.kind is ScopeKindV2.PROJECT:
+        return root, tenant, project
+    if scope.session_id is None:
+        raise RuntimeV2Error("invalid_operation_scope", "session scope identifier is required")
+    session = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id=scope.tenant_id,
+        project_id=scope.project_id,
+        session_id=scope.session_id,
+    )
+    return root, tenant, project, session
 
 
 def scope_rank_v2(scope: ScopeV2) -> int:

@@ -100,6 +100,84 @@ async def test_live_recovery_applies_exact_unreceipted_request_on_same_host(live
         await recovery.stop()
 
 
+async def test_lagging_api_replica_catches_up_after_shared_ack(live_requested):
+    import httpx
+
+    from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 import (
+        HttpRoutePublicationCoordinatorV2,
+    )
+    from src.infrastructure.adapters.primary.web.startup.replica_readiness_v2 import (
+        replica_probe_router,
+    )
+    from src.infrastructure.adapters.secondary.persistence.database import get_db
+    from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+    from src.infrastructure.plugins.v2.http_routes import RouteTableRegistryV2
+
+    primary, first, factory, calls = live_requested
+    saved, old, _counts = await _state(factory)
+    peer = FastAPI()
+    second = peer.state.platform_plugin_runtime_v2 = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2()
+    )
+    routes = peer.state.platform_plugin_route_registry_v2 = RouteTableRegistryV2()
+    peer.state.platform_plugin_publication_policy_v2 = (
+        primary.state.platform_plugin_publication_policy_v2
+    )
+    coordinator = peer.state.platform_plugin_http_route_publication_v2 = (
+        HttpRoutePublicationCoordinatorV2(
+            host=second, registry=routes, workspace_core_settings=None
+        )
+    )
+
+    async def session():
+        async with factory() as db:
+            yield db
+
+    for app in (primary, peer):
+        app.include_router(replica_probe_router)
+        app.dependency_overrides[get_db] = session
+    try:
+        previous = await coordinator.publish_snapshot(
+            parse_profile_snapshot_v2(old["snapshot"]),
+            parse_control_envelope_v2(old["envelope"]),
+        )
+        assert previous.plugin_publication.accepted
+        assert await _recovery(primary, first, factory).run_once()
+        before = await _state(factory)
+        assert before[0] == before[1] == saved
+        async with (
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=primary), base_url="http://primary"
+            ) as a,
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=peer), base_url="http://peer") as b,
+        ):
+            assert (await a.get("/health/ready")).status_code == 200
+            response = await b.get("/health/ready")
+            assert response.status_code == 503
+            assert response.json()["reason"] == "generation_mismatch"
+            assert await _recovery(peer, second, factory).run_once()
+            assert (await b.get("/health/ready")).status_code == 200
+            from src.host.operations import project_package_readiness
+
+            async def unavailable_packages(self, db, keys):
+                return False
+
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(
+                    project_package_readiness.ProjectPackageReplicaReadiness,
+                    "ready",
+                    unavailable_packages,
+                )
+                unprepared = await a.get("/health/ready")
+                assert unprepared.status_code == 503
+                assert unprepared.json()["reason"] == "project_package_unavailable"
+        assert await _state(factory) == before
+        assert not await _recovery(peer, second, factory).run_once()
+        assert calls.count(second) == 2
+    finally:
+        await second.close()
+
+
 async def test_foreground_completion_after_prepare_prevents_background_apply(
     live_requested, monkeypatch
 ):

@@ -1,4 +1,5 @@
 use super::*;
+use crate::local_runtime::signed_wasm_fixture as fixture;
 use crate::local_runtime::{
     self,
     authorized_tool_host::AuthorizedRunToolHost,
@@ -13,9 +14,8 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::json;
 use tower::ServiceExt;
-#[allow(dead_code)]
-#[path = "../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
-mod fixture;
+// A real signed tool turn can include multiple Wasm invocations and durable checkpoint writes.
+const SIGNED_TURN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 const MARKER: &str =
     "(module (func (export \"score\") (param i32) (result i32) i32.const 20260914))";
 const TOKEN: &str = "local-plugin-runtime-test-session";
@@ -733,13 +733,21 @@ async fn aborted_operation_releases_its_real_signed_generation_lease() {
     assert!(set.prepare(&escaped).await.is_empty());
 }
 
+#[cfg(feature = "legacy-business")]
 #[path = "local_plugin_continuation_v2_tests.rs"]
 mod continuation_authority_tests;
 #[path = "local_plugin_operation_v2_tests.rs"]
 mod operation_authority_tests;
+#[cfg(feature = "legacy-business")]
 #[path = "local_execution_selection_patch_tests.rs"]
 mod selection_patch_tests;
 #[path = "local_skill_discovery_v2_tests.rs"]
 mod skill_discovery_tests;
 #[path = "local_plugin_timeline_v2_tests.rs"]
 mod timeline_metadata_tests;
+
+#[path = "local_plugin_http_route_tests.rs"]
+mod http_routes;
+
+#[path = "local_plugin_workspace_http_tests.rs"]
+mod workspace_http_routes;

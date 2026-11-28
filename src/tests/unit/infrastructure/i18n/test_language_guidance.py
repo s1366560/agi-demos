@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.plugins.v2.system_prompt import SystemPromptSectionsV2
 
 LANGUAGE_GUIDANCE_TEXT_ZH = (

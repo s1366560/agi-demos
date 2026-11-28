@@ -25,7 +25,7 @@ async def test_bootstrap_failure_settles_exact_run_before_publishing_error(canon
     publish = AsyncMock(side_effect=lambda **_kwargs: order.append("published"))
     with (
         patch(
-            "src.infrastructure.agent.core.project_react_agent.ProjectReActAgent",
+            "plugins.business.agent.engine.react.project_react_agent.ProjectReActAgent",
             side_effect=RuntimeError("snapshot staging failed"),
         ),
         patch("src.infrastructure.agent.actor.execution._settle_root_run_authority", settle),

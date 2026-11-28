@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.react import project_react_agent
 from src.domain.model.plugins.generated_v2 import EventModeV2, ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core import project_react_agent
 from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
     AGENT_LIFECYCLE_CHANGED_EVENT_V2,
     AGENT_LIFECYCLE_NOTIFIER_MODULE_V2,

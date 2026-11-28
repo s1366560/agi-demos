@@ -2,7 +2,7 @@ import { createWorkbenchSnapshotJourneyV2 } from './desktopWorkbenchSnapshotJour
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopRendererGenerationActionsV2 } from '../../plugins/desktopRendererGenerationContextV2';
 import { createDesktopAutomationOperationsV2 } from '../../plugins/desktopAutomationAuthorityModuleV2';
-import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
+import { createProjectWorkspacesV2Client } from '@business/workspace/ui/desktop/project-workspaces/projectWorkspacesV2Client';
 import {
   createDesktopWorkbenchCapabilityClient,
   type DesktopCapabilitySnapshotObserver,

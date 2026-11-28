@@ -1,0 +1,17 @@
+{
+  "schema": "memstack.slot-ui/1",
+  "title": "Knowledge graph",
+  "actions": [
+    {
+      "id": "project-graph",
+      "label": "Project graph",
+      "input": {
+        "label": "Nodes and edges (JSON)",
+        "initial": {
+          "nodes": [],
+          "edges": []
+        }
+      }
+    }
+  ]
+}

@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.schemas.plugin_marketplace import MarketplaceMutationRequest, MarketplaceScope
 from src.application.services.marketplace_signed_scope_v2 import (
     SignedMarketplaceScopeV2,
     signed_installations,
@@ -23,6 +24,9 @@ from src.infrastructure.adapters.primary.web.mcp_application_authority_v2 import
     mcp_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.plugin_marketplace import _require_tenant_admin
+from src.infrastructure.adapters.primary.web.routers.project_marketplace import (
+    mutate_project_installation,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.adapters.secondary.persistence.plugin_marketplace_models_v3 import (
@@ -32,11 +36,6 @@ from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.marketplace_snapshot_cache import reclaim_marketplace_cache
 
 router: APIRouter = APIRouter(prefix="/api/v1/plugin-marketplace/v3", tags=["Plugin Marketplace"])
-
-
-class MarketplaceScope(BaseModel):
-    tenant_id: str = Field(min_length=1, max_length=64)
-    project_id: str | None = Field(default=None, max_length=64)
 
 
 class MarketplaceSourceRequest(MarketplaceScope):
@@ -56,13 +55,6 @@ class MarketplaceInstallRequest(MarketplaceScope):
     preflight_id: str
     approved_permissions: list[str] = Field(default_factory=list)
     idempotency_key: str = Field(min_length=1, max_length=128)
-
-
-class MarketplaceMutationRequest(MarketplaceScope):
-    idempotency_key: str = Field(min_length=1, max_length=128)
-    preflight_id: str | None = None
-    approved_permissions: list[str] = Field(default_factory=list)
-    credentials: dict[str, str] = Field(default_factory=dict)
 
 
 async def authorize_scope(
@@ -172,18 +164,34 @@ async def preflight(
 
 @router.get("/installations")
 async def list_installations(
+    request: Request,
     tenant_id: str,
     project_id: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    await authorize_scope(db, user, tenant_id, project_id)
+    project_packages = []
+    if project_id:
+        from .optional_business_http_v2 import list_project_packages
+
+        # Membership grants access to the signed pages installed in this project.
+        # Source configuration and legacy management records retain their admin policy.
+        project_packages = (await list_project_packages(tenant_id, project_id, request, user, db))[
+            "items"
+        ]
+    try:
+        await authorize_scope(db, user, tenant_id, project_id)
+    except HTTPException as error:
+        if project_id and error.status_code == 403:
+            return {"items": project_packages}
+        raise
     service = PluginMarketplaceV3(db, tenant_id, project_id)
     return {
         "items": [
             service.installation_view(row.payload) for row in await service.records("installation")
         ]
         + await signed_installations(db, tenant_id, project_id)
+        + project_packages
     }
 
 
@@ -213,6 +221,8 @@ async def mutate(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    if installation_id.startswith("project-package:"):
+        return await mutate_project_installation(installation_id, action, data, request, user, db)
     await authorize_scope(db, user, data.tenant_id, data.project_id)
     service = PluginMarketplaceV3(db, data.tenant_id, data.project_id)
     signed = await db.scalar(

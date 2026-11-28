@@ -12,6 +12,7 @@ import httpx
 import pytest
 from websockets.asyncio.client import connect
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.application.services import (
     approved_run_tool_permission_v2 as approved,
     chat_run_tool_permission_v2 as chat,
@@ -22,7 +23,6 @@ from src.infrastructure.agent.hitl.coordinator import HITLCoordinator, ResolveRe
 from src.infrastructure.agent.native_computer_use.permission_result import (
     input_digest as permission_input_digest,
 )
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.tools import native_computer_use as native
 from src.tests.integration.agent.test_native_computer_bridge import PNG
 from src.tests.integration.agent.test_native_computer_websocket import (
@@ -97,7 +97,7 @@ async def test_native_permission_resume_keeps_session_and_next_model_receives_pn
         )
         yield SimpleNamespace(type=StreamEventType.FINISH, data={"reason": "tool_calls"})
 
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.LLMStream.generate", generate)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.LLMStream.generate", generate)
     async with connect(
         f"ws://{transport.address}/native-test",
         additional_headers={"Authorization": "Bearer fixture-u"},

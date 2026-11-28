@@ -10,7 +10,7 @@ import pytest
 class TestProjectMemoryCapabilityInit:
     @pytest.mark.asyncio
     async def test_enables_memory_runtime_without_redis(self) -> None:
-        from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+        from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
 
         agent = ProjectReActAgent.__new__(ProjectReActAgent)
         agent.config = SimpleNamespace(
@@ -37,7 +37,7 @@ class TestProjectMemoryCapabilityInit:
 
     @pytest.mark.asyncio
     async def test_skips_memory_runtime_when_globally_disabled(self) -> None:
-        from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+        from plugins.business.agent.engine.react.project_react_agent import ProjectReActAgent
 
         agent = ProjectReActAgent.__new__(ProjectReActAgent)
         agent.config = SimpleNamespace(

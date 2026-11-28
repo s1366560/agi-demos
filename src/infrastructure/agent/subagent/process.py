@@ -23,11 +23,12 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
+    from plugins.business.agent.engine.processor.factory import ProcessorFactory
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.agent.permission.manager import PermissionManager
-    from src.infrastructure.agent.processor.factory import ProcessorFactory
 
+from plugins.business.agent.engine.processor.run_context import RunContext
 from src.domain.events.agent_events import (
     SubAgentCompletedEvent,
     SubAgentDoomLoopEvent,
@@ -40,7 +41,6 @@ from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 
 from ..doom_loop.detector import DoomLoopDetector
-from ..processor.run_context import RunContext
 from .context_bridge import ContextBridge, SubAgentContext
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,30 @@ class SubAgentProcess:
         """Get the execution result (available after execute completes)."""
         return self._result
 
+    async def _bind_signed_package(self) -> None:
+        from dataclasses import replace
+
+        from src.infrastructure.agent.core.project_package_subagents import (
+            SignedProjectSubAgent,
+            signed_subagent_tools,
+        )
+        from src.infrastructure.agent.core.project_package_tools import current_package_capabilities
+
+        if isinstance(self._subagent, SignedProjectSubAgent):
+            catalog = current_package_capabilities()
+            if catalog is None:
+                raise RuntimeError("missing run-bound signed SubAgent catalog")
+            agent = await catalog.authorize_subagent(
+                self._subagent,
+                self._context.metadata["tenant_id"],
+                self._context.metadata["project_id"],
+            )
+            self._subagent = agent
+            self._context = replace(
+                self._context, system_prompt=agent.system_prompt, memory_context=""
+            )
+            self._tools = signed_subagent_tools(agent, self._tools)
+
     async def execute(self) -> AsyncIterator[dict[str, Any]]:
         """Execute the SubAgent in an independent ReAct loop.
 
@@ -164,6 +188,7 @@ class SubAgentProcess:
         Yields:
             Dict events with subagent_id for frontend routing.
         """
+        await self._bind_signed_package()
         start_time = time.time()
         success = True
         error_msg: str | None = None

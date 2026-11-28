@@ -88,7 +88,7 @@ def _subagent(name: str, *, allowed_tools: list[str] | None = None) -> SubAgent:
 
 
 def _react_agent(*, tools: dict[str, object], subagents: list[SubAgent]):
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
     agent = ReActAgent(
         model="test-model",

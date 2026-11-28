@@ -3,7 +3,10 @@ import { mcpManagementOwnerKey } from './mcpManagementLocationModel';
 import { PluginInstancesV2 } from './PluginInstancesV2';
 import { ComputerUseSettingsPage } from './ComputerUseSettingsPage';
 import { useDesktopRendererAuthorityV2 } from '../../plugins/desktopRendererAuthorityStateV2';
+import { PackageManagement } from '../../packageHost/PackageManagement';
+import { messages as marketLabels } from '../../packageHost/messages';
 import { PluginMarketplaceV3 } from './PluginMarketplaceV3';
+import { DevicePluginSettings } from './DevicePluginSettings';
 import { LocalPluginSettings } from './LocalPluginSettings';
 import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import {
@@ -887,6 +890,11 @@ export function SettingsWindow({
               ) : null}
               {isResourceSection ? (
                 <div className={`settings-resource-container${section === 'plugins' ? ' settings-resource-container--plugins' : ''}`}>
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId ? (
+                    <PackageManagement tenant={config.tenantId} project={config.projectId || null}
+                      full canManage locale={locale} onNavigate={onClose} />
+                  ) : null}
+                  <SettingsIntegrations collapsible={section === 'plugins' && config.mode === 'cloud'}>
                   {section === 'plugins' ? <ComputerUseSettingsPage /> : null}
                   {section === 'plugins' ? <PluginInstancesV2 config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} /> : null}
                   {section === 'plugins' ? (
@@ -902,6 +910,13 @@ export function SettingsWindow({
                     />
                   ) : null}
                   <div id={section === 'plugins' ? 'signed-plugin-marketplace' : undefined} tabIndex={-1}>
+                  {section === 'plugins' && config.mode === 'cloud' && config.tenantId ? (
+                    <DevicePluginSettings
+                      key={JSON.stringify([config.apiBaseUrl, auth.user?.user_id, config.tenantId, config.projectId])}
+                      tenant={config.tenantId}
+                      project={config.projectId}
+                    />
+                  ) : null}
                   {section === 'plugins' && !pluginMarketplaceSettingsAvailable(config.mode) ? (
                     <LocalPluginSettings config={config} operations={pluginMarketplaceOperationsV2} canManage={canManagePluginControlPlane} />
                   ) : (
@@ -1015,6 +1030,7 @@ export function SettingsWindow({
                       loading={platformPluginUiSlots.loading}
                     />
                   ) : null}
+                  </SettingsIntegrations>
                 </div>
               ) : null}
             </main>
@@ -1026,6 +1042,16 @@ export function SettingsWindow({
   );
 
   return createPortal(windowContent, document.body);
+}
+
+function SettingsIntegrations({collapsible, children}: {collapsible: boolean; children: React.ReactNode}) {
+  const [open, setOpen] = useState(false);
+  return collapsible ? (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{marketLabels.moreIntegrations}</summary>
+      {open && children}
+    </details>
+  ) : <>{children}</>;
 }
 
 function SettingsGroup({

@@ -12,7 +12,7 @@ import type {
   RuntimePoolQuery,
   RuntimePoolScope,
   RuntimePoolStatus,
-} from '../features/runtime-pool/runtimePoolClient';
+} from '@business/environments/ui/desktop/runtime-pool/runtimePoolClient';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 import {

@@ -16,7 +16,7 @@ import {
 import type {
   CloudMemoryCommand,
   CloudMemoryOptions,
-} from '../features/project-knowledge/cloudMemoryClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/cloudMemoryClient';
 import {
   prepareCloudMemoryCommand,
   prepareCloudMemoryOptions,
@@ -29,8 +29,8 @@ import {
   type ProjectMemoriesSnapshot,
   type ProjectMemory,
   type ProjectMemoriesPageOptions,
-} from '../features/project-knowledge/projectMemoriesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectMemoriesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import type {
   NativeKnowledgeCommand,

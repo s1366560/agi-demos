@@ -5,11 +5,15 @@ use super::*;
 mod activity_read_state;
 #[cfg(test)]
 mod activity_read_state_tests;
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/artifact_content.rs"]
 mod artifact_content;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/artifact_content_tests.rs"]
 mod artifact_content_tests;
+#[path = "../../../../../../plugins/business/agent/desktop-sidecar/conversation_title.rs"]
 mod conversation_title;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/agent/desktop-sidecar/conversation_title_tests.rs"]
 mod conversation_title_tests;
 pub(super) mod managed_resources;
 #[cfg(test)]
@@ -18,17 +22,20 @@ mod mcp_apps;
 pub(super) use mcp_apps::native as device_mcp_contract;
 #[cfg(test)]
 mod mcp_apps_tests;
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/project_overview.rs"]
 mod project_overview;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/project_overview_tests.rs"]
 mod project_overview_tests;
-mod sandbox_files;
-#[cfg(test)]
-mod sandbox_files_tests;
+#[path = "../../../../../../plugins/business/knowledge/desktop-sidecar/search.rs"]
 mod search;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/knowledge/desktop-sidecar/search_tests.rs"]
 mod search_tests;
+#[path = "../../../../../../plugins/business/agent/desktop-sidecar/tenant_agent_bindings.rs"]
 mod tenant_agent_bindings;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/agent/desktop-sidecar/tenant_agent_bindings_tests.rs"]
 mod tenant_agent_bindings_tests;
 mod tenant_analytics;
 #[cfg(test)]
@@ -36,8 +43,10 @@ mod tenant_analytics_tests;
 mod tenant_overview;
 #[cfg(test)]
 mod tenant_overview_tests;
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/tenant_projects.rs"]
 mod tenant_projects;
 #[cfg(test)]
+#[path = "../../../../../../plugins/business/workspace/desktop-sidecar/tenant_projects_tests.rs"]
 mod tenant_projects_tests;
 #[cfg(test)]
 mod v1_retirement_tests;
@@ -216,7 +225,6 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
                 .patch(retired_platform_plugin_v1)
                 .delete(retired_platform_plugin_v1),
         )
-        .merge(sandbox_files::router())
 }
 
 async fn retired_managed_plugin_v1_read(

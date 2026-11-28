@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.agent.processor import ToolDefinition
-from src.infrastructure.agent.processor.goal_evaluator import (
+from plugins.business.agent.engine.processor import ToolDefinition
+from plugins.business.agent.engine.processor.goal_evaluator import (
     GOAL_COMPLETION_JUDGE_TOOL_V2,
     GoalEvaluator,
     GoalJudgmentAuditV2,

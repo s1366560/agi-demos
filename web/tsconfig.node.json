@@ -12,6 +12,7 @@
         "allowSyntheticDefaultImports": true
     },
     "include": [
-        "vite.config.ts"
+        "vite.config.ts",
+        "playwright.project-packages.config.ts"
     ]
 }

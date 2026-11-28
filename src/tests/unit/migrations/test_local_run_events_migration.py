@@ -33,18 +33,20 @@ def test_revision_follows_the_execution_target_head() -> None:
     assert migration.down_revision == "e8a1b2c3d4f5"
 
 
-def test_upgrade_skips_when_the_event_table_exists() -> None:
+def test_upgrade_skips_when_the_event_table_exists(monkeypatch) -> None:
     migration = _load_migration()
     operation = Mock()
     migration.op = operation
-    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=lambda _name: True)
+    monkeypatch.setattr(
+        migration.sa, "inspect", lambda _bind: SimpleNamespace(has_table=lambda _name: True)
+    )
 
     migration.upgrade()
 
     operation.create_table.assert_not_called()
 
 
-def test_upgrade_skips_when_the_authority_table_is_absent() -> None:
+def test_upgrade_skips_when_the_authority_table_is_absent(monkeypatch) -> None:
     migration = _load_migration()
     operation = Mock()
     migration.op = operation
@@ -52,14 +54,14 @@ def test_upgrade_skips_when_the_authority_table_is_absent() -> None:
     def has_table(name: str) -> bool:
         return False
 
-    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=has_table)
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: SimpleNamespace(has_table=has_table))
 
     migration.upgrade()
 
     operation.create_table.assert_not_called()
 
 
-def test_upgrade_creates_the_event_table_when_the_authority_table_exists() -> None:
+def test_upgrade_creates_the_event_table_when_the_authority_table_exists(monkeypatch) -> None:
     migration = _load_migration()
     operation = Mock()
     migration.op = operation
@@ -67,18 +69,20 @@ def test_upgrade_creates_the_event_table_when_the_authority_table_exists() -> No
     def has_table(name: str) -> bool:
         return name == "agent_run_authorities"
 
-    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=has_table)
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: SimpleNamespace(has_table=has_table))
 
     migration.upgrade()
 
     operation.create_table.assert_called_once()
 
 
-def test_downgrade_skips_when_the_event_table_is_absent() -> None:
+def test_downgrade_skips_when_the_event_table_is_absent(monkeypatch) -> None:
     migration = _load_migration()
     operation = Mock()
     migration.op = operation
-    migration.sa.inspect = lambda _bind: SimpleNamespace(has_table=lambda _name: False)
+    monkeypatch.setattr(
+        migration.sa, "inspect", lambda _bind: SimpleNamespace(has_table=lambda _name: False)
+    )
 
     migration.downgrade()
 

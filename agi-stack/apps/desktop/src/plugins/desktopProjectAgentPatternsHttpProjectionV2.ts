@@ -9,12 +9,12 @@ import {
   requireProjectAgentScope,
   requireText,
   type ProjectAgentScope,
-} from '../features/project-agent/projectAgentClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import {
   PROJECT_AGENT_PATTERNS_LOCAL_REASON,
   type ProjectAgentPattern,
   type ProjectAgentPatternsSnapshot,
-} from '../features/project-agent/projectAgentPatternsClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentPatternsClient';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectAgentPatternsRuntimeConfigV2,

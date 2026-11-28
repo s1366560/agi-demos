@@ -12,7 +12,7 @@ Tests the validator against the AgentSkills.io specification:
 
 import pytest
 
-from src.infrastructure.skill.validator import (
+from plugins.business.agent.skill_validation.validator import (
     AgentSkillsValidator,
     AllowedTool,
     SkillValidationError,

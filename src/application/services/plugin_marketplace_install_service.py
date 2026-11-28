@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from src.application.schemas.plugin_marketplace import MarketplacePackageRequest
-from src.application.services.plugin_marketplace_desired_bundle_service_v2 import (
-    PluginMarketplaceDesiredBundleServiceV2,
-)
 from src.domain.model.plugins.generated_v2 import (
+    BundleManifestV2,
     BundleReferenceV2,
     ScopeKindV2,
     ScopeV2,
@@ -23,10 +22,18 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
     PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.plugins.governance import sha256_hex
-from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
+from src.infrastructure.plugins.package_registry import RegistryPluginArtifact, normalize_registry
 from src.infrastructure.plugins.v2.bundle_archive import parse_bundle_archive_v2
-from src.infrastructure.plugins.v2.protocol import bundle_manifest_v2_to_payload
+from src.infrastructure.plugins.v2.protocol import (
+    bundle_manifest_v2_to_payload,
+    parse_bundle_manifest_v2,
+)
 from src.infrastructure.plugins.v2.scan_evidence_v2 import resolve_security_scan_status_v2
+
+if TYPE_CHECKING:
+    from src.application.services.plugin_marketplace_desired_bundle_service_v2 import (
+        PluginMarketplaceDesiredBundleServiceV2,
+    )
 
 
 class MarketplaceArtifactClient(Protocol):
@@ -47,6 +54,7 @@ class MarketplaceInstallDecision:
     reason: str
     desired_revision: int | None = None
     desired_changed: bool = False
+    project_archive: bytes | None = field(default=None, repr=False, compare=False)
 
 
 class PluginMarketplaceInstallService:
@@ -55,15 +63,19 @@ class PluginMarketplaceInstallService:
     def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         repository: PlatformPluginGovernanceRepository,
-        desired_bundles: PluginMarketplaceDesiredBundleServiceV2,
+        desired_bundles: PluginMarketplaceDesiredBundleServiceV2
+        | Callable[[], PluginMarketplaceDesiredBundleServiceV2]
+        | None,
         artifact_client: MarketplaceArtifactClient,
         *,
         trusted_public_keys: tuple[str, ...],
+        allowed_registries: frozenset[str],
     ) -> None:
         self._repository = repository
         self._desired_bundles = desired_bundles
         self._artifact_client = artifact_client
         self._trusted_public_keys = trusted_public_keys
+        self._allowed_registries = frozenset(normalize_registry(r) for r in allowed_registries)
 
     async def request_install(
         self,
@@ -74,10 +86,14 @@ class PluginMarketplaceInstallService:
         """Approve only a signed, provenance-bearing, permission-approved v2 Bundle."""
         try:
             _admit_install_request(request, trusted_public_keys=self._trusted_public_keys)
+            registry = normalize_registry(request.artifact.registry)
+            if registry not in self._allowed_registries:
+                raise ValueError("OCI registry is not permitted by deployment policy")
             existing = await self._repository.get_package_version(
                 request.plugin_id,
                 request.version,
             )
+            scan_status = _current_scan_status(existing)
             catalog_material: _CatalogSignatureMaterial | None = None
             if request.signature is None or request.provenance is None:
                 catalog_material = _resolve_catalog_signature_material(
@@ -92,7 +108,7 @@ class PluginMarketplaceInstallService:
                 )
 
             artifact = await self._artifact_client.fetch(
-                registry=request.artifact.registry,
+                registry=registry,
                 repository=request.artifact.repository,
                 manifest_digest=request.artifact.manifest_sha256,
             )
@@ -108,33 +124,19 @@ class PluginMarketplaceInstallService:
             )
             bundle = verified.manifest
             bundle_payload = bundle_manifest_v2_to_payload(bundle)
-            if bundle_payload != request.manifest:
-                raise ValueError("Bundle descriptor differs from its catalog declaration")
-            if bundle.bundle_id != request.plugin_id or bundle.version != request.version:
-                raise ValueError("Bundle identity differs from the marketplace package")
-            if any(manifest.trust is TrustKindV2.BUILTIN for manifest in bundle.manifests):
-                raise ValueError("marketplace Bundle cannot claim builtin trust")
-            signature = bundle.signature
-            if signature is None:
-                raise ValueError("marketplace Bundle must carry a detached signature")
             signature_record, provenance_record = _install_records(
                 request,
-                signature=signature,
+                signature=_catalog_signature(bundle, bundle_payload, request),
                 bundle_provenance=bundle.provenance,
                 catalog_material=catalog_material,
                 trusted_public_keys=self._trusted_public_keys,
             )
-            _validate_immutable_package_version(
-                existing,
-                publisher=request.publisher,
-                artifact=artifact,
-                artifact_digest=request.artifact_sha256,
-                manifest=bundle_payload,
-                signature=signature_record,
-                provenance=provenance_record,
-            )
-
-            _ = await self._repository.upsert_package(
+            project_archive = any(item.path == "contributions.json" for item in bundle.artifacts)
+            if project_archive and not request.project_id:
+                raise ValueError("a project must own this business package")
+            if not project_archive and self._desired_bundles is None:
+                raise ValueError("the package kernel requires signed project contributions")
+            candidate = PlatformPluginPackageModel(
                 plugin_id=bundle.bundle_id,
                 version=bundle.version,
                 publisher=request.publisher,
@@ -145,9 +147,36 @@ class PluginMarketplaceInstallService:
                 manifest=bundle_payload,
                 signature=signature_record,
                 provenance=provenance_record,
-                security_scan_status=resolve_security_scan_status_v2(None),
+                security_scan_status=scan_status,
+                install_status="installed",
             )
-            mutation = await self._desired_bundles.install(
+            registered = await self._repository.register_immutable_release(candidate)
+            _current_scan_status(registered)
+            _validate_immutable_package_version(
+                registered,
+                publisher=request.publisher,
+                artifact=artifact,
+                artifact_digest=request.artifact_sha256,
+                manifest=bundle_payload,
+                signature=signature_record,
+                provenance=provenance_record,
+            )
+            registered.install_status = "installed"
+            if project_archive:
+                return MarketplaceInstallDecision(
+                    status="approved",
+                    plugin_id=request.plugin_id,
+                    version=request.version,
+                    reason="signed project package verified",
+                    project_archive=artifact.archive,
+                )
+            assert self._desired_bundles is not None
+            desired = (
+                self._desired_bundles()
+                if callable(self._desired_bundles)
+                else self._desired_bundles
+            )
+            mutation = await desired.install(
                 scope=ScopeV2(
                     kind=ScopeKindV2.PROJECT if request.project_id else ScopeKindV2.TENANT,
                     tenant_id=request.tenant_id,
@@ -184,6 +213,34 @@ class PluginMarketplaceInstallService:
                 version=request.version,
                 reason=str(exc),
             )
+
+
+def _catalog_signature(
+    bundle: BundleManifestV2, bundle_payload: dict[str, object], request: MarketplacePackageRequest
+) -> str:
+    if bundle_payload != request.manifest:
+        # Publishers submit bundle.json; the stored projection also contains optional null fields.
+        try:
+            declared = parse_bundle_manifest_v2(request.manifest)
+        except ValueError as error:
+            raise ValueError("Bundle descriptor differs from its catalog declaration") from error
+        if declared != bundle:
+            raise ValueError("Bundle descriptor differs from its catalog declaration")
+    if bundle.bundle_id != request.plugin_id or bundle.version != request.version:
+        raise ValueError("Bundle identity differs from the marketplace package")
+    if any(manifest.trust is TrustKindV2.BUILTIN for manifest in bundle.manifests):
+        raise ValueError("marketplace Bundle cannot claim builtin trust")
+    if bundle.signature is None:
+        raise ValueError("marketplace Bundle must carry a detached signature")
+    return bundle.signature
+
+
+def _current_scan_status(existing: PlatformPluginPackageModel | None) -> str:
+    if existing is None:
+        return resolve_security_scan_status_v2(None)
+    if existing.security_scan_status == "failed":
+        raise ValueError("marketplace package failed security scanning")
+    return existing.security_scan_status
 
 
 def _bundle_source(bundle_id: str, version: str) -> str:

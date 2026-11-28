@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.environments.backend.cluster_health import health_metrics, project_health
 from src.application.schemas.acp_runner_schemas import (
     ACPRunnerPoolCreate,
     ACPRunnerPoolResponse,
@@ -42,37 +43,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clusters", tags=["Clusters"])
 
 
-def _health_config(provider_config: dict[str, object]) -> dict[str, object]:
-    health = provider_config.get("health")
-    return dict(cast(dict[str, object], health)) if isinstance(health, dict) else {}
-
-
-def _as_float(value: object) -> float | None:
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
-def _as_int(value: object) -> int | None:
-    numeric = _as_float(value)
-    return int(numeric) if numeric is not None else None
-
-
-def _usage_percent(used: object, total: object) -> float | None:
-    used_value = _as_float(used)
-    total_value = _as_float(total)
-    if used_value is None or total_value is None or total_value <= 0:
-        return None
-    return round(min(max((used_value / total_value) * 100, 0), 100), 2)
-
-
 def _cluster_not_found_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -94,32 +64,10 @@ async def _require_cluster_admin(
 
 
 def _cluster_health_response(cluster: Cluster) -> ClusterHealthResponse:
-    provider_config = cluster.provider_config or {}
-    health = _health_config(provider_config)
-
-    node_count = (
-        _as_int(health.get("total_nodes"))
-        or _as_int(provider_config.get("node_count"))
-        or _as_int(provider_config.get("nodes"))
-        or 0
-    )
-
-    cpu_usage = _as_float(health.get("cpu_usage"))
-    if cpu_usage is None:
-        cpu_usage = _usage_percent(health.get("used_cpu"), health.get("total_cpu"))
-    memory_usage = _as_float(health.get("memory_usage"))
-    if memory_usage is None:
-        memory_usage = _usage_percent(
-            health.get("used_memory_gb"),
-            health.get("total_memory_gb"),
-        )
-
     return ClusterHealthResponse(
         status=cluster.health_status or cluster.status.value,
-        node_count=node_count,
-        cpu_usage=cpu_usage,
-        memory_usage=memory_usage,
         checked_at=cluster.last_health_check,
+        **project_health(health_metrics(cluster.provider_config or {})),
     )
 
 

@@ -10,7 +10,7 @@ import type {
   TenantGeneReview,
   TenantGenesClient,
   TenantGenesSnapshot,
-} from '../features/tenant-admin/tenantGenesClient';
+} from '@business/environments/ui/desktop/tenant-admin/tenantGenesClient';
 import type {
   TenantManagementRequestOptions,
   TenantManagementScope,

@@ -9,9 +9,11 @@ from typing import Any, cast
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.routing import APIRoute, request_response
 from pydantic import BaseModel
-from sqlalchemy import select
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
+from plugins.business.workspace.backend.workspace_directory_export import (
+    export_workspace_directory,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_actor,
     get_current_user,
@@ -39,14 +41,14 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
 from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
     workspace_core_client_v2_from_request,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.feature_operations import (
     FeatureOperationOwnerV2,
     builtin_feature_owner_v2,
 )
 from src.infrastructure.workspace_core.client import WorkspaceCoreClientError
+from src.infrastructure.workspace_core.project_membership import project_membership_header
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +244,23 @@ async def _proxy_workspace_request(
         )
         return _workspace_core_unavailable()
 
+    # Only the workspace directory contract declares this parameter. Core has already
+    # applied workspace membership, tenant, project, ordering and pagination.
+    export_package = endpoint_values.get("export_package")
+    if isinstance(export_package, str) and upstream.status_code == 200:
+        async with async_session_factory() as db:
+            return await export_workspace_directory(
+                upstream,
+                db=db,
+                actor=endpoint_values["current_user"],
+                tenant=endpoint_values["tenant_id"],
+                project=endpoint_values["project_id"],
+                plugin=export_package,
+                keys=tuple(
+                    getattr(request.app.state, "plugin_marketplace_trusted_public_keys_v2", ())
+                ),
+            )
+
     response_headers = {
         name: value
         for name, value in upstream.headers.items()
@@ -255,8 +274,6 @@ async def _proxy_workspace_request(
 
 
 _PROJECT_CREATE_PATH_SUFFIX = "/workspaces"
-_MEMBERSHIP_ROLE_HEADER = "x-memstack-project-membership-role"
-_MEMBERSHIP_ROLES = frozenset({"owner", "admin", "editor", "member", "viewer"})
 
 
 async def _project_membership_role_header(
@@ -283,18 +300,7 @@ async def _project_membership_role_header(
     if not project_id or user_id is None:
         return None
     async with async_session_factory() as session:
-        result = await session.execute(
-            refresh_select_statement(
-                select(UserProject.role).where(
-                    UserProject.user_id == str(user_id),
-                    UserProject.project_id == project_id,
-                )
-            )
-        )
-        role = result.scalar_one_or_none()
-    if role is None:
-        return None
-    return (_MEMBERSHIP_ROLE_HEADER, role if role in _MEMBERSHIP_ROLES else "member")
+        return await project_membership_header(session, str(user_id), project_id)
 
 
 def _proxy_request_headers(

@@ -1,0 +1,11 @@
+{
+  "name": {
+    "en": "Workspace",
+    "zh": "工作空间"
+  },
+  "description": {
+    "en": "Create workspaces, manage their settings and export directory records to CSV.",
+    "zh": "创建和管理项目工作区，将目录导出为 CSV。"
+  },
+  "icon": "panels-top-left"
+}

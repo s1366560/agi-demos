@@ -16,8 +16,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_health_service import HealthCheckLevel, SandboxHealthService
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
+from plugins.business.environments.backend.sandbox.sandbox_health_service import (
+    HealthCheckLevel,
+    SandboxHealthService,
+)
 from src.application.services.sandbox_profile import list_profiles
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxStatus

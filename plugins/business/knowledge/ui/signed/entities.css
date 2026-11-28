@@ -1,0 +1,8 @@
+@import 'tailwindcss' source(none);
+@source '../web/project/createEntitiesList.tsx';
+@source '../web/project/entities/entityTypeColor.ts';
+@source '../../../../../sdk/memstack-plugin-sdk/ui';
+@theme {
+  --text-2xs: 0.625rem;
+  --color-surface-dark: #151a24;
+}

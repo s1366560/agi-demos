@@ -731,7 +731,7 @@
       },
       "contract_digest": "sha256:2552b79c90f852bb0d710cd2b0fcb28a71786db1ea2502126b7cea724a552963",
       "artifact": {
-        "digest": "sha256:29c6f520a989bc58e31f5079a956b5ae3afeaf02daa8deb1cf7d38f384388e13",
+        "digest": "sha256:5acc81d2d7bf53245594cecdcd91bb8e63406f459ef6653e0b997100a807d65e",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -998,7 +998,7 @@
       },
       "contract_digest": "sha256:e5912b479000b04123d4cda8d863251fecf07be458cc1eeef9deae903340a3a3",
       "artifact": {
-        "digest": "sha256:5fa4669c71026c6f3463680ec4dbfeec24d441050c949d03bfa32f5e7ae2f8e5",
+        "digest": "sha256:73a4b685183c61ece0a07ce1ca36434f2fcbdf0e73c1020d4c340ea8f46cf02b",
         "source": "repo+python://src/infrastructure/plugins/v2/graph_runtime.py"
       }
     },
@@ -1051,7 +1051,7 @@
     },
     {
       "module_ref": "builtin://memstack/sandbox/mcp-docker-runtime",
-      "entrypoint": "src.infrastructure.plugins.v2.sandbox_runtime:sandbox_runtime_definition_v2",
+      "entrypoint": "plugins.business.environments.backend.sandbox.sandbox_runtime:sandbox_runtime_definition_v2",
       "targets": [
         "python"
       ],
@@ -1090,13 +1090,13 @@
       },
       "contract_digest": "sha256:744d4dfe3936dc34aab51e9448d9c7af2992f91a0f31187bbcfb88db35725612",
       "artifact": {
-        "digest": "sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d6914ac03392179f93d",
-        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+        "digest": "sha256:0f85779a3a64fb79be9fad31e7c88aac086dc42b5e83936ffc05c97b8a88d097",
+        "source": "repo+python://plugins/business/environments/backend/sandbox/sandbox_runtime.py"
       }
     },
     {
       "module_ref": "builtin://memstack/application/sandbox-services",
-      "entrypoint": "src.infrastructure.plugins.v2.sandbox_runtime:sandbox_application_definition_v2",
+      "entrypoint": "plugins.business.environments.backend.sandbox.sandbox_runtime:sandbox_application_definition_v2",
       "targets": [
         "python"
       ],
@@ -1137,13 +1137,13 @@
       },
       "contract_digest": "sha256:f29bd4c6f75433ffdeff09ff681c255009eae20b4db5778f979ac76be3631e95",
       "artifact": {
-        "digest": "sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d6914ac03392179f93d",
-        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py"
+        "digest": "sha256:0f85779a3a64fb79be9fad31e7c88aac086dc42b5e83936ffc05c97b8a88d097",
+        "source": "repo+python://plugins/business/environments/backend/sandbox/sandbox_runtime.py"
       }
     },
     {
       "module_ref": "builtin://memstack/sandbox/http-service-registry",
-      "entrypoint": "src.infrastructure.plugins.v2.sandbox_http_service_registry:sandbox_http_service_registry_definition_v2",
+      "entrypoint": "plugins.business.environments.backend.sandbox.sandbox_http_service_registry:sandbox_http_service_registry_definition_v2",
       "targets": [
         "python"
       ],
@@ -1178,8 +1178,8 @@
       },
       "contract_digest": "sha256:3d7a635d9989bc2344b83c36822e5d7c99b1ce9f9afedd8e13fca81ff5806c55",
       "artifact": {
-        "digest": "sha256:11b2d4955d1b4b56b4cd134f9d91fb19b10d82ab9068b0e4b918cf2a967f17e7",
-        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_http_service_registry.py"
+        "digest": "sha256:11909652173730a64731963ddaa7a886b885f81dd4f6cb39a8e76e9be2a92061",
+        "source": "repo+python://plugins/business/environments/backend/sandbox/sandbox_http_service_registry.py"
       }
     },
     {
@@ -1245,7 +1245,7 @@
       },
       "contract_digest": "sha256:4661b355f90a336a8c26ea3f9cbf11c84fb7aee80847e109245a0bbb150d739c",
       "artifact": {
-        "digest": "sha256:884484c77780107eb00694803390e36b2a9f01b5bd93adab6ff148425655adcf",
+        "digest": "sha256:0d21d6f1d618e9e18bb1c8c3857922f01bed620039f7d20b34ffc1735d78d520",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
@@ -1335,7 +1335,7 @@
     },
     {
       "module_ref": "builtin://memstack/sandbox/operation-service-provider",
-      "entrypoint": "src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_provider_definition_v2",
+      "entrypoint": "plugins.business.environments.backend.sandbox.sandbox_operation_services:sandbox_operation_provider_definition_v2",
       "targets": [
         "python"
       ],
@@ -1376,13 +1376,13 @@
       },
       "contract_digest": "sha256:f12298ec43cfbe059cb0a23c30a00519171af18a10385b9c7930246c3b264af6",
       "artifact": {
-        "digest": "sha256:b15c934ac0309e3aa2f2a7b4955dbcad58e53e0143c8265db27793deb841db70",
-        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
+        "digest": "sha256:358cda1d3e1a660f43a0ad570f80a2648f3d10181d347828b62d3674d8e2a4cb",
+        "source": "repo+python://plugins/business/environments/backend/sandbox/sandbox_operation_services.py"
       }
     },
     {
       "module_ref": "builtin://memstack/application/sandbox-operation-services",
-      "entrypoint": "src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_application_definition_v2",
+      "entrypoint": "plugins.business.environments.backend.sandbox.sandbox_operation_services:sandbox_operation_application_definition_v2",
       "targets": [
         "python"
       ],
@@ -1423,8 +1423,8 @@
       },
       "contract_digest": "sha256:b5de20c732299c8b212b78d631a2ed70828ab4929f0576a390cbe6f3a6967124",
       "artifact": {
-        "digest": "sha256:b15c934ac0309e3aa2f2a7b4955dbcad58e53e0143c8265db27793deb841db70",
-        "source": "repo+python://src/infrastructure/plugins/v2/sandbox_operation_services.py"
+        "digest": "sha256:358cda1d3e1a660f43a0ad570f80a2648f3d10181d347828b62d3674d8e2a4cb",
+        "source": "repo+python://plugins/business/environments/backend/sandbox/sandbox_operation_services.py"
       }
     },
     {
@@ -1470,7 +1470,7 @@
       },
       "contract_digest": "sha256:10868f4371f5689a787195fe94b2333b1427b7cfe81d239d764a48695b4fd354",
       "artifact": {
-        "digest": "sha256:26dba50a435238d3af13e0b90eac40c529cd7ae533ae0b4803b4af26911a63c1",
+        "digest": "sha256:dcf427cf42a043f1e758849f1672264793272d3616069a7e81a3927918e3e7ad",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -1517,7 +1517,7 @@
       },
       "contract_digest": "sha256:e135f2957e11313055a0137dcf3f8231af583ee046e6d9aec89e90197d4ad1ed",
       "artifact": {
-        "digest": "sha256:26dba50a435238d3af13e0b90eac40c529cd7ae533ae0b4803b4af26911a63c1",
+        "digest": "sha256:dcf427cf42a043f1e758849f1672264793272d3616069a7e81a3927918e3e7ad",
         "source": "repo+python://src/infrastructure/plugins/v2/mcp_services.py"
       }
     },
@@ -1558,7 +1558,7 @@
       },
       "contract_digest": "sha256:f04be927f8996c45a457afe3e6cb45f23761de4c30387ca1446d6def476a4111",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
@@ -1599,7 +1599,7 @@
       },
       "contract_digest": "sha256:657cae4d7231d5e75e4fbf8ffc217a7d2333db11ffec875d545202189f80f4b0",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
@@ -1738,7 +1738,7 @@
       },
       "contract_digest": "sha256:9a38e3615185d337f154cbbea40254edd2785871efc0c3a2d3aa7d54eb421281",
       "artifact": {
-        "digest": "sha256:a9d65d2290a76019f68b3fb9b1df294a665338b4049d40d17829673107549b56",
+        "digest": "sha256:b33e12fd28af5a437229f19b2a0f0645b95339a99dcb66224cbd7d148ac36f12",
         "source": "repo+python://src/infrastructure/plugins/v2/cluster_services.py"
       }
     },
@@ -1785,7 +1785,7 @@
       },
       "contract_digest": "sha256:c6926310c8e49a59d6dba9bc17b02eb50fa132f456633718de318617da9994f4",
       "artifact": {
-        "digest": "sha256:a9d65d2290a76019f68b3fb9b1df294a665338b4049d40d17829673107549b56",
+        "digest": "sha256:b33e12fd28af5a437229f19b2a0f0645b95339a99dcb66224cbd7d148ac36f12",
         "source": "repo+python://src/infrastructure/plugins/v2/cluster_services.py"
       }
     },
@@ -1826,7 +1826,7 @@
       },
       "contract_digest": "sha256:cfe78e125f46fd3b46c434766b00de4d63f0c89e03dbc4ea115365dfd379298c",
       "artifact": {
-        "digest": "sha256:02d383d049972b35f761582842b937dc4d803ec7d2f8f5938377b579f85052bb",
+        "digest": "sha256:a3ec9b59be6a3ffc27702c43f34e1503dfcce383991f134aa4da4084a07bcafb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },
@@ -1873,7 +1873,7 @@
       },
       "contract_digest": "sha256:6f4934939d317226e7b1434fc6519e905a25f4d2940a6482c8f74b7eb6128b2b",
       "artifact": {
-        "digest": "sha256:02d383d049972b35f761582842b937dc4d803ec7d2f8f5938377b579f85052bb",
+        "digest": "sha256:a3ec9b59be6a3ffc27702c43f34e1503dfcce383991f134aa4da4084a07bcafb",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_deploy_services.py"
       }
     },
@@ -2448,13 +2448,17 @@
             "strategy": {
               "const": "operation-async-session",
               "type": "string"
+            },
+            "policy_archive_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
             }
           }
         }
       },
-      "contract_digest": "sha256:2390139880f8fcf586e35494cd45cee5ef1f424e285a010d5bbde71b48dae88b",
+      "contract_digest": "sha256:e98d412219b9d594de61faae6f4f550097dfce2aa3e3c4d9e4249ea3fee2525a",
       "artifact": {
-        "digest": "sha256:43d99dc52b246c258ef6954b78adf90293ea52c10e6ca10e322e7a3470683975",
+        "digest": "sha256:6395a8803a84da6736f2c0a0150e37637d0edf8958acb1770277a8d409655a06",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -2501,7 +2505,7 @@
       },
       "contract_digest": "sha256:b24aa25b2711be8734c6b36445a1d657fbf4d02c663a449a02920a7fcabe4465",
       "artifact": {
-        "digest": "sha256:43d99dc52b246c258ef6954b78adf90293ea52c10e6ca10e322e7a3470683975",
+        "digest": "sha256:6395a8803a84da6736f2c0a0150e37637d0edf8958acb1770277a8d409655a06",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -2542,7 +2546,7 @@
       },
       "contract_digest": "sha256:02af02e8cb294884c9a2f0b39dfaf9afb2ff06b2042790bf2d9d3ebdea665b8d",
       "artifact": {
-        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "digest": "sha256:af2002104829e03afa3557fd043203775c1f4d77beabd417617dfe3ad35e3542",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
       }
     },
@@ -2583,7 +2587,7 @@
       },
       "contract_digest": "sha256:e339dcb6ac062dac12a16dec5ccf6f2e30958d08e122facd339fa4da3ef81427",
       "artifact": {
-        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "digest": "sha256:af2002104829e03afa3557fd043203775c1f4d77beabd417617dfe3ad35e3542",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
       }
     },
@@ -2635,7 +2639,7 @@
       },
       "contract_digest": "sha256:1269c35c50de273ec2b74b650ddb855c27f9ccf2be368c09e01dda99851a9048",
       "artifact": {
-        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "digest": "sha256:af2002104829e03afa3557fd043203775c1f4d77beabd417617dfe3ad35e3542",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
       }
     },
@@ -2940,7 +2944,7 @@
       },
       "contract_digest": "sha256:a9b8870be2c318dd8ea89a1efcf78b597e8b4de469b670f461b424137d25c9a7",
       "artifact": {
-        "digest": "sha256:32830866e0da86fc02af22a35b3268ed31c8a24c078f8e045e64db802de5e7fb",
+        "digest": "sha256:dba14ceb5b404298b04519150e159dea200af64b686ecfc682b6d8242f6cc334",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_webhook_services.py"
       }
     },
@@ -2987,7 +2991,7 @@
       },
       "contract_digest": "sha256:03cf9e858a21b020004ac0803f9ae6490eb0675baf36e9559dfbce93c64c17ac",
       "artifact": {
-        "digest": "sha256:32830866e0da86fc02af22a35b3268ed31c8a24c078f8e045e64db802de5e7fb",
+        "digest": "sha256:dba14ceb5b404298b04519150e159dea200af64b686ecfc682b6d8242f6cc334",
         "source": "repo+python://src/infrastructure/plugins/v2/tenant_webhook_services.py"
       }
     },
@@ -3033,7 +3037,7 @@
       },
       "contract_digest": "sha256:15221920c0b19482eb6a0c4b9b49a189349c07e5ec7f1dbd1820d3d0cc30e7c8",
       "artifact": {
-        "digest": "sha256:630055ad01a80cce7477224361646d046284ce70bbebef53d8a9a18859bb15ca",
+        "digest": "sha256:c4c442c669fe750cf04d09ed917bc4637f479bfa498514ed637f88c36413dc16",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
       }
     },
@@ -3080,7 +3084,7 @@
       },
       "contract_digest": "sha256:e5fd0f702e910f9fd4d4cae18bca8ec3cc644c25f0f3e0c2c5c37024bd4cfe21",
       "artifact": {
-        "digest": "sha256:630055ad01a80cce7477224361646d046284ce70bbebef53d8a9a18859bb15ca",
+        "digest": "sha256:c4c442c669fe750cf04d09ed917bc4637f479bfa498514ed637f88c36413dc16",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_file_services.py"
       }
     },
@@ -3121,7 +3125,7 @@
       },
       "contract_digest": "sha256:945df53794fab970a8f9c70589f5672a2f3aa464207f40d44e957fc1e438a0a3",
       "artifact": {
-        "digest": "sha256:18a28cb2ae3bde20d0a837969adff8e7c98aa2316c2f9fcc9d0a80a5f0565de3",
+        "digest": "sha256:bc44d83c6d6ca08753770b0dc4c6549975cfa2482009c25abcd367c4a9f82726",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_channel_services.py"
       }
     },
@@ -3168,7 +3172,7 @@
       },
       "contract_digest": "sha256:800c23f67cdb0b6309fe7c44f43653715566e1b511b11e3aa9c2be637cfebc08",
       "artifact": {
-        "digest": "sha256:18a28cb2ae3bde20d0a837969adff8e7c98aa2316c2f9fcc9d0a80a5f0565de3",
+        "digest": "sha256:bc44d83c6d6ca08753770b0dc4c6549975cfa2482009c25abcd367c4a9f82726",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_channel_services.py"
       }
     },
@@ -3209,7 +3213,7 @@
       },
       "contract_digest": "sha256:1150eac6bf6c4a172f3c4f2901b0c32c42fa1af121e9073129d53b68bc35ca93",
       "artifact": {
-        "digest": "sha256:e026e5722970162475668113a9aa5ad79cd666fcf6cfcbffe14c77a21a5f2031",
+        "digest": "sha256:b4051ebeebad89b545c1d0d90d60fec138b65cde8d3d8bf335d9748c5d1a7408",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_template_services.py"
       }
     },
@@ -3256,7 +3260,7 @@
       },
       "contract_digest": "sha256:19065635f315d1c015a747eeacdeed141af1f23d94711ce8445c740ee1f575e1",
       "artifact": {
-        "digest": "sha256:e026e5722970162475668113a9aa5ad79cd666fcf6cfcbffe14c77a21a5f2031",
+        "digest": "sha256:b4051ebeebad89b545c1d0d90d60fec138b65cde8d3d8bf335d9748c5d1a7408",
         "source": "repo+python://src/infrastructure/plugins/v2/instance_template_services.py"
       }
     },
@@ -3332,7 +3336,7 @@
       },
       "contract_digest": "sha256:84adfd2c132bf5d8c6cb7dc62b7d72984d68faebfec51733b98f8677904e798b",
       "artifact": {
-        "digest": "sha256:ce81ef619c01ab6299d86aa0bd2205ba259e4a00168e17ceecdd6b41d9385f20",
+        "digest": "sha256:5dfa1cb80bc4f485b5da64d2f11ce59521ac8aaa7fde8c336efa6b207d83126c",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_gc_runtime.py"
       }
     },
@@ -4342,7 +4346,7 @@
       },
       "contract_digest": "sha256:8a50c9e69c135c79556ada240540ce4f35cb67263d5ca2f2e3b7abe625323841",
       "artifact": {
-        "digest": "sha256:bec31210e3d455050c36fa6d6531983db4c6c93293d4454529df096f95a2d4c2",
+        "digest": "sha256:1fb2f2518ef60d35f7a568982ed2514fc25983ea19a14e8a98ee3c904efbfe53",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_events.py"
       }
     },
@@ -4614,7 +4618,7 @@
       },
       "contract_digest": "sha256:9d641e2cf89532547c95c2ca0631fb823632544ce036110781e967718442e8da",
       "artifact": {
-        "digest": "sha256:69d0d7eee48b03610fc60101328b7c002e89648b26e33c6fa76fbd9fae5059e7",
+        "digest": "sha256:aebacc1cc8812d9c96689b20a4ffca5056ba7dbafd248b9b44aa1b9a4d668fdf",
         "source": "repo+python://src/infrastructure/plugins/v2/docker_monitor_runtime.py"
       }
     },
@@ -4702,13 +4706,13 @@
       },
       "contract_digest": "sha256:f906fa558857ebf5c673e41d04fda8a2904f5a81c1ba4bee22c67d15c248562e",
       "artifact": {
-        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "digest": "sha256:a65d5f6ba32e94103d31fdbb8cc4b1500a3fd6b35b9f9d623f617d1cdbd99b80",
         "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
       }
     },
     {
       "module_ref": "builtin://memstack/workflow/asyncio-runtime",
-      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_runtime_definition_v2",
+      "entrypoint": "plugins.business.automation.backend.workflow_runtime:workflow_runtime_definition_v2",
       "targets": [
         "python"
       ],
@@ -4749,13 +4753,13 @@
       },
       "contract_digest": "sha256:ea01e59a297d980cc24b1ad3bed0ac07024c3249b85002d0191492a7b84aeb1b",
       "artifact": {
-        "digest": "sha256:c502cec9e5c5cac7f809456dba75db5519bde1f9bdfb7cbd43c10bef26690450",
-        "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
+        "digest": "sha256:5476642ee1151b53e9f86accedb36bf0edc5a129d420f8b42789fa01bbd29f74",
+        "source": "repo+python://plugins/business/automation/backend/workflow_runtime.py"
       }
     },
     {
       "module_ref": "builtin://memstack/application/workflow-services",
-      "entrypoint": "src.infrastructure.plugins.v2.workflow_runtime:workflow_application_definition_v2",
+      "entrypoint": "plugins.business.automation.backend.workflow_runtime:workflow_application_definition_v2",
       "targets": [
         "python"
       ],
@@ -4796,8 +4800,8 @@
       },
       "contract_digest": "sha256:8076ab08930cfb438e125fbd1be720ff920d3975d1d0b90b29af78c1fe7c0ce2",
       "artifact": {
-        "digest": "sha256:c502cec9e5c5cac7f809456dba75db5519bde1f9bdfb7cbd43c10bef26690450",
-        "source": "repo+python://src/infrastructure/plugins/v2/workflow_runtime.py"
+        "digest": "sha256:5476642ee1151b53e9f86accedb36bf0edc5a129d420f8b42789fa01bbd29f74",
+        "source": "repo+python://plugins/business/automation/backend/workflow_runtime.py"
       }
     },
     {
@@ -5213,7 +5217,7 @@
       },
       "contract_digest": "sha256:ba9a9a2abecf57a64c7d66fe8e704afbb8c9b17b004513d136f67291d4cb9d39",
       "artifact": {
-        "digest": "sha256:2dbc543450557b009be527af34f430edde2119ff9ee3ecc16213c5de77042a45",
+        "digest": "sha256:7bd7f501aa63a17e357b716ba6a4e5ee7dc8d36260b734abd31025ff7a2284ab",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -5254,7 +5258,7 @@
       },
       "contract_digest": "sha256:b9abcc3f544083376ebe560026e8ee49b93cad6a929d0047c4f4014925b23a34",
       "artifact": {
-        "digest": "sha256:2dbc543450557b009be527af34f430edde2119ff9ee3ecc16213c5de77042a45",
+        "digest": "sha256:7bd7f501aa63a17e357b716ba6a4e5ee7dc8d36260b734abd31025ff7a2284ab",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -5311,7 +5315,7 @@
       },
       "contract_digest": "sha256:ea708193b2db19ae2d5780efdba3472323d18ab7dbe4305bbe0962df719d77a2",
       "artifact": {
-        "digest": "sha256:2dbc543450557b009be527af34f430edde2119ff9ee3ecc16213c5de77042a45",
+        "digest": "sha256:7bd7f501aa63a17e357b716ba6a4e5ee7dc8d36260b734abd31025ff7a2284ab",
         "source": "repo+python://src/infrastructure/plugins/v2/cron_services.py"
       }
     },
@@ -5669,7 +5673,7 @@
     },
     {
       "module_ref": "builtin://memstack/persistence/workflow-pattern-provider",
-      "entrypoint": "src.infrastructure.plugins.v2.workflow_pattern_services:_apply_workflow_pattern_provider_v2",
+      "entrypoint": "plugins.business.automation.backend.workflow_pattern_services:_apply_workflow_pattern_provider_v2",
       "targets": [
         "python"
       ],
@@ -5704,13 +5708,13 @@
       },
       "contract_digest": "sha256:95ebe640237af1161a7517e077209590f3ecd4c8a5afdbd6aa4b649ab5895f76",
       "artifact": {
-        "digest": "sha256:274a3552031a08448758ee9df1a94e83a5c7114e888fd8d7e8d9a857ad23651a",
-        "source": "repo+python://src/infrastructure/plugins/v2/workflow_pattern_services.py"
+        "digest": "sha256:264ca1d6b6a82bc3083053c23ecddc5cc841b0d012feb389e3c65c032c216974",
+        "source": "repo+python://plugins/business/automation/backend/workflow_pattern_services.py"
       }
     },
     {
       "module_ref": "builtin://memstack/application/workflow-pattern-services",
-      "entrypoint": "src.infrastructure.plugins.v2.workflow_pattern_services:_apply_workflow_pattern_application_v2",
+      "entrypoint": "plugins.business.automation.backend.workflow_pattern_services:_apply_workflow_pattern_application_v2",
       "targets": [
         "python"
       ],
@@ -5751,8 +5755,8 @@
       },
       "contract_digest": "sha256:0f896c2054e1a5e3bbf9c229af0e1a9637049d0dc6e85efc1a7c8ae547131729",
       "artifact": {
-        "digest": "sha256:274a3552031a08448758ee9df1a94e83a5c7114e888fd8d7e8d9a857ad23651a",
-        "source": "repo+python://src/infrastructure/plugins/v2/workflow_pattern_services.py"
+        "digest": "sha256:264ca1d6b6a82bc3083053c23ecddc5cc841b0d012feb389e3c65c032c216974",
+        "source": "repo+python://plugins/business/automation/backend/workflow_pattern_services.py"
       }
     },
     {
@@ -5968,7 +5972,7 @@
       },
       "contract_digest": "sha256:07fbfde8e0946272b13d9337fd8104d2b1027b091da656b3f494fdb40ffe141c",
       "artifact": {
-        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "digest": "sha256:a65d5f6ba32e94103d31fdbb8cc4b1500a3fd6b35b9f9d623f617d1cdbd99b80",
         "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
       }
     },
@@ -6020,7 +6024,7 @@
       },
       "contract_digest": "sha256:3c676fd0282e372e0b178cf2e4c7dc8f5bece550fec200e8fc4424b7f990a902",
       "artifact": {
-        "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
+        "digest": "sha256:a65d5f6ba32e94103d31fdbb8cc4b1500a3fd6b35b9f9d623f617d1cdbd99b80",
         "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
       }
     },
@@ -7804,13 +7808,13 @@
       },
       "contract_digest": "sha256:bd5d1b921471f3677edc995467879a454ddbc9b7230c10c033489b75a26dc95e",
       "artifact": {
-        "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
+        "digest": "sha256:d67f3447f21536648809ff3f6eff4d3241f3ebdf4854310eb4a9eeec6e37e138",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
       }
     },
     {
       "module_ref": "builtin://memstack/channel/feishu-adapter",
-      "entrypoint": "src.infrastructure.plugins.v2.channel_adapters:_apply_feishu_channel_adapter_v2",
+      "entrypoint": "plugins.adapters.channels.feishu.contribution:_apply_feishu_channel_adapter_v2",
       "targets": [
         "python"
       ],
@@ -7852,8 +7856,8 @@
       },
       "contract_digest": "sha256:a8d931d428beadaecb18e437e817d6227194cfcbb5ff40152cc563ed75b43108",
       "artifact": {
-        "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
-        "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
+        "digest": "sha256:268ee73c7a73ad532d9ac0b0afec8e0ee07b89c48e8dd43d0a2660554b626491",
+        "source": "repo+python://plugins/adapters/channels/feishu/contribution.py"
       }
     },
     {
@@ -9643,7 +9647,7 @@
       },
       "contract_digest": "sha256:a926dc27f8e47990b62207989b972dd1f3eb27bc444425e0511206ef304d7464",
       "artifact": {
-        "digest": "sha256:7d90d292d90aecb63886e01e1870b70f95e3cd4452122adebdd0544d9dd68088",
+        "digest": "sha256:e8dcf6cf7b0d1e0d282aea77e687c8d3b4ab7ed57ed488e2252e398acca0db4d",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_project_sandbox_http_routes.py"
       }
     },
@@ -9920,7 +9924,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:d695607ab4c730631671cfdaf3fab58f7869871ba3262a6bbda94b5f28c62c05",
+        "digest": "sha256:9986c308e5e775ea495edefe9760260a21b3f09dae8108edf7c728b4fc25590c",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_billing_http_routes.py"
       }
     },
@@ -10294,7 +10298,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:3c2c26b2dcaebe655a6523694e3a6b762b770c6f1b95da1d82dd62a77a7840bd",
+        "digest": "sha256:ca1c586a070c506bc7caf1f91567cb63f451cd17ba6e467642386a0e4f786575",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },
@@ -14983,6 +14987,204 @@
       "artifact": {
         "digest": "sha256:1a6ba87f15c323325130373d305e97dafe2025b7f7aa75f99206bfa7fc722557",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_cloud_knowledge_sync_http_routes.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/agent",
+      "entrypoint": "plugins.business.agent.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-agent",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:8f0fca0bd5f717517f49b5be97078ee6a6e9b695e8e5d4d73b7429fd90cd712b",
+      "artifact": {
+        "digest": "sha256:8833511623023cf69dd272dcf256a27be0c04cf50b3f07051d36fe2da43732b7",
+        "source": "repo+python://plugins/business/agent/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/automation",
+      "entrypoint": "plugins.business.automation.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-automation",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:8277ed5bbfbcd4cd2dc438259bcc27e71848bb4eba45427051bfb18b63ff9cdb",
+      "artifact": {
+        "digest": "sha256:989669fe070fda2f2b74b2344af08e1110ef13ccd284b347d56672e8280676a5",
+        "source": "repo+python://plugins/business/automation/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/billing",
+      "entrypoint": "plugins.business.billing.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-billing",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:2d2b42d18ac50f8e6a8cd3bc4153a2be30c99fec1ed40a565283b88302e8ed67",
+      "artifact": {
+        "digest": "sha256:c6963ceec5e9e567802a12327a2a20d97dc7aa779f440408154a785b36c394b8",
+        "source": "repo+python://plugins/business/billing/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/environments",
+      "entrypoint": "plugins.business.environments.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-environments",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:e2ae5c4f558cce5a3cb94163f7297676138945d7d836cad6b526b5db206c332c",
+      "artifact": {
+        "digest": "sha256:0324637acab14f6073b5be78b8e1ab9a2074ebfd3e0ff69168718788e1a3730e",
+        "source": "repo+python://plugins/business/environments/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/knowledge",
+      "entrypoint": "plugins.business.knowledge.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-knowledge",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:0bd5af327f1f3f424ba2339e5e0ad72472dd85e4f8f8c64e013d00fcf76264d3",
+      "artifact": {
+        "digest": "sha256:12df21553dc7d0a0aa4bc8c8fee90556117b270b451eae039781e438c5b71821",
+        "source": "repo+python://plugins/business/knowledge/backend/application_adapter.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/package-application/workspace",
+      "entrypoint": "plugins.business.workspace.backend.application_adapter:apply",
+      "targets": [
+        "python"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:package-application:memstack-workspace",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:5393a4faba76802a3e0b95c2f4cab052573449b11eda0a55c31479b167c4ec5e",
+      "artifact": {
+        "digest": "sha256:44b004d8ea703a03c29ebf042bd74dfacf64809a49547a46fc5bfb451b439f21",
+        "source": "repo+python://plugins/business/workspace/backend/application_adapter.py"
       }
     }
   ],

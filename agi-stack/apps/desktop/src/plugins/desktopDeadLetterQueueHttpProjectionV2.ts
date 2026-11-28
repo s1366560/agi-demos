@@ -12,7 +12,7 @@ import {
   type DeadLetterQueueQuery,
   type DeadLetterQueueScope,
   type DeadLetterQueueStats,
-} from '../features/governance/deadLetterQueueClient';
+} from '@business/automation/ui/desktop/governance/deadLetterQueueClient';
 
 const BASE_PATH = '/api/v1/admin/dlq';
 const CONTRACT_VERSION = '3.0.0';

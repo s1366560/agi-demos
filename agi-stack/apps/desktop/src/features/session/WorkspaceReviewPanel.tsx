@@ -87,7 +87,7 @@ import {
 } from './SessionPlanReview';
 import {
   SessionTerminalCanvas,
-} from './SessionTerminalCanvas';
+} from '@business/environments/ui/desktop/session/SessionTerminalCanvas';
 import {
   artifactVersionActions,
   currentArtifactVersions,
@@ -138,7 +138,7 @@ import {
 } from './sessionProjectionTypes';
 import {
   type TerminalBindingState,
-} from './sessionTerminalModel';
+} from '@business/environments/ui/desktop/session/sessionTerminalModel';
 import {
   type SessionCapabilityMode,
   type SessionDetailViewModel,
@@ -149,10 +149,10 @@ import {
 } from './workspaceReviewPanelModel';
 import {
   type SandboxRuntimeCapability,
-} from '../sandbox/sandboxRuntimeClient';
+} from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 import {
   type SessionSandboxRuntimeSurface,
-} from '../sandbox/useSandboxRuntimeSurface';
+} from '@business/environments/ui/desktop/sandbox/useSandboxRuntimeSurface';
 import {
   useI18n,
 } from '../../i18n';

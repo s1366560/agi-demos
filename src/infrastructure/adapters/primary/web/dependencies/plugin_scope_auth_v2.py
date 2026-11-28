@@ -16,6 +16,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.scope import validate_scope_v2
 
+PROJECT_EXECUTOR_ROLES = ("owner", "admin", "member")
+
 
 async def resolve_plugin_read_scope_v2(
     db: AsyncSession, *, current_user: User, requested_scope: ScopeV2
@@ -58,6 +60,23 @@ async def resolve_plugin_read_scope_v2(
         if member is None:
             raise RuntimeV2Error("scope_read_forbidden", "scope view is unavailable")
     return scope
+
+
+async def project_package_actor_can_execute(
+    db: AsyncSession, *, current_user: User, requested_scope: ScopeV2
+) -> bool:
+    """Viewers can inspect enabled project packages, while members can execute them."""
+    scope = await resolve_plugin_read_scope_v2(
+        db, current_user=current_user, requested_scope=requested_scope
+    )
+    if scope.kind != ScopeKindV2.PROJECT or not current_user.is_active:
+        return False
+    role = await db.scalar(
+        select(UserProject.role).where(
+            UserProject.user_id == current_user.id, UserProject.project_id == scope.project_id
+        )
+    )
+    return role in PROJECT_EXECUTOR_ROLES
 
 
 async def resolve_plugin_publication_scope_v2(

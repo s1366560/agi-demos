@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.cron_service import CronMutationUnavailableError
+from plugins.business.automation.backend.cron_service import CronMutationUnavailableError
 from src.infrastructure.agent.tools import cron_tool as cron_tool_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.cron_tool import cron_tool, make_cron_tool

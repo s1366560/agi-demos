@@ -8,7 +8,13 @@ from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from plugins.business.automation.workflow.tasks import TaskManager
+from plugins.business.knowledge.backend.graph_workflows import (
+    build_asyncio_workflow_engine_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.episodes import (
     delete_episode,
     get_episode,
@@ -18,7 +24,11 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
     shutdown_plugin_runtime_v2,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
+from src.infrastructure.adapters.primary.web.workflow_application_authority_v2 import (
+    workflow_engine_authority_dependency_v2,
+)
+from src.infrastructure.adapters.secondary.persistence import database
+from src.infrastructure.adapters.secondary.persistence.models import Project, TaskLog, UserProject
 
 
 def _without_scope(payload: dict) -> dict:
@@ -51,16 +61,25 @@ def _application(db: object, graph_store: object) -> SimpleNamespace:
     )
 
 
+@pytest.fixture
+def episode_workflow_engine():
+    return build_asyncio_workflow_engine_v2(manager=TaskManager())
+
+
 @pytest.fixture(autouse=True)
 async def initialize_episodes_route_generation(
     test_app: FastAPI,
     mock_graphiti_client: object,
+    episode_workflow_engine,
 ) -> AsyncIterator[None]:
     """Run HTTP cases through the production V2 route and graph authorities."""
 
     async def graph_runtime_factory() -> object:
         return mock_graphiti_client
 
+    test_app.dependency_overrides[workflow_engine_authority_dependency_v2] = (
+        lambda: episode_workflow_engine
+    )
     await initialize_plugin_runtime_v2(
         test_app,
         graph_runtime_factory=graph_runtime_factory,
@@ -81,6 +100,48 @@ class _Neo4jDateTimeLike:
 
 @pytest.mark.unit
 class TestEpisodesRouter:
+    async def test_background_episode_preserves_selected_handlers_original_contract(
+        self,
+        async_client,
+        test_engine,
+        test_project_db,
+        test_user,
+        episode_workflow_engine,
+        monkeypatch,
+    ):
+        assert test_engine.url.database == ":memory:"
+        sessions = async_sessionmaker(test_engine, expire_on_commit=False)
+        monkeypatch.setattr(database, "async_session_factory", sessions)
+        engine = episode_workflow_engine
+        payload = {"name": "Standalone", "content": "An episode", "project_id": test_project_db.id}
+        route = "/api/v1/episodes/?background=true"
+        rejected = await async_client.post(route, json=payload)
+        assert rejected.status_code == 501
+        async with sessions() as db:
+            assert await db.scalar(select(func.count()).select_from(TaskLog)) == 0
+
+        async def process_standalone(data):
+            return data
+
+        engine.register_handler(
+            "episode_processing", process_standalone, accepts_input=lambda job: bool(job["task_id"])
+        )
+        response = await async_client.post(route, json=payload)
+        assert response.status_code == 202, response.text
+        job = response.json()
+        execution = await engine.get_workflow_result(job["workflow_id"])
+        assert execution["error"] is None
+        dispatched = execution["result"]
+        assert dispatched["uuid"] == job["id"]
+        assert dispatched["task_id"] == job["task_id"]
+        assert dispatched["project_id"] == test_project_db.id
+        assert dispatched["user_id"] == str(test_user.id)
+        assert dispatched["tenant_id"] == test_project_db.tenant_id
+        assert "memory_id" not in dispatched and "source_revision" not in dispatched
+        async with sessions() as db:
+            task = await db.get(TaskLog, job["task_id"])
+            assert task.entity_id == job["id"] and task.payload["content"] == payload["content"]
+
     """Test cases for episodes router endpoints."""
 
     @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 use agistack_core::agent::types::MediaAttachment;
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn audio_declaration_is_revision_bound_model_specific_and_reaches_real_http() {
     let captured = Arc::new(tokio::sync::Mutex::new(Vec::new()));

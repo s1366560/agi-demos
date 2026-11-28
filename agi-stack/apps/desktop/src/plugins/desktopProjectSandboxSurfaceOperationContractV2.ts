@@ -8,13 +8,13 @@ import type {
   SandboxFileListRequest,
   SandboxFileReadRequest,
   SandboxFileDownloadRequest,
-} from '../features/sandbox/sandboxRuntimeClient';
+} from '@business/environments/ui/desktop/sandbox/sandboxRuntimeClient';
 import {
   parseSandboxRuntimeCapabilitySnapshot,
   type SandboxRuntimeCapabilitySnapshot,
   type RemoteDesktopSession,
   type RemoteDesktopResolution,
-} from '../features/sandbox/sandboxRuntimeSurfaceClient';
+} from '@business/environments/ui/desktop/sandbox/sandboxRuntimeSurfaceClient';
 import {
   requireSandboxPath,
   requireBoundedInteger,

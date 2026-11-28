@@ -1,0 +1,24 @@
+@import 'tailwindcss' source(none);
+@source '../web/components/sandbox';
+@import '@radix-ui/themes/styles.css';
+.sandbox-interaction {
+  display: flex;
+  flex-direction: column;
+  height: 95vh;
+  min-height: 320px;
+}
+.sandbox-interaction > nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+.sandbox-interaction > nav button {
+  background: var(--gray-2);
+  color: var(--gray-12);
+  border: 1px solid var(--gray-6);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.8rem;
+}
+.sandbox-interaction > nav button[aria-pressed='true'] {
+  background: var(--accent-4);
+}

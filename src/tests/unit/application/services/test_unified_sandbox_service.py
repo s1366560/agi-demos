@@ -21,11 +21,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.application.services.sandbox_profile import SandboxProfileType
-from src.application.services.unified_sandbox_service import (
+from plugins.business.environments.backend.sandbox.unified_sandbox_service import (
     SandboxInfo,
     UnifiedSandboxService,
 )
+from src.application.services.sandbox_profile import SandboxProfileType
 from src.domain.model.sandbox.project_sandbox import (
     ProjectSandbox,
     ProjectSandboxStatus,

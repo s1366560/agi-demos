@@ -56,6 +56,7 @@ DEPENDENCY_TABLES = (
     "memories",
     "memory_shares",
     "memory_chunks",
+    "task_logs",
 )
 
 
@@ -140,6 +141,7 @@ async def pg_sync() -> AsyncGenerator[
         connect_args={"server_settings": {"search_path": schema}},
     )
     async with engine.begin() as connection:
+        assert await connection.scalar(sa.text("SELECT current_database()")) == QA_DATABASE
         await connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
         await connection.run_sync(bootstrap)
     sessions = async_sessionmaker(engine, expire_on_commit=False)

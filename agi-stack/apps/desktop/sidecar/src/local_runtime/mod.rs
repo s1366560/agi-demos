@@ -1,6 +1,8 @@
 mod llm_tool_contracts;
 mod plan_tool_contract;
 #[cfg(test)]
+mod profile_tests;
+#[cfg(test)]
 mod tool_contract_tests;
 mod visual_input_llm;
 use std::{
@@ -53,6 +55,7 @@ use url::{Host, Url};
 use uuid::Uuid;
 
 use crate::application_vault::ApplicationCredentialVault;
+use crate::sidecar_profile::SidecarProfile;
 
 #[cfg(test)]
 use agistack_core::model::Entity;
@@ -94,6 +97,7 @@ mod conversation_history;
 mod conversation_llm_route;
 mod cua_repl;
 mod device_mcp;
+mod device_plugins;
 pub(crate) mod execution_authority;
 mod execution_profile;
 mod execution_selection;
@@ -101,18 +105,21 @@ mod execution_selection_patch;
 mod fan_out_tool_host;
 mod hitl_model_response;
 mod knowledge_authority_v2;
+#[cfg(feature = "legacy-business")]
+mod legacy_http;
 mod local_feature_authority_v2;
 mod local_history_retirement;
 mod local_plugin_instances_v2;
 mod local_plugin_routes_v2;
 mod local_plugin_tool_host_v2;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod local_route_parity_tests;
 mod local_run_upload_command;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod managed_resource_tests;
 mod mcp_agent_tool_host;
 mod mcp_app_automation;
+#[cfg(feature = "legacy-business")]
 mod mcp_app_static;
 #[cfg(test)]
 mod mcp_remote_transport_tests;
@@ -121,6 +128,14 @@ mod mcp_supervisor;
 mod mcp_supervisor_tests;
 mod message_display;
 mod model_request_replay_v2;
+mod signed_project_http;
+#[cfg(test)]
+#[path = "../../../../../crates/plugin-host/tests/support/signed_wasm_runtime.rs"]
+mod signed_wasm_fixture;
+mod workspace_read;
+#[cfg(feature = "legacy-business")]
+use legacy_http::*;
+#[cfg_attr(not(feature = "legacy-business"), path = "package_mcp_contract.rs")]
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
@@ -158,7 +173,7 @@ mod subagent_control;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-business"))]
 mod terminal_generation_v2_tests;
 mod terminal_pty_v2;
 mod timeline_presentation;
@@ -232,13 +247,13 @@ impl LocalRuntimeService {
         local_knowledge_acceptance: Option<
             crate::local_knowledge_acceptance::LocalKnowledgeAcceptance,
         >,
+        profile: SidecarProfile,
     ) -> Result<Self, String> {
         if let Some(qualification) = &local_knowledge_acceptance {
             qualification.require_current(&app_data_dir, &workspace_root)?;
         }
         std::fs::create_dir_all(&app_data_dir).map_err(|error| error.to_string())?;
         std::fs::create_dir_all(&workspace_root).map_err(|error| error.to_string())?;
-        let browser_preferences = browser_preferences::load(&app_data_dir)?;
         let checkpoint_path = app_data_dir.join("agistack-local-agent-checkpoints.db");
         let session_store_path = app_data_dir.join("agistack-desktop-sessions.db");
         let checkpoints = Arc::new(
@@ -268,6 +283,7 @@ impl LocalRuntimeService {
             session_store,
             provider_credentials,
         )?;
+        state.profile = profile;
         *state
             .audio_sessions
             .vault
@@ -275,50 +291,60 @@ impl LocalRuntimeService {
             .map_err(|_| "speech_vault_unavailable")? = Some(speech_credential_vault);
         state.app_data_dir = Some(app_data_dir.clone());
         state.local_knowledge_acceptance = local_knowledge_acceptance;
-        state
-            .config
-            .lock()
-            .expect("local runtime config")
-            .browser_bridge = browser_preferences;
+        if profile != SidecarProfile::PackageHost {
+            state
+                .config
+                .lock()
+                .expect("local runtime config")
+                .browser_bridge = browser_preferences::load(&app_data_dir)?;
+        }
         let state = Arc::new(state);
-        if crate::workspace_core_cutover::load_cutover_marker(&app_data_dir.join("workspace-core"))
+        if profile != SidecarProfile::PackageHost {
+            if crate::workspace_core_cutover::load_cutover_marker(
+                &app_data_dir.join("workspace-core"),
+            )
             .await?
             .is_some_and(|marker| marker.state.is_cutover())
-        {
-            workspace_core_bridge::mark_workspace_core_cutover(&state);
+            {
+                workspace_core_bridge::mark_workspace_core_cutover(&state);
+            }
+            state
+                .mcp_supervisor
+                .install_credential_vault(mcp_credential_vault)
+                .map_err(|error| error.to_string())?;
+            state
+                .mcp_supervisor
+                .prepare_startup_recovery()
+                .map_err(|error| error.to_string())?;
         }
-        state
-            .mcp_supervisor
-            .install_credential_vault(mcp_credential_vault)
-            .map_err(|error| error.to_string())?;
-        plugin_marketplace_v3::recover(&state)?;
-        state
-            .mcp_supervisor
-            .prepare_startup_recovery()
-            .map_err(|error| error.to_string())?;
-        state.reconcile_recovered_runs_from_checkpoints().await?;
-        state.start_automation_worker_with_config(
-            automation_worker::AutomationWorkerConfig::local_default(),
-        )?;
+        if profile == SidecarProfile::Compat {
+            plugin_marketplace_v3::recover(&state)?;
+            state.reconcile_recovered_runs_from_checkpoints().await?;
+            state.start_automation_worker_with_config(
+                automation_worker::AutomationWorkerConfig::local_default(),
+            )?;
+        }
         let app = local_router(Arc::clone(&state));
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
             .map_err(|error| error.to_string())?;
         let addr = listener.local_addr().map_err(|error| error.to_string())?;
         let api_base_url = format!("http://{addr}");
-        state.reconcile_browser_bridge(
-            &state
-                .config
-                .lock()
-                .expect("local runtime config")
-                .browser_bridge,
-            &api_base_url,
-        )?;
-        state
-            .mcp_supervisor
-            .recover_all_enabled()
-            .await
-            .map_err(|error| error.to_string())?;
+        if profile != SidecarProfile::PackageHost {
+            state.reconcile_browser_bridge(
+                &state
+                    .config
+                    .lock()
+                    .expect("local runtime config")
+                    .browser_bridge,
+                &api_base_url,
+            )?;
+            state
+                .mcp_supervisor
+                .recover_all_enabled()
+                .await
+                .map_err(|error| error.to_string())?;
+        }
         tokio::spawn(async move {
             if let Err(error) = axum::serve(listener, app).await {
                 eprintln!("agistack local runtime stopped: {error}");
@@ -344,6 +370,13 @@ impl LocalRuntimeService {
         input: Value,
     ) -> Result<Value, String> {
         computer_use_v2::native_operation(&self.state, broker, input).await
+    }
+    pub(crate) async fn device_plugin_manage_v2(
+        &self,
+        broker: &crate::trusted_session::TrustedSessionBroker,
+        input: Value,
+    ) -> Result<Value, String> {
+        device_plugins::operation(&self.state, broker, input).await
     }
     pub(crate) async fn device_mcp_manage_v2(
         &self,
@@ -537,6 +570,9 @@ impl LocalRuntimeService {
         &self,
         config: LocalRuntimeConfigPatch,
     ) -> Result<LocalRuntimeStatus, String> {
+        if self.state.profile == SidecarProfile::PackageHost && !config.is_workspace_only() {
+            return Err("local runtime configuration is invalid".into());
+        }
         self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
     }
@@ -969,6 +1005,7 @@ impl PlanModeToolHost {
 }
 
 struct LocalRuntimeState {
+    profile: SidecarProfile,
     api_token: String,
     workspace_root: Mutex<PathBuf>,
     tool_host: Mutex<LocalToolHost>,
@@ -1323,6 +1360,11 @@ impl LocalRuntimeState {
         )?);
         let site_credentials = provider_credentials.site_credential_broker();
         Ok(Self {
+            profile: if cfg!(feature = "legacy-business") {
+                SidecarProfile::Compat
+            } else {
+                SidecarProfile::Full
+            },
             api_token,
             workspace_root: Mutex::new(workspace_root),
             tool_host: Mutex::new(tool_host),
@@ -3576,315 +3618,81 @@ fn bounded_identifier(value: &str) -> bool {
     !value.is_empty() && value == value.trim() && value.len() <= 512
 }
 
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/workspace/desktop-sidecar/workspaces.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/agent/desktop-sidecar/providers.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/agent/desktop-sidecar/conversations.rs"
+));
+#[cfg(feature = "legacy-business")]
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../../plugins/business/environments/desktop-sidecar/sandbox.rs"
+));
+
+// Both profiles use the production router with mandatory generation admission here.
+#[cfg(all(test, not(feature = "legacy-business")))]
+use local_router as local_router_with_generation_required;
+
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
-    #[cfg(test)]
-    {
-        let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
-        local_router_with_generation_admission(state, admission)
+    #[cfg(feature = "legacy-business")]
+    if state.profile == SidecarProfile::Compat {
+        #[cfg(test)]
+        {
+            let admission =
+                PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
+            return local_router_with_generation_admission(state, admission);
+        }
+        #[cfg(not(test))]
+        return local_router_with_generation_required(state);
     }
-    #[cfg(not(test))]
-    local_router_with_generation_required(state)
-}
-
-fn local_router_with_generation_required(state: Arc<LocalRuntimeState>) -> Router {
-    let admission = PlatformPluginRouteAdmissionV2::required(Arc::clone(&state));
-    local_router_with_generation_admission(state, admission)
-}
-
-fn local_router_with_generation_admission(
-    state: Arc<LocalRuntimeState>,
-    admission: PlatformPluginRouteAdmissionV2,
-) -> Router {
-    let kernel_protected = Router::new()
-        .route("/api/v1/auth/me", get(auth_me))
-        .route("/api/v1/tenants", get(list_tenants))
-        .route("/api/v1/projects", get(list_projects))
-        .route("/api/v1/workspace-context", get(get_workspace_context))
-        .route(
-            "/api/v1/workspace-context/switch",
-            post(switch_workspace_context),
-        )
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_active_scope,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_user_session,
-        ));
-
-    let protected = Router::new()
-        .route(
-            "/api/v1/llm-providers/",
-            get(list_llm_providers).post(create_llm_provider),
-        )
-        .route("/api/v1/llm-providers/types", get(list_llm_provider_types))
-        .route(
-            "/api/v1/llm-providers/models/:provider_type",
-            get(list_llm_provider_models),
-        )
-        .route(
-            "/api/v1/llm-providers/test-connection",
-            post(validate_llm_provider_draft),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants",
-            get(list_workspace_tool_grants),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/tool-grants/:grant_id",
-            delete(revoke_workspace_tool_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/origin-grants",
-            get(list_browser_origin_grants),
-        )
-        .route(
-            "/api/v1/browser-bridge/origin-grants/:grant_id",
-            delete(revoke_browser_origin_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/capability-grants",
-            get(list_browser_capability_grants),
-        )
-        .route(
-            "/api/v1/browser-bridge/capability-grants/:grant_id",
-            delete(revoke_browser_capability_grant),
-        )
-        .route(
-            "/api/v1/browser-bridge/site-credentials",
-            get(list_browser_site_credentials).put(upsert_browser_site_credential),
-        )
-        .route(
-            "/api/v1/browser-bridge/site-credentials/:credential_id",
-            delete(revoke_browser_site_credential),
-        )
-        .route(
-            "/api/v1/browser-bridge/audit",
-            get(list_browser_action_audit_entries),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/runtime-selection",
-            put(select_llm_provider_runtime),
-        )
-        .route(
-            "/api/v1/llm-providers/routing-policy",
-            get(workspace_core_bridge::proxy_workspace_fallback)
-                .put(workspace_core_bridge::proxy_workspace_fallback),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id",
-            patch(update_llm_provider)
-                .put(update_llm_provider)
-                .delete(delete_llm_provider),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/health-check",
-            post(validate_llm_provider),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/models/discover",
-            post(discover_llm_provider_models),
-        )
-        .route(
-            "/api/v1/llm-providers/:provider_id/usage",
-            get(get_llm_provider_usage),
-        )
-        .route(
-            "/api/v1/projects/:project_id/my-work",
-            get(list_project_my_work),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs",
-            get(automation::list).post(automation::create),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/capabilities",
-            get(automation::capabilities),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id",
-            get(automation::get)
-                .patch(automation::update)
-                .delete(automation::delete),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/toggle",
-            post(automation::toggle),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/run",
-            post(automation::run),
-        )
-        .route(
-            "/api/v1/projects/:project_id/cron-jobs/:automation_id/runs",
-            get(automation::list_runs),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces",
-            get(list_workspaces).post(create_workspace),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/task-sessions",
-            post(task_session::create_task_session),
-        )
-        .route(
-            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/messages",
-            get(list_workspace_messages).post(create_workspace_message),
-        )
-        .route("/api/v1/workspaces/:workspace_id/tasks", get(list_tasks))
-        .route("/api/v1/workspaces/:workspace_id/plan", get(plan_snapshot))
-        .route(
-            "/api/v1/agent/conversations",
-            get(list_conversations).post(create_conversation),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/mode",
-            patch(update_conversation_mode),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/config",
-            patch(update_conversation_config),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/session",
-            get(session_projection::conversation_session),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/messages",
-            get(conversation_messages).post(run_conversation_message),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/messages/:message_id/model-requests/:attempt_id",
-            get(model_request_replay_v2::get),
-        )
-        .route(
-            "/api/v1/agent/plans/approve-and-start",
-            post(approve_plan_and_start),
-        )
-        .route(
-            "/api/v1/agent/conversations/:conversation_id/runs",
-            get(list_conversation_runs),
-        )
-        .route("/api/v1/agent/runs/:run_id", get(get_run))
-        .route("/api/v1/agent/runs/:run_id/changes", get(get_run_changes))
-        .route(
-            "/api/v1/agent/runs/:run_id/inputs",
-            get(list_run_inputs).post(create_run_input),
-        )
-        .route(
-            "/api/v1/agent/run-inputs/:input_id/promote-to-plan",
-            post(promote_run_input_to_plan),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/pause",
-            post(run_control::pause_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/resume",
-            post(run_control::resume_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/fork",
-            post(run_control::fork_recovery_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/cancel",
-            post(run_control::cancel_run),
-        )
-        .route(
-            "/api/v1/agent/runs/:run_id/review",
-            post(run_control::review_run),
-        )
-        .route(
-            "/api/v1/agent/artifact-versions/:artifact_version_id/review",
-            post(review_artifact_version),
-        )
-        .route(
-            "/api/v1/agent/artifact-versions/:artifact_version_id/deliver",
-            post(deliver_artifact_version),
-        )
-        .route("/api/v1/agent/hitl/respond", post(respond_to_hitl))
-        .route("/api/v1/agent/conversations/:conversation_id/browser-auth", get(browser_auth_routes::pending))
-        .route("/api/v1/agent/browser-auth/:request_id/respond", post(browser_auth_routes::respond))
-        .route("/api/v1/agent/plan/mode", post(switch_plan_mode))
-        .route(
-            "/api/v1/agent/plan/mode/:conversation_id",
-            get(get_plan_mode),
-        )
-        .route(
-            "/api/v1/agent/plan/tasks/:conversation_id",
-            get(list_agent_plan_tasks),
-        )
-        .route("/api/v1/agent/ws", get(agent_ws))
-        .route(
-            "/api/v1/projects/:project_id/sandbox",
-            get(get_sandbox).post(ensure_sandbox),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/proxy-auth-cookie",
-            post(proxy_auth_cookie),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/desktop",
-            post(start_desktop),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/desktop/proxy/",
-            get(desktop_proxy),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/terminal",
-            post(start_terminal),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/terminal/proxy/ws",
-            get(terminal_ws),
-        )
-        .route(
-            "/api/v1/projects/:project_id/sandbox/execute",
-            post(sandbox_execute),
-        )
-        .route("/mcp/tools/list", get(mcp_tools_list))
-        .route("/mcp/tools/call", post(mcp_tools_call))
-        .merge(platform_plugin_marketplace_v2::router())
-        .merge(plugin_marketplace_v3::router())
-        .merge(local_plugin_routes_v2::router())
-        .merge(local_plugin_instances_v2::router())
-        .merge(computer_use_v2::router())
-        .merge(knowledge_authority_v2::router())
-        .merge(parity_routes::router())
-        .fallback(workspace_core_bridge::proxy_workspace_fallback)
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            workspace_core_bridge::proxy_workspace_if_authoritative,
-        ))
-        .layer(middleware::from_fn_with_state(
-            admission,
-            platform_plugin_route_admission_v2::require_generation_v2,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_active_scope,
-        ))
-        .layer(middleware::from_fn_with_state(
-            Arc::clone(&state),
-            require_user_session,
-        ));
-
-    let public_router = Router::new()
-        .route("/api/v1/auth/signout", post(sign_out))
-        .merge(kernel_protected)
-        .merge(protected)
+    let health = Router::new().route("/health", get(|| async { StatusCode::NO_CONTENT }));
+    let public_routes = if state.profile == SidecarProfile::Full {
+        let scoped = Router::new()
+            .merge(local_plugin_routes_v2::router())
+            .merge(local_plugin_instances_v2::router())
+            .fallback(signed_project_http::dispatch)
+            .layer(middleware::from_fn_with_state(
+                PlatformPluginRouteAdmissionV2::required(Arc::clone(&state)),
+                platform_plugin_route_admission_v2::require_generation_v2,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_active_scope,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_user_session,
+            ))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                signed_project_http::cloud,
+            ));
+        health.merge(scoped)
+    } else {
+        health
+    };
+    let app = public_routes
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             require_launch_capability,
         ))
         .layer(local_cors_layer())
         .with_state(Arc::clone(&state));
-    public_router
-        .merge(workspace_core_bridge::router(state))
-        .merge(mcp_app_static::router())
+    if state.profile == SidecarProfile::Full {
+        app.merge(workspace_core_bridge::router(state))
+    } else {
+        app
+    }
 }
 
 fn local_cors_origins(renderer_origin: Option<&str>) -> Vec<HeaderValue> {
@@ -4408,34 +4216,6 @@ async fn list_projects(
     })))
 }
 
-async fn get_workspace_context(
-    Extension(authenticated): Extension<AuthenticatedContext>,
-) -> Json<Value> {
-    Json(json!({
-        "context": authenticated.workspace,
-        "membership_role": authenticated.membership_role,
-    }))
-}
-
-async fn switch_workspace_context(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(request): Json<ContextSwitchRequest>,
-) -> LocalJsonResult {
-    let outcome = state
-        .session_store
-        .switch_workspace_context(&authenticated, &request, Utc::now().timestamp_millis())
-        .map_err(auth_context_error)?;
-    if outcome.changed {
-        state
-            .revoke_stale_context_runs(&authenticated.user.user_id)
-            .await;
-    }
-    serde_json::to_value(outcome)
-        .map(Json)
-        .map_err(|error| local_store_error(error.to_string()))
-}
-
 #[derive(Debug, Default, Deserialize)]
 struct ManagedResourceListQuery {
     tenant_id: Option<String>,
@@ -4594,10 +4374,7 @@ struct LocalLlmProviderModelsResponse {
     source: Option<&'static str>,
 }
 
-async fn list_llm_provider_types() -> Json<Vec<LlmProviderTypeDescriptor>> {
-    Json(LOCAL_LLM_PROVIDER_TYPES.to_vec())
-}
-
+#[cfg(feature = "legacy-business")]
 fn static_local_roster(provider_type: &str) -> LocalLlmProviderModels {
     const ROSTER_JSON: &str =
         include_str!("../../../../../../src/infrastructure/llm/static_provider_models.json");
@@ -4626,118 +4403,6 @@ fn string_list(value: Option<&Value>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-async fn list_llm_provider_models(
-    Path(provider_type): Path<String>,
-) -> Result<Json<LocalLlmProviderModelsResponse>, (StatusCode, Json<Value>)> {
-    let provider_type = provider_type.trim().to_lowercase();
-    let (models, source) = match provider_type.as_str() {
-        "openai" | "anthropic" => (
-            static_local_roster(provider_type.as_str()),
-            Some("static-fallback"),
-        ),
-        "openai_compatible" => (LocalLlmProviderModels::default(), None),
-        _ => {
-            return Err((
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "detail": "unsupported local provider type" })),
-            ));
-        }
-    };
-    Ok(Json(LocalLlmProviderModelsResponse {
-        provider_type,
-        models,
-        source,
-    }))
-}
-
-async fn list_llm_providers(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-) -> LocalJsonResult {
-    let tenant_id = &authenticated.workspace.tenant_id;
-    let runtime = state
-        .provider_runtime
-        .lock()
-        .map_err(|error| local_store_error(error.to_string()))?;
-    let providers = state
-        .session_store
-        .list_managed_resources(ManagedResourceKind::Provider, "tenant", tenant_id)
-        .map_err(local_store_error)?;
-    let selected_provider_id = runtime.selections.get(tenant_id);
-    let providers = providers
-        .into_iter()
-        .map(|provider| {
-            let provider_id = provider
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let key = ProviderRuntimeKey {
-                tenant_id: tenant_id.clone(),
-                provider_id: provider_id.clone(),
-            };
-            provider_with_runtime_state(
-                provider,
-                selected_provider_id.map(String::as_str) == Some(provider_id.as_str()),
-                runtime.bindings.get(&key),
-                runtime.configured_credentials.contains(&key),
-                runtime.probes.get(&key),
-            )
-        })
-        .collect();
-    Ok(Json(Value::Array(providers)))
-}
-
-async fn list_workspace_tool_grants(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-) -> LocalJsonResult {
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    let items = state
-        .session_store
-        .list_workspace_tool_grants(&workspace_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "items": items })))
-}
-
-async fn revoke_workspace_tool_grant(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id, grant_id)): Path<(String, String, String, String)>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    ensure_workspace_scope(
-        &state,
-        &authenticated,
-        &tenant_id,
-        &project_id,
-        &workspace_id,
-    )?;
-    let grant = state
-        .session_store
-        .revoke_workspace_tool_grant(
-            &workspace_id,
-            &grant_id,
-            &authenticated.user.user_id,
-            &now_iso(),
-        )
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "workspace tool grant not found" })),
-            )
-        })?;
-    Ok(Json(json!(grant)))
 }
 
 fn browser_origin_grant_json(grant: &BrowserOriginGrant) -> Value {
@@ -5165,102 +4830,6 @@ async fn validate_llm_provider(
         "error_code": result.outcome.error_code,
         "error_message": result.outcome.error_code.map(|_| result.outcome.detail),
         "catalog": catalog,
-    })))
-}
-
-async fn validate_llm_provider_draft(
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    State(state): State<Arc<LocalRuntimeState>>,
-    Json(request): Json<LlmProviderDraftProbe>,
-) -> LocalJsonResult {
-    ensure_provider_manager(&authenticated)?;
-    if request.name.trim().is_empty() {
-        return Err(provider_probe_request_error("provider name is required"));
-    }
-    let provider_type = request.provider_type.trim().to_lowercase();
-    if !runtime_provider_supported(&provider_type) {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider type" })),
-        ));
-    }
-
-    let base_url = normalized_runtime_provider_base_url(&provider_type, &request.base_url)?;
-    let auth_method = request.auth_method.trim().to_lowercase();
-    if !matches!(auth_method.as_str(), "api_key" | "environment" | "none") {
-        return Err((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "detail": "unsupported local provider auth method" })),
-        ));
-    }
-    validate_provider_auth_fields(
-        &auth_method,
-        request.api_key.is_some(),
-        request.environment_variable.is_some(),
-    )?;
-    let credential = if auth_method == "environment" {
-        let environment_variable = request
-            .environment_variable
-            .as_deref()
-            .map(|value| normalized_provider_environment_variable(&provider_type, &base_url, value))
-            .transpose()?
-            .ok_or_else(|| provider_probe_request_error("environment variable name is required"))?;
-        std::env::var(environment_variable)
-            .ok()
-            .and_then(|value| normalized_runtime_credential(&value))
-    } else {
-        request
-            .api_key
-            .as_deref()
-            .and_then(normalized_runtime_credential)
-    };
-    if matches!(auth_method.as_str(), "api_key" | "environment") && credential.is_none() {
-        return Ok(Json(json!({
-            "provider": null,
-            "status": "needs_credentials",
-            "probed": false,
-            "detail": if auth_method == "environment" {
-                "The referenced environment variable is unavailable in this runtime."
-            } else {
-                "Enter a provider credential before testing this connection."
-            },
-            "last_check": null,
-            "response_time_ms": null,
-            "error_code": "credential_unavailable",
-            "error_message": if auth_method == "environment" {
-                "The referenced environment variable is unavailable in this runtime."
-            } else {
-                "Enter a provider credential before testing this connection."
-            },
-            "catalog": null,
-        })));
-    }
-    let last_check = now_iso();
-    let outcome = state
-        .provider_probe
-        .probe(ProviderProbeRequest {
-            provider_type: provider_type.clone(),
-            base_url,
-            auth_method: provider_probe_auth_method(&auth_method).to_string(),
-            credential,
-        })
-        .await;
-    Ok(Json(json!({
-        "provider": null,
-        "status": outcome.status,
-        "probed": true,
-        "detail": outcome.detail,
-        "last_check": last_check,
-        "response_time_ms": outcome.response_time_ms,
-        "error_code": outcome.error_code,
-        "error_message": outcome.error_code.map(|_| outcome.detail),
-        "catalog": provider_probe_catalog(
-            &provider_type,
-            None,
-            &outcome,
-            &last_check,
-            None,
-        ),
     })))
 }
 
@@ -6375,59 +5944,6 @@ fn hierarchy_page_bounds(
     Ok((limit, offset, end))
 }
 
-async fn list_workspaces(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id)): Path<(String, String)>,
-    Query(_query): Query<HierarchyListQuery>,
-) -> LocalJsonResult {
-    if tenant_id != authenticated.workspace.tenant_id {
-        return Err(active_workspace_scope_error());
-    }
-    ensure_active_project(&authenticated, &project_id)?;
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn create_workspace(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id)): Path<(String, String)>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    if tenant_id != authenticated.workspace.tenant_id {
-        return Err(active_workspace_scope_error());
-    }
-    ensure_active_project(&authenticated, &project_id)?;
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn list_workspace_messages(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-) -> LocalJsonResult {
-    let _ = (authenticated, tenant_id, project_id, workspace_id);
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
-async fn create_workspace_message(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    let _ = (authenticated, tenant_id, project_id, workspace_id);
-    Err(workspace_core_bridge::unavailable(
-        "Workspace Core authority is unavailable",
-    ))
-}
-
 async fn list_tasks(
     State(_state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
@@ -6460,52 +5976,6 @@ struct ListConversationsQuery {
     offset: Option<usize>,
 }
 
-async fn list_conversations(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Query(query): Query<ListConversationsQuery>,
-) -> LocalJsonResult {
-    let project_id = query
-        .project_id
-        .unwrap_or_else(|| authenticated.workspace.project_id.clone());
-    ensure_active_project(&authenticated, &project_id)?;
-    let workspace_id = query.workspace_id;
-    if let Some(workspace_id) = workspace_id
-        .as_deref()
-        .filter(|_| !workspace_core_bridge::workspace_core_cutover_started(&state))
-    {
-        ensure_active_workspace(&state, &authenticated, workspace_id)?;
-    }
-    let page_query = HierarchyListQuery {
-        limit: query.limit,
-        offset: query.offset,
-    };
-    let (limit, offset, end) = hierarchy_page_bounds(&page_query, 100)?;
-    let values: Vec<Value> = state
-        .session_store
-        .list_conversations(&project_id, workspace_id.as_deref())
-        .map_err(local_store_error)?
-        .iter()
-        .filter(|conversation| !query.unbound_only || conversation.workspace_id.is_none())
-        .map(|conversation| state.conversation_value(conversation))
-        .collect();
-    let total = values.len();
-    let items = values
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect::<Vec<_>>();
-    let next_offset = end.min(total);
-    Ok(Json(json!({
-        "items": items,
-        "total": total,
-        "has_more": next_offset < total,
-        "offset": offset,
-        "limit": limit,
-        "next_offset": if next_offset < total { Some(next_offset) } else { None },
-    })))
-}
-
 #[derive(Deserialize)]
 struct CreateConversationBody {
     project_id: String,
@@ -6523,58 +5993,6 @@ struct CreateConversationAgentConfig {
     llm_model_override: Option<String>,
     #[serde(default)]
     llm_route_override: Option<LlmRouteTarget>,
-}
-
-async fn create_conversation(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<CreateConversationBody>,
-) -> LocalJsonResult {
-    ensure_active_project(&authenticated, &body.project_id)?;
-    let llm_route = normalized_conversation_llm_route(
-        body.agent_config.llm_model_override,
-        body.agent_config.llm_route_override,
-    )
-    .map_err(local_bad_request)?;
-    if let Some(route) = llm_route.as_ref() {
-        state
-            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
-            .map_err(local_bad_request)?;
-    }
-    let now = now_iso();
-    let conversation = LocalConversation {
-        id: format!("local-conversation-{}", Uuid::new_v4()),
-        project_id: authenticated.workspace.project_id.clone(),
-        tenant_id: authenticated.workspace.tenant_id.clone(),
-        title: body.title.unwrap_or_else(|| "Local session".to_string()),
-        workspace_id: None,
-        capability_mode: body.agent_config.capability_mode,
-        current_mode: ConversationRunMode::Plan,
-        created_at: now.clone(),
-        updated_at: now,
-    };
-    state
-        .session_store
-        .insert_conversation_with_llm_route(&conversation, llm_route.as_ref())
-        .map_err(local_store_error)?;
-    let initial_selection = execution_selection::ExecutionSelection {
-        agent_id: body.agent_config.selected_agent_id,
-        forced_skill_id: None,
-        subagent_id: None,
-    }
-    .normalized()
-    .map_err(local_bad_request)?;
-    state
-        .session_store
-        .save_execution_selection(
-            &conversation.id,
-            "conversation-created",
-            &initial_selection,
-            &now_iso(),
-        )
-        .map_err(local_store_error)?;
-    let value = state.conversation_value(&conversation);
-    Ok(Json(value))
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -6642,126 +6060,6 @@ struct ConversationConfigBody {
     llm_route_override: Option<Option<LlmRouteTarget>>,
     #[serde(default, deserialize_with = "approval_config::deserialize_mode")]
     approval_mode: Option<approval_config::ApprovalMode>,
-}
-
-async fn update_conversation_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Json(body): Json<ConversationModeBody>,
-) -> LocalJsonResult {
-    let value = {
-        let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-        let changes_workspace_scope = match &body.workspace_id {
-            WorkspaceIdPatch::Missing => false,
-            WorkspaceIdPatch::Null => conversation.workspace_id.is_some(),
-            WorkspaceIdPatch::Value(workspace_id) => {
-                conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
-            }
-        };
-        if is_local_demo_conversation(&conversation.id) && changes_workspace_scope {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "detail": "local demo conversation workspace scope is immutable"
-                })),
-            ));
-        }
-        match body.workspace_id {
-            WorkspaceIdPatch::Missing => {}
-            WorkspaceIdPatch::Null => conversation.workspace_id = None,
-            WorkspaceIdPatch::Value(workspace_id) => {
-                if workspace_core_bridge::workspace_core_cutover_started(&state) {
-                    workspace_core_bridge::validate_workspace_access(
-                        &state,
-                        &authenticated,
-                        &workspace_id,
-                    )
-                    .await?;
-                } else {
-                    ensure_active_workspace(&state, &authenticated, &workspace_id)?;
-                }
-                conversation.workspace_id = Some(workspace_id);
-            }
-        }
-        if let Some(capability_mode) = body.capability_mode {
-            conversation.capability_mode = capability_mode;
-        }
-        conversation.updated_at = now_iso();
-        state
-            .session_store
-            .update_conversation(&conversation)
-            .map_err(local_store_error)?;
-        state.conversation_value(&conversation)
-    };
-    Ok(Json(value))
-}
-
-async fn update_conversation_config(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Json(body): Json<ConversationConfigBody>,
-) -> LocalJsonResult {
-    if let Some(patch) = body.execution_selection {
-        if body.selected_agent_id.is_some()
-            || body.llm_model_override.is_some()
-            || body.llm_route_override.is_some()
-            || body.approval_mode.is_some()
-        {
-            return Err(local_bad_request(
-                "execution_selection must be updated independently".into(),
-            ));
-        }
-        return execution_selection_patch::update(&state, &authenticated, &conversation_id, patch);
-    }
-    let route_present = body.llm_model_override.is_some() || body.llm_route_override.is_some();
-    let llm_route = normalized_conversation_llm_route(
-        body.llm_model_override.flatten(),
-        body.llm_route_override.flatten(),
-    )
-    .map_err(local_bad_request)?;
-    if let Some(route) = llm_route.as_ref() {
-        state
-            .validate_conversation_llm_route(&authenticated.workspace.tenant_id, route)
-            .map_err(local_bad_request)?;
-    }
-    let value = {
-        let mut conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-        let now = now_iso();
-        let mut selection = state
-            .session_store
-            .execution_selection(&conversation.id)
-            .map_err(local_store_error)?
-            .unwrap_or_default();
-        if body.selected_agent_id.is_some() {
-            selection.agent_id = body.selected_agent_id;
-        }
-        let selection = selection.normalized().map_err(local_bad_request)?;
-        if route_present {
-            state
-                .session_store
-                .update_conversation_llm_route(&conversation.id, llm_route.as_ref(), &now)
-                .map_err(local_store_error)?;
-        }
-        if let Some(mode) = body.approval_mode {
-            state
-                .session_store
-                .update_conversation_approval_mode(&conversation.id, mode)
-                .map_err(local_store_error)?;
-        }
-        state
-            .session_store
-            .save_execution_selection(&conversation.id, "conversation-config", &selection, &now)
-            .map_err(local_store_error)?;
-        conversation.updated_at = now;
-        state
-            .session_store
-            .update_conversation(&conversation)
-            .map_err(local_store_error)?;
-        state.conversation_value(&conversation)
-    };
-    Ok(Json(value))
 }
 
 #[derive(Deserialize)]
@@ -6837,141 +6135,6 @@ fn conversation_messages_query_error(detail: &str) -> (StatusCode, Json<Value>) 
 struct SwitchPlanModeBody {
     conversation_id: String,
     mode: ConversationRunMode,
-}
-
-async fn switch_plan_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<SwitchPlanModeBody>,
-) -> LocalJsonResult {
-    if body.mode == ConversationRunMode::Build {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "build mode requires atomic plan approval and run authorization"
-            })),
-        ));
-    }
-    let mut conversation = scoped_conversation(&state, &authenticated, &body.conversation_id)?;
-    conversation.current_mode = body.mode;
-    conversation.updated_at = now_iso();
-    state
-        .session_store
-        .update_conversation(&conversation)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation.id,
-        "mode": conversation.current_mode,
-        "switched_at": conversation.updated_at,
-    })))
-}
-
-async fn get_plan_mode(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    let conversation = scoped_conversation(&state, &authenticated, &conversation_id)?;
-    Ok(Json(json!({
-        "conversation_id": conversation.id,
-        "mode": conversation.current_mode,
-    })))
-}
-
-async fn list_agent_plan_tasks(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let tasks = state
-        .session_store
-        .list_agent_plan_tasks(&conversation_id)
-        .map_err(local_store_error)?;
-    let plan_version = state
-        .session_store
-        .latest_draft_plan(&conversation_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation_id,
-        "total_count": tasks.len(),
-        "tasks": tasks,
-        "plan_version": plan_version,
-        "approval": {
-            "kind": "versioned_atomic",
-            "plan_version": plan_version,
-        },
-    })))
-}
-
-async fn conversation_messages(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-    Query(query): Query<ConversationMessagesQuery>,
-) -> LocalJsonResult {
-    let query = query.validated()?;
-    ensure_active_project(&authenticated, &query.project_id)?;
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let DesktopTimelinePage {
-        items,
-        has_more,
-        first_cursor,
-        last_cursor,
-    } = state
-        .session_store
-        .timeline_page(&conversation_id, query.limit, query.from, query.before)
-        .map_err(local_store_error)?;
-    let approval_requests = state
-        .session_store
-        .list_hitl_requests(&conversation_id)
-        .map_err(local_store_error)?
-        .into_iter()
-        .filter(|request| {
-            request.decision.is_some()
-                && matches!(request.kind, HitlKind::Decision | HitlKind::Permission)
-        })
-        .map(|request| {
-            let run_revision = request
-                .run_id
-                .as_deref()
-                .map(|run_id| state.session_store.run(run_id))
-                .transpose()?
-                .flatten()
-                .map(|run| run.revision);
-            let mut value = serde_json::to_value(request).map_err(|error| error.to_string())?;
-            value["run_revision"] = json!(run_revision);
-            Ok::<Value, String>(value)
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(local_store_error)?;
-    let artifact_versions = state
-        .session_store
-        .list_artifact_versions(&conversation_id)
-        .map_err(local_store_error)?;
-    let artifact_deliveries = state
-        .session_store
-        .list_artifact_deliveries(&conversation_id)
-        .map_err(local_store_error)?;
-    let tool_invocations = state
-        .session_store
-        .list_tool_invocations(&conversation_id)
-        .map_err(local_store_error)?;
-    let total = items.len();
-    Ok(Json(json!({
-        "conversationId": conversation_id,
-        "timeline": items,
-        "approval_requests": approval_requests,
-        "artifact_versions": artifact_versions,
-        "artifact_deliveries": artifact_deliveries,
-        "tool_invocations": tool_invocations,
-        "total": total,
-        "has_more": has_more,
-        "first_time_us": first_cursor.map(|cursor| cursor.time_us),
-        "first_counter": first_cursor.map(|cursor| cursor.counter),
-        "last_time_us": last_cursor.map(|cursor| cursor.time_us),
-        "last_counter": last_cursor.map(|cursor| cursor.counter),
-    })))
 }
 
 #[derive(Deserialize)]
@@ -7159,232 +6322,9 @@ struct ExecutionEnvironmentBody {
     kind: DesktopExecutionEnvironmentKind,
 }
 
-async fn approve_plan_and_start(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Json(body): Json<ApprovePlanAndStartBody>,
-) -> LocalJsonResult {
-    if body.message.trim().is_empty()
-        || body.message_id.trim().is_empty()
-        || body.idempotency_key.trim().is_empty()
-        || body.plan_version_id.trim().is_empty()
-        || body.expected_plan_version < 1
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "detail": "plan_version_id, expected_plan_version, message, message_id, and idempotency_key are required"
-            })),
-        ));
-    }
-    ensure_active_project(&authenticated, &body.project_id)?;
-    let conversation = scoped_conversation(&state, &authenticated, &body.conversation_id)?;
-    let existing_run = state
-        .session_store
-        .run_by_idempotency_key(&body.idempotency_key)
-        .map_err(local_store_error)?;
-    if let Some(existing_run) = existing_run.as_ref() {
-        ensure_active_project(&authenticated, &existing_run.project_id)?;
-    }
-    let prepared = if existing_run.is_some() {
-        None
-    } else {
-        local_feature_authority_v2::require_feature(
-            &state,
-            &authenticated,
-            "builtin-desktop-feature-agent-workspace-tenant-agent-workspace",
-        )
-        .map_err(|code| {
-            (
-                StatusCode::CONFLICT,
-                Json(json!({"code":code,"detail":"Agent workspace is unavailable"})),
-            )
-        })?;
-        let kind = body
-            .environment
-            .as_ref()
-            .map(|environment| environment.kind)
-            .unwrap_or(DesktopExecutionEnvironmentKind::Local);
-        if kind == DesktopExecutionEnvironmentKind::Worktree
-            && conversation.capability_mode != ConversationCapabilityMode::Code
-        {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({ "detail": "worktree execution requires a Code conversation" })),
-            ));
-        }
-        let environment_id = format!("local-environment-{}", Uuid::new_v4());
-        Some(
-            state
-                .worktree_manager()
-                .prepare(kind, &environment_id, &now_iso())
-                .map_err(execution_environment_error)?,
-        )
-    };
-    let approved_at = now_iso();
-    let outcome = match state.session_store.approve_plan_and_start_in_environment(
-        session_store::ApprovePlanStartInput {
-            conversation_id: &body.conversation_id,
-            project_id: &authenticated.workspace.project_id,
-            plan_version_id: &body.plan_version_id,
-            expected_plan_version: body.expected_plan_version,
-            idempotency_key: &body.idempotency_key,
-            message_id: &body.message_id,
-            request_message: &body.message,
-            environment: prepared
-                .as_ref()
-                .map(|prepared| prepared.environment.clone()),
-            requested_environment_kind: body
-                .environment
-                .as_ref()
-                .map(|environment| environment.kind)
-                .unwrap_or(DesktopExecutionEnvironmentKind::Local),
-            permission_profile: body.permission_profile,
-            now: &approved_at,
-        },
-    ) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            if let Some(prepared) = prepared.as_ref() {
-                state.worktree_manager().cleanup(&prepared.environment);
-            }
-            return Err(authority_error(error));
-        }
-    };
-    if !outcome.created {
-        if let Some(prepared) = prepared.as_ref() {
-            state.worktree_manager().cleanup(&prepared.environment);
-        }
-    } else if let Some(prepared) = prepared.as_ref() {
-        let event_type = if prepared.created_worktree {
-            "worktree_created"
-        } else {
-            "environment_selected"
-        };
-        let item = state.timeline_item(
-            event_type,
-            outcome.conversation.id.clone(),
-            Some(outcome.run.message_id.clone()),
-            None,
-            None,
-            json!({
-                "run_id": outcome.run.id,
-                "environment": prepared.environment,
-            }),
-        );
-        state.append_timeline(&outcome.conversation.id, item);
-    }
-    let should_queue = matches!(
-        outcome.run.status,
-        DesktopRunStatus::Queued | DesktopRunStatus::Interrupted
-    );
-    if should_queue {
-        let run_state = Arc::clone(&state);
-        let conversation_id = outcome.conversation.id.clone();
-        let project_id = outcome.conversation.project_id.clone();
-        let message = outcome.run.request_message.clone();
-        let message_id = outcome.run.message_id.clone();
-        let run_id = outcome.run.id.clone();
-        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-        let knowledge_authorization =
-            knowledge_authority_v2::agent_access::RunAuthorization::capture(
-                authenticated,
-                plugin_generation.clone(),
-                &outcome.conversation,
-                &message_id,
-                Some(&run_id),
-            );
-        tokio::spawn(async move {
-            knowledge_authority_v2::agent_access::scope(knowledge_authorization, async move {
-                run_state
-                    .run_agent_message_for_role_with_generation(
-                        conversation_id,
-                        project_id,
-                        message,
-                        message_id,
-                        None,
-                        Some(run_id),
-                        None,
-                        plugin_generation,
-                        None,
-                    )
-                    .await;
-            })
-            .await;
-        });
-    }
-    Ok(Json(json!({
-        "queued": should_queue,
-        "created": outcome.created,
-        "conversation": state.conversation_value(&outcome.conversation),
-        "plan_version": outcome.plan_version,
-        "run": outcome.run,
-    })))
-}
-
-async fn get_run(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(run_id): Path<String>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    let events = state
-        .session_store
-        .run_events(&run_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({ "run": run, "events": events })))
-}
-
 #[derive(Deserialize)]
 struct RunChangesQuery {
     expected_revision: u64,
-}
-
-async fn get_run_changes(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(run_id): Path<String>,
-    Query(query): Query<RunChangesQuery>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    if run.revision != query.expected_revision {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "run revision conflict",
-                "expected_revision": query.expected_revision,
-                "actual_revision": run.revision,
-            })),
-        ));
-    }
-    let snapshot =
-        tokio::task::spawn_blocking(move || GitChangesInspector::inspect(&run, &now_iso()))
-            .await
-            .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
-    Ok(Json(
-        serde_json::to_value(snapshot).map_err(|error| local_store_error(error.to_string()))?,
-    ))
 }
 
 #[derive(Deserialize)]
@@ -7567,152 +6507,6 @@ async fn list_run_inputs(
         "run_revision": run.revision,
         "inputs": inputs,
         "total_count": inputs.len(),
-    })))
-}
-
-async fn create_run_input(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Path(run_id): Path<String>,
-    Json(body): Json<CreateRunInputBody>,
-) -> LocalJsonResult {
-    if body.message.trim().is_empty()
-        || body.message_id.trim().is_empty()
-        || body.idempotency_key.trim().is_empty()
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "detail": "message, message_id, and idempotency_key are required"
-            })),
-        ));
-    }
-    validate_composer_context_items(&body.context_items).map_err(invalid_composer_context)?;
-    let run = state
-        .session_store
-        .run(&run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    let run_conversation = state
-        .session_store
-        .conversation(&run.conversation_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| invalid_composer_context("run conversation was not found"))?;
-    let run_workspace_id = run_conversation
-        .workspace_id
-        .as_deref()
-        .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
-    validate_composer_context_authority(
-        &state,
-        &authenticated,
-        run_workspace_id,
-        &body.context_items,
-        plugin_generation
-            .as_ref()
-            .map(|Extension(generation)| generation.as_ref()),
-    )?;
-    if run.revision != body.expected_run_revision {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "run revision conflict",
-                "expected_revision": body.expected_run_revision,
-                "actual_revision": run.revision,
-            })),
-        ));
-    }
-    if run.status != DesktopRunStatus::Running {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run is not accepting steering or queued input" })),
-        ));
-    }
-    if body.delivery == RunInputDelivery::SteerNow && state.control_for_run(&run).is_none() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run is not attached for steering" })),
-        ));
-    }
-    if !body.references.is_empty() {
-        let run_for_inspection = run.clone();
-        let snapshot = tokio::task::spawn_blocking(move || {
-            GitChangesInspector::inspect(&run_for_inspection, &now_iso())
-        })
-        .await
-        .map_err(|_| local_store_error("change inspection task failed".to_string()))?;
-        validate_run_input_references(&snapshot, &body.references).map_err(|detail| {
-            (
-                StatusCode::CONFLICT,
-                Json(json!({
-                    "detail": detail,
-                    "snapshot_id": snapshot.id,
-                    "run_revision": run.revision,
-                })),
-            )
-        })?;
-    }
-    let created_at = now_iso();
-    let outcome = state
-        .session_store
-        .create_run_input(session_store::CreateRunInput {
-            run_id: &run.id,
-            expected_run_revision: body.expected_run_revision,
-            message_id: &body.message_id,
-            idempotency_key: &body.idempotency_key,
-            delivery: body.delivery,
-            content: &body.message,
-            references: body.references,
-            context_items: body.context_items,
-            now: &created_at,
-        });
-    let (input, created) = match outcome {
-        Ok(value) => value,
-        Err(error) if error.contains("conflict") || error.contains("not accepting") => {
-            return Err((StatusCode::CONFLICT, Json(json!({ "detail": error }))));
-        }
-        Err(error) => return Err(local_store_error(error)),
-    };
-    if created {
-        let event_type = match input.delivery {
-            RunInputDelivery::SteerNow => "user_message",
-            RunInputDelivery::QueueNext => "run_input_queued",
-        };
-        let item = state.timeline_item(
-            event_type,
-            run.conversation_id.clone(),
-            Some(input.message_id.clone()),
-            (input.delivery == RunInputDelivery::SteerNow).then_some("user"),
-            Some(input.content.clone()),
-            json!({
-                "run_id": run.id,
-                "run_revision": run.revision,
-                "run_input_id": input.id,
-                "delivery_mode": input.delivery,
-                "input_status": input.status,
-                "references": input.references,
-                "context_items": input.context_items,
-            }),
-        );
-        state.append_timeline(&run.conversation_id, item);
-    }
-    Ok(Json(json!({
-        "accepted": true,
-        "created": created,
-        "action": "send_message",
-        "conversation_id": run.conversation_id,
-        "message_id": input.message_id,
-        "delivery_mode": input.delivery,
-        "run_id": run.id,
-        "run_revision": run.revision,
-        "queue_position": input.queue_position,
-        "input": input,
     })))
 }
 
@@ -8128,102 +6922,6 @@ struct DeliverArtifactVersionBody {
 
 fn default_local_artifact_destination() -> String {
     "local_workspace".to_string()
-}
-
-async fn deliver_artifact_version(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(artifact_version_id): Path<String>,
-    Json(body): Json<DeliverArtifactVersionBody>,
-) -> LocalJsonResult {
-    let version = state
-        .session_store
-        .artifact_version(&artifact_version_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "artifact version not found" })),
-            )
-        })?;
-    scoped_conversation(&state, &authenticated, &version.conversation_id)?;
-    if version.status == DesktopArtifactStatus::Delivered {
-        let deliveries = state
-            .session_store
-            .list_artifact_deliveries(&version.conversation_id)
-            .map_err(local_store_error)?;
-        if let Some(delivery) = deliveries.into_iter().find(|delivery| {
-            delivery.artifact_version_id == version.id
-                && delivery.idempotency_key == body.idempotency_key
-        }) {
-            return Ok(Json(json!({
-                "accepted": true,
-                "status": "delivered",
-                "artifact_version": version,
-                "delivery": delivery,
-            })));
-        }
-    }
-    ensure_artifact_revision(&version, body.expected_revision)?;
-    if version.status != DesktopArtifactStatus::Approved {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "only an approved artifact version can be delivered" })),
-        ));
-    }
-    if body.idempotency_key.trim().is_empty() || body.destination.trim().is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": "idempotency_key and destination are required" })),
-        ));
-    }
-    let metadata = tokio::fs::metadata(&version.path).await.map_err(|_| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "artifact file is unavailable; delivery was not recorded" })),
-        )
-    })?;
-    if !metadata.is_file() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "artifact path is not a file; delivery was not recorded" })),
-        ));
-    }
-    let delivered_at = now_iso();
-    let receipt = json!({
-        "artifact_version_id": version.id,
-        "artifact_id": version.artifact_id,
-        "destination": body.destination,
-        "path": version.path,
-        "relative_path": version.relative_path,
-        "bytes": metadata.len(),
-        "actor": "local_user",
-        "delivered_at": delivered_at,
-    });
-    let (delivered, delivery) = state
-        .session_store
-        .deliver_artifact_version(
-            &version.id,
-            version.revision,
-            &body.idempotency_key,
-            &body.destination,
-            receipt,
-            &delivered_at,
-        )
-        .map_err(local_store_error)?;
-    append_artifact_event(
-        &state,
-        &delivered,
-        "artifact_delivered",
-        None,
-        Some(&delivery.receipt),
-    );
-    Ok(Json(json!({
-        "accepted": true,
-        "status": "delivered",
-        "artifact_version": delivered,
-        "delivery": delivery,
-    })))
 }
 
 fn ensure_artifact_revision(
@@ -9557,35 +8255,6 @@ fn hitl_response_approves(kind: HitlKind, response_data: &Value) -> bool {
     }
 }
 
-async fn list_conversation_runs(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(conversation_id): Path<String>,
-) -> LocalJsonResult {
-    scoped_conversation(&state, &authenticated, &conversation_id)?;
-    let runs = state
-        .session_store
-        .list_runs(&conversation_id)
-        .map_err(local_store_error)?;
-    Ok(Json(json!({
-        "conversation_id": conversation_id,
-        "total_count": runs.len(),
-        "runs": runs,
-    })))
-}
-
-async fn agent_ws(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    ws: WebSocketUpgrade,
-) -> impl IntoResponse {
-    // A socket may span publications; each new turn admits its own generation.
-    drop(plugin_generation);
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
-}
-
 fn execution_selection_from_agent_message(
     value: &Value,
 ) -> Result<execution_selection::ExecutionSelection, String> {
@@ -9887,168 +8556,15 @@ fn is_subscribed_event(event: &Value, conversations: &HashSet<String>) -> bool {
         .is_some_and(|conversation_id| conversations.contains(conversation_id))
 }
 
-async fn get_sandbox(Path(project_id): Path<String>) -> Json<Value> {
-    Json(sandbox_value(project_id))
-}
-
-async fn ensure_sandbox(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local sandbox is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
-async fn proxy_auth_cookie() -> Json<Value> {
-    Json(json!({ "ok": true }))
-}
-
-async fn start_desktop(Path(project_id): Path<String>) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "isolated local desktop is not configured",
-            "sandbox": sandbox_value(project_id),
-        })),
-    ))
-}
-
-async fn desktop_proxy() -> Html<&'static str> {
-    Html(
-        r#"<!doctype html><html><body style="margin:0;background:#111;color:#ddd;font:14px system-ui;display:grid;place-items:center;height:100vh"><div>Local desktop mode uses the native Electron window.</div></body></html>"#,
-    )
-}
-
 #[derive(Deserialize)]
 struct StartTerminalBody {
     run_id: String,
     expected_run_revision: u64,
 }
 
-async fn start_terminal(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Path(project_id): Path<String>,
-    Json(body): Json<StartTerminalBody>,
-) -> LocalJsonResult {
-    ensure_active_project(&authenticated, &project_id)?;
-    let run = state
-        .session_store
-        .run(&body.run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    if run.project_id != project_id {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "terminal run project mismatch" })),
-        ));
-    }
-    if run.revision != body.expected_run_revision
-        || run.status != DesktopRunStatus::Running
-        || run.permission_profile != DesktopPermissionProfile::FullAccess
-    {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "terminal requires the exact active run revision with full_access permission",
-                "actual_revision": run.revision,
-                "status": run.status,
-                "permission_profile": run.permission_profile,
-            })),
-        ));
-    }
-    let environment = run.environment.as_ref().ok_or_else(|| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run has no authoritative execution environment" })),
-        )
-    })?;
-    state
-        .worktree_manager()
-        .validate(environment)
-        .map_err(execution_environment_error)?;
-    let cwd = PathBuf::from(&environment.workspace_path);
-    let created_at = now_iso();
-    let expires_at = (Utc::now() + ChronoDuration::seconds(30)).to_rfc3339();
-    let lease = state.create_terminal_session(
-        &run,
-        environment,
-        &authenticated,
-        cwd.clone(),
-        created_at,
-        expires_at,
-    );
-    Ok(Json(json!({
-        "success": true,
-        "url": null,
-        "port": null,
-        "session_id": lease.session_id,
-        "run_id": run.id,
-        "run_revision": run.revision,
-        "conversation_id": run.conversation_id,
-        "project_id": run.project_id,
-        "environment_id": environment.id,
-        "created_at": lease.created_at,
-        "expires_at": lease.expires_at,
-        "resumable": false,
-        "cwd": cwd,
-        "environment": run.environment,
-    })))
-}
-
 #[derive(Deserialize)]
 struct TerminalSocketQuery {
     session_id: String,
-}
-
-async fn terminal_ws(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
-    Path(project_id): Path<String>,
-    Query(query): Query<TerminalSocketQuery>,
-    ws: WebSocketUpgrade,
-) -> Response {
-    if let Err(error) = ensure_active_project(&authenticated, &project_id) {
-        return error.into_response();
-    }
-    let Some(lease) = state.take_terminal_session(&query.session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "detail": "unknown or consumed terminal session" })),
-        )
-            .into_response();
-    };
-    let cwd = match validate_terminal_session_lease(&state, &authenticated, &project_id, &lease) {
-        Ok(cwd) => cwd,
-        Err(error) => return error.into_response(),
-    };
-    let state_for_socket = Arc::clone(&state);
-    let authenticated_for_socket = authenticated.clone();
-    let project_for_socket = project_id.clone();
-    let lease_for_socket = lease.clone();
-    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| {
-            terminal_socket_loop(
-                socket,
-                cwd,
-                query.session_id,
-                state_for_socket,
-                authenticated_for_socket,
-                project_for_socket,
-                lease_for_socket,
-                plugin_generation,
-            )
-        })
-        .into_response()
 }
 
 fn validate_terminal_session_lease(
@@ -10300,35 +8816,6 @@ async fn terminal_socket_loop(
     drop(plugin_generation);
 }
 
-async fn sandbox_execute(
-    State(_state): State<Arc<LocalRuntimeState>>,
-    Json(_body): Json<Value>,
-) -> LocalJsonResult {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({
-            "detail": "sandbox execution is disabled until an isolated runtime is configured"
-        })),
-    ))
-}
-
-async fn mcp_tools_list(State(state): State<Arc<LocalRuntimeState>>) -> Json<Value> {
-    let tool_host = state.tool_host.lock().expect("local tool host").clone();
-    let mut result = tool_host.mcp_tools_list_result();
-    // The engine consumes tool *names* via ToolHost::list_tools; schemas are
-    // served only through this listing, so the browser bridge merges its
-    // metadata here under the same broker-connected gate the engine uses.
-    if state.connected_browser_tool_host().is_some() {
-        if let Some(tools) = result.get_mut("tools").and_then(Value::as_array_mut) {
-            tools.extend(agistack_adapters_browser::list_tool_metadata());
-            // Wrapper-composed tools (not part of the browser crate) advertise
-            // their schemas here too.
-            tools.push(browser_run_tool_host::fill_credentials_tool_metadata());
-        }
-    }
-    Json(result)
-}
-
 #[derive(Deserialize)]
 struct McpToolCallBody {
     run_id: String,
@@ -10336,83 +8823,6 @@ struct McpToolCallBody {
     name: String,
     #[serde(default)]
     arguments: Value,
-}
-
-async fn mcp_tools_call(
-    State(state): State<Arc<LocalRuntimeState>>,
-    Extension(authenticated): Extension<AuthenticatedContext>,
-    Json(body): Json<McpToolCallBody>,
-) -> LocalJsonResult {
-    let run = state
-        .session_store
-        .run(&body.run_id)
-        .map_err(local_store_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "detail": "run not found" })),
-            )
-        })?;
-    ensure_active_project(&authenticated, &run.project_id)?;
-    if run.revision != body.expected_run_revision || run.status != DesktopRunStatus::Running {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({
-                "detail": "MCP tool execution requires the exact active run revision",
-                "actual_revision": run.revision,
-                "status": run.status,
-            })),
-        ));
-    }
-    let environment = run.environment.as_ref().ok_or_else(|| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": "run has no authoritative execution environment" })),
-        )
-    })?;
-    state
-        .worktree_manager()
-        .validate(environment)
-        .map_err(execution_environment_error)?;
-    let inner = LocalToolHost::new(&environment.workspace_path)
-        .map_err(|error| execution_environment_error(error.to_string()))?;
-    let host = AuthorizedRunToolHost::new(Arc::new(inner), state.session_store.clone(), run);
-    let input_json = serde_json::to_string(&body.arguments).map_err(|error| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": error.to_string() })),
-        )
-    })?;
-    let output = host.call(&body.name, &input_json).await.map_err(|error| {
-        (
-            StatusCode::CONFLICT,
-            Json(json!({ "detail": error.to_string() })),
-        )
-    })?;
-    let value = serde_json::from_str(&output).unwrap_or_else(|_| {
-        json!({
-            "isError": false,
-            "content": [{ "type": "text", "text": output }],
-        })
-    });
-    Ok(Json(value))
-}
-
-fn sandbox_value(project_id: String) -> Value {
-    json!({
-        "sandbox_id": format!("local-{project_id}"),
-        "project_id": project_id,
-        "tenant_id": "local",
-        "status": "unavailable",
-        "endpoint": null,
-        "websocket_url": null,
-        "desktop_port": null,
-        "terminal_port": null,
-        "desktop_url": null,
-        "terminal_url": null,
-        "is_healthy": false,
-        "error_message": "isolated local sandbox is not configured",
-    })
 }
 
 struct LocalTimelineObserver {
@@ -11140,6 +9550,7 @@ mod tests {
         include!("conversation_history_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod conversation_llm_route_tests {
         use super::*;
         include!("conversation_llm_route_tests.rs");
@@ -11158,6 +9569,7 @@ mod tests {
         include!("provider_audio_failover_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod provider_request_timeout_tests {
         use super::*;
         include!("provider_request_timeout_tests.rs");
@@ -11176,6 +9588,7 @@ mod tests {
         include!("provider_embedding_declaration_tests.rs");
     }
 
+    #[cfg(feature = "legacy-business")]
     mod provider_management_tests {
         use super::*;
         include!("provider_management_tests.rs");
@@ -12126,6 +10539,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_origin_grant_routes_list_and_revoke() {
         let state = test_state("browser-grant-secret");
@@ -12215,6 +10629,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_capability_grant_routes_list_and_revoke() {
         let state = test_state("browser-capability-secret");
@@ -12306,6 +10721,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_site_credential_routes_round_trip_without_password_exposure() {
         let state = test_state("browser-credential-secret");
@@ -12465,6 +10881,7 @@ mod tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn browser_action_audit_route_lists_newest_first_with_filters() {
         let state = test_state("browser-audit-secret");
@@ -12540,6 +10957,7 @@ mod tests {
         assert_eq!(entries[0]["tool_name"], "browser_cdp_raw");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_messages_api_paginates_with_exclusive_tuple_cursors() {
         let state = test_state("timeline-secret");
@@ -12638,6 +11056,7 @@ mod tests {
         assert_eq!(forward["has_more"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_messages_api_validates_project_limit_and_cursors() {
         let state = test_state("timeline-validation-secret");
@@ -12689,6 +11108,7 @@ mod tests {
         assert_eq!(wrong_project.status(), StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn identity_catalogs_match_the_cloud_pagination_contract() {
         let app = local_router(test_state("identity-pagination-secret"));
@@ -12750,6 +11170,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_catalog_filters_unbound_sessions_before_pagination() {
         let state = test_state("unbound-catalog-secret");
@@ -12796,6 +11217,7 @@ mod tests {
         assert_eq!(unbound["next_offset"], Value::Null);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn router_requires_launch_capability_for_http_and_websocket_upgrade() {
         let state = test_state("launch-secret");
@@ -12866,6 +11288,7 @@ mod tests {
         assert_eq!(authorized.status(), axum::http::StatusCode::OK);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_auth_me_exposes_structured_non_superuser_authority() {
         let app = local_router(test_state("launch-secret"));
@@ -12885,6 +11308,7 @@ mod tests {
         assert_eq!(body["global_roles"], json!([]));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_session_and_workspace_context_require_two_credentials_and_revoke_cleanly() {
         let state = test_state_without_session("launch-secret");
@@ -12992,6 +11416,7 @@ mod tests {
         assert_eq!(revoked.status(), axum::http::StatusCode::UNAUTHORIZED);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn signout_retries_after_response_loss_without_revoking_other_sessions() {
         let state = test_state_without_session("launch-secret");
@@ -13151,6 +11576,7 @@ mod tests {
         assert_eq!(active.status(), axum::http::StatusCode::OK);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_login_routes_are_not_registered() {
         let app = local_router(test_state_without_session("launch-secret"));
@@ -13181,6 +11607,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_types_declare_supported_local_auth_methods() {
         let state = test_state("provider-types-secret");
@@ -13225,6 +11652,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_auth_requests_reject_unknown_and_mutually_exclusive_fields() {
         let mutation_cases = [
@@ -13350,6 +11778,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn no_auth_provider_is_credential_configured_even_while_disabled() {
         let state = test_state("provider-no-auth-status");
@@ -13399,6 +11828,7 @@ mod tests {
         assert_eq!(provider["health_status"], "disabled");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn missing_provider_credentials_are_not_reported_as_network_probes() {
         let state = test_state("provider-missing-credential-status");
@@ -13463,6 +11893,7 @@ mod tests {
         assert_eq!(health["provider"]["health_status"], "needs_credentials");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_references_are_limited_to_provider_credentials() {
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
@@ -13580,6 +12011,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn loopback_environment_provider_probe_sends_resolved_credential() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -13623,6 +12055,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_reference_never_persists_the_resolved_value() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -13683,6 +12116,7 @@ mod tests {
         assert!(runtime.configured_credentials.contains(&key));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_can_be_re_enabled_after_disable() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -13771,6 +12205,7 @@ mod tests {
         assert!(runtime.configured_credentials.contains(&key));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn environment_provider_reference_survives_restart_without_persisting_the_value() {
         const ENVIRONMENT_VARIABLE: &str = "OPENAI_API_KEY";
@@ -13900,6 +12335,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove environment restart test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_model_catalog_is_static_structured_and_source_attributed() {
         let state = test_state("provider-catalog-secret");
@@ -13965,6 +12401,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_put_health_and_usage_routes_match_desktop_client_contract() {
         let (provider_base_url, provider_shutdown) =
@@ -14099,6 +12536,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn draft_provider_probe_discovers_models_without_persisting() {
         let _environment_lock = PROVIDER_ENVIRONMENT_TEST_LOCK.lock().await;
@@ -14241,6 +12679,7 @@ mod tests {
         provider_shutdown.send(()).ok();
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn unavailable_credential_store_rejects_provider_update_without_mutating_runtime_or_db() {
         let root = test_root();
@@ -14348,6 +12787,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_endpoints_reject_invalid_or_unsafe_transport_before_persistence() {
         let state = test_state("provider-endpoint-secret");
@@ -14447,6 +12887,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_mutation_is_revision_guarded_and_never_reuses_another_provider_key() {
         let state = test_state("provider-secret");
@@ -14633,6 +13074,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn provider_connection_update_requires_explicit_idempotent_runtime_selection() {
         let state = test_state("explicit-provider-selection-secret");
@@ -14734,6 +13176,7 @@ mod tests {
         assert_eq!(local["runtime_selected"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_status_is_sorted_and_never_exposes_provider_transport_or_credentials() {
         let state = test_state("runtime-provider-projection-secret");
@@ -14873,6 +13316,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn signout_preserves_runtime_selection_for_the_next_local_session() {
         let state = test_state("selection-signout-secret");
@@ -14948,6 +13392,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn active_provider_connection_does_not_appear_in_runtime_status_before_selection() {
         let state = test_state("unselected-runtime-status-secret");
@@ -14983,6 +13428,7 @@ mod tests {
         assert_eq!(error, "Workspace Core policy authority is unavailable");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn stale_provider_update_cannot_clear_authoritative_runtime_selection() {
         let state = test_state("stale-provider-selection-secret");
@@ -15058,6 +13504,7 @@ mod tests {
         assert_eq!(providers[0]["is_active"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn routed_endpoint_change_requires_replacement_credential_atomically() {
         let state = test_state("atomic-provider-credential-secret");
@@ -15162,6 +13609,7 @@ mod tests {
         assert!(!persisted.to_string().contains("new-provider-key"));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_selection_route_allows_electron_put_preflight() {
         let response = local_router(test_state("selection-cors-secret"))
@@ -15188,6 +13636,7 @@ mod tests {
             .is_some_and(|methods| methods.split(',').any(|method| method.trim() == "PUT")));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn workspace_reconfigure_preserves_provider_credentials_and_selection_state() {
         let state = test_state("workspace-config-provider-secret");
@@ -15266,6 +13715,7 @@ mod tests {
         assert_eq!(selected["runtime_selected"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn runtime_selection_and_provider_credential_survive_restart_without_secret_exposure() {
         let root = test_root();
@@ -15442,6 +13892,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove restart test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn active_provider_without_selection_row_is_not_inferred_as_runtime() {
         let root = test_root();
@@ -15672,6 +14123,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove schema test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn tenant_members_can_list_but_cannot_mutate_or_validate_providers() {
         let state = test_state("member-provider-secret");
@@ -15731,6 +14183,7 @@ mod tests {
         assert_eq!(validate.status(), axum::http::StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn opaque_agent_resources_are_rejected_outside_active_workspace_context() {
         let state = test_state_without_session("launch-secret");
@@ -15860,6 +14313,7 @@ mod tests {
         assert_eq!(active_conversation["project_id"], "local-project");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn cors_allows_electron_origin_and_rejects_web_origin() {
         let app = local_router(test_state("launch-secret"));
@@ -16164,6 +14618,7 @@ mod tests {
         assert_eq!(assistant_messages, 2);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn lost_response_retry_replays_without_a_second_agent_execution() {
         let state = test_state("client-turn-retry-secret");
@@ -16258,6 +14713,7 @@ mod tests {
             .is_empty());
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn client_turn_idempotency_distinguishes_structured_workload_roles() {
         let state = test_state("client-turn-role-secret");
@@ -16295,6 +14751,7 @@ mod tests {
         assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn concurrent_client_turn_replays_start_one_agent_execution() {
         let state = test_state("client-turn-concurrent-secret");
@@ -16344,6 +14801,7 @@ mod tests {
         assert_eq!(state.agent_engine_attempts.load(Ordering::SeqCst), 1);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn invalid_client_message_ids_have_no_side_effects() {
         let state = test_state("client-turn-validation-secret");
@@ -16855,6 +15313,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove test root");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn plan_task_route_returns_only_the_requested_conversation_plan() {
         let state = test_state("launch-secret");
@@ -16964,6 +15423,7 @@ mod tests {
         assert_eq!(projected["metadata"]["run"]["status"], "queued");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_returns_one_authoritative_snapshot() {
         let state = test_state("session-projection-secret");
@@ -17050,6 +15510,7 @@ mod tests {
             .is_some_and(|updated_at| !updated_at.is_empty()));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_requires_the_exact_query_scope() {
         let state = test_state("session-scope-secret");
@@ -17116,6 +15577,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_session_projection_supports_standalone_scope() {
         let state = test_state("standalone-session-secret");
@@ -17155,6 +15617,7 @@ mod tests {
         assert_eq!(snapshot["conversation"]["workspace_id"], Value::Null);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn plan_mode_route_persists_the_conversation_authority_boundary() {
         let state = test_state("launch-secret");
@@ -17201,6 +15664,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn new_conversations_start_in_plan_mode() {
         let state = test_state("launch-secret");
@@ -17256,6 +15720,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn my_work_route_is_project_scoped_and_uses_run_status_without_text_inference() {
         let state = test_state("launch-secret");
@@ -17377,6 +15842,7 @@ mod tests {
         assert_eq!(payload["items"][0]["required_action"], "review_approval");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_mutations_are_persistent_revision_guarded_and_project_scoped() {
         let state = test_state("automation-read-secret");
@@ -17641,6 +16107,7 @@ mod tests {
         assert_eq!(foreign_project.status(), StatusCode::FORBIDDEN);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_run_v2_returns_one_durable_receipt_and_history_record() {
         let state = test_state("automation-run-v2-secret");
@@ -17818,6 +16285,7 @@ mod tests {
         assert_eq!(replay_after_shutdown["duplicate"], true);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_run_fails_closed_without_a_live_worker_and_does_not_enqueue() {
         let state = test_state("automation-run-unavailable-secret");
@@ -17882,6 +16350,7 @@ mod tests {
         assert_eq!(response_json(history).await["total"], 0);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn local_automation_never_selects_the_first_workspace_for_an_unscoped_job() {
         let state = test_state("automation-unscoped-secret");
@@ -17951,6 +16420,7 @@ mod tests {
         state.stop_automation_worker().await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_capability_can_switch_without_losing_workspace_linkage() {
         let state = test_state("launch-secret");
@@ -18007,6 +16477,7 @@ mod tests {
         assert_eq!(stored.workspace_id, None);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn conversation_mode_patch_distinguishes_missing_null_and_value_workspace_id() {
         let state = test_state("conversation-mode-patch-secret");
@@ -19309,6 +17780,7 @@ mod tests {
         assert_eq!(decision["decision"], "request_changes");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn artifact_api_persists_review_and_records_delivery_only_when_the_file_exists() {
         let state = test_state("artifact-secret");
@@ -19478,6 +17950,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn hitl_response_resumes_authoritative_run_and_preserves_status_boundaries() {
         let state = test_state("launch-secret");
@@ -19821,6 +18294,7 @@ mod tests {
         assert_eq!(conflicting_replay.status(), StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn env_var_hitl_rejects_plaintext_without_mutating_checkpoint() {
         let state = test_state("launch-secret");
@@ -19892,6 +18366,7 @@ mod tests {
             .contains("must-not-persist"));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn a2ui_hitl_enforces_persisted_surface_action_authority_and_redacts_history() {
         use agistack_core::agent::types::{A2uiActionAuthority, A2uiAllowedAction, HitlRequest};
@@ -20442,6 +18917,7 @@ mod tests {
             .0
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn review_approval_completes_the_same_authoritative_run() {
         let state = test_state("launch-secret");
@@ -20493,6 +18969,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn paused_run_can_cancel_without_restarting_execution() {
         let state = test_state("launch-secret");
@@ -20558,6 +19035,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn pause_rejects_a_running_record_without_an_attached_execution() {
         let state = test_state("launch-secret");
@@ -20588,6 +19066,7 @@ mod tests {
         assert_eq!(stored.revision, running.revision);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn steer_now_persists_before_ack_and_applies_without_advancing_run_revision() {
         let state = test_state("launch-secret");
@@ -20665,6 +19144,7 @@ mod tests {
         state.release_agent_run(&conversation.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn queue_next_waits_through_review_then_promotes_once_to_a_plan_turn() {
         let state = test_state("launch-secret");
@@ -20852,6 +19332,7 @@ mod tests {
         assert_eq!(conflict.status(), StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn pause_route_signals_the_attached_execution_without_faking_run_state() {
         let state = test_state("launch-secret");
@@ -20906,6 +19387,7 @@ mod tests {
         state.release_agent_run(&conversation.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn resume_continues_the_same_paused_run_from_its_checkpoint() {
         let state = test_state("launch-secret");
@@ -20976,6 +19458,7 @@ mod tests {
         assert_eq!(final_run.expect("resumed run reaches review").id, paused.id);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn reconnect_starts_a_recovered_unstarted_run_once_with_the_original_authority() {
         let state = test_state("launch-secret");
@@ -21124,6 +19607,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn recovered_unstarted_run_cancels_without_a_core_checkpoint() {
         let state = test_state("launch-secret");
@@ -21178,6 +19662,7 @@ mod tests {
         assert_eq!(checkpoint.goal, interrupted.request_message);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn recovered_unstarted_run_cancels_a_seeded_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -21376,6 +19861,7 @@ mod tests {
         state.release_agent_run_if_control(&conversation.id, &reclaimed);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn disconnect_after_running_commit_reconnects_from_seeded_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -21644,6 +20130,7 @@ mod tests {
         assert_eq!(stored_fork.revision, running_fork.revision + 2);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn startup_quarantines_checkpoint_authority_mismatch_before_reconnect() {
         let state = test_state("launch-secret");
@@ -21794,6 +20281,7 @@ mod tests {
         assert_eq!(stored.error, quarantined.error);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn review_changes_reopens_the_same_run_with_human_feedback() {
         let state = test_state("launch-secret");
@@ -21859,6 +20347,7 @@ mod tests {
         }));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn terminal_grant_is_single_use_and_rechecks_authoritative_run_identity() {
         let state = test_state("launch-secret");
@@ -22015,6 +20504,7 @@ mod tests {
         assert_eq!(stale.0, StatusCode::CONFLICT);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn mcp_tool_call_rejects_requests_without_an_authoritative_run_scope() {
         let state = test_state("launch-secret");
@@ -22329,6 +20819,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn sandbox_execute_never_falls_back_to_the_host_shell() {
         let state = test_state("launch-secret");
@@ -22672,6 +21163,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn reconnect_never_restarts_a_terminalized_launch_checkpoint() {
         let state = test_state("launch-secret");
@@ -22939,6 +21431,7 @@ mod tests {
         assert_eq!(stored.revision, quarantined.revision);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_started_source_controls_never_cross_the_core_checkpoint_boundary() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -22955,6 +21448,7 @@ mod tests {
         .await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_unstarted_source_controls_never_cross_the_core_checkpoint_boundary() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -22971,6 +21465,7 @@ mod tests {
         .await;
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_source_new_recovery_key_has_zero_prepare_db_or_event_side_effects() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -23139,6 +21634,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn busy_conversation_recovery_fork_claim_fails_before_prepare_or_insert() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -23384,6 +21880,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn post_transfer_resume_failure_removes_created_worktree_run_and_events() {
         let state = test_state("launch-secret");
@@ -23581,6 +22078,7 @@ mod tests {
         std::fs::remove_dir_all(root).expect("remove rollback fixture");
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn transferred_source_same_queued_recovery_key_replays_without_source_preflight() {
         let (state, checkpoints) = test_state_with_counting_checkpoints("launch-secret");
@@ -23680,6 +22178,7 @@ mod tests {
             .is_some_and(|authority| authority.matches_run(&forked)));
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn old_source_cancel_never_terminalizes_fork_checkpoint_after_authority_transfer() {
         let state = test_state("launch-secret");
@@ -23755,6 +22254,7 @@ mod tests {
         state.release_agent_run_if_control(&conversation.id, &control);
     }
 
+    #[cfg(feature = "legacy-business")]
     #[tokio::test]
     async fn old_source_resume_never_reopens_fork_checkpoint_after_authority_transfer() {
         let state = test_state("launch-secret");

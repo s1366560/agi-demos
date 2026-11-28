@@ -195,15 +195,15 @@ function verifyMacSignatures(appPath, sidecarPath, workspaceCorePath, dmgPath) {
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', sidecarPath], {
     stdio: 'inherit',
   });
-  execFileSync('/usr/bin/codesign', ['--verify', '--strict', workspaceCorePath], {
+  if (workspaceCorePath) execFileSync('/usr/bin/codesign', ['--verify', '--strict', workspaceCorePath], {
     stdio: 'inherit',
   });
   const appSignature = inspectMacSignature(appPath);
   const sidecarSignature = inspectMacSignature(sidecarPath);
-  const workspaceCoreSignature = inspectMacSignature(workspaceCorePath);
+  const workspaceCoreSignature = workspaceCorePath ? inspectMacSignature(workspaceCorePath) : null;
   for (const [label, signature] of [
     ['sidecar', sidecarSignature],
-    ['Workspace Core', workspaceCoreSignature],
+    ...(workspaceCoreSignature ? [['Workspace Core', workspaceCoreSignature]] : []),
   ]) {
     if (appSignature.developerIdAuthority !== signature.developerIdAuthority) {
       throw new Error(`app and ${label} Developer ID Authority values do not match`);
@@ -219,7 +219,7 @@ function verifyMacSignatures(appPath, sidecarPath, workspaceCorePath, dmgPath) {
   if (
     appSignature.teamIdentifier !== expectedTeamIdentifier ||
     sidecarSignature.teamIdentifier !== expectedTeamIdentifier ||
-    workspaceCoreSignature.teamIdentifier !== expectedTeamIdentifier
+    (workspaceCoreSignature && workspaceCoreSignature.teamIdentifier !== expectedTeamIdentifier)
   ) {
     throw new Error(
       'app, sidecar, and Workspace Core TeamIdentifier values do not match the configured release team',
@@ -229,7 +229,7 @@ function verifyMacSignatures(appPath, sidecarPath, workspaceCorePath, dmgPath) {
   inspectMacAudioInputEntitlement(requireMacRendererHelper(appPath));
   const appArchitectures = inspectUniversalMacBinary(requireMacMainExecutable(appPath));
   const sidecarArchitectures = inspectUniversalMacBinary(sidecarPath);
-  const workspaceCoreArchitectures = inspectUniversalMacBinary(workspaceCorePath);
+  const workspaceCoreArchitectures = workspaceCorePath && inspectUniversalMacBinary(workspaceCorePath);
   if (process.env.AGISTACK_REQUIRE_NOTARIZATION === '1') {
     execFileSync('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=4', appPath], {
       stdio: 'inherit',
@@ -260,14 +260,14 @@ function verifyMacSignatures(appPath, sidecarPath, workspaceCorePath, dmgPath) {
     architecture: 'universal',
     app_architectures: appArchitectures,
     sidecar_architectures: sidecarArchitectures,
-    workspace_core_architectures: workspaceCoreArchitectures,
+    ...(workspaceCorePath ? {workspace_core_architectures: workspaceCoreArchitectures} : {}),
     developer_id_authority: appSignature.developerIdAuthority,
     team_identifier: appSignature.teamIdentifier,
     signing_certificate_sha256: appSignature.signingCertificateSha256,
     same_signature_identity: true,
     app_signature_valid: true,
     sidecar_signature_valid: true,
-    workspace_core_signature_valid: true,
+    ...(workspaceCorePath ? {workspace_core_signature_valid: true} : {}),
     notarization_verified: true,
     app_stapler_valid: true,
     dmg_stapler_valid: true,
@@ -313,7 +313,7 @@ function verifyWindowsSignatures(installerPath, sidecarPath, workspaceCorePath) 
       expectedThumbprint,
       installerPath,
       sidecarPath,
-      workspaceCorePath,
+      ...(workspaceCorePath ? [workspaceCorePath] : []),
     ],
     { stdio: 'inherit' },
   );
@@ -321,7 +321,7 @@ function verifyWindowsSignatures(installerPath, sidecarPath, workspaceCorePath) 
     signer_thumbprint: expectedThumbprint,
     installer_authenticode_valid: true,
     sidecar_authenticode_valid: true,
-    workspace_core_authenticode_valid: true,
+    ...(workspaceCorePath ? {workspace_core_authenticode_valid: true} : {}),
   };
 }
 
@@ -373,6 +373,18 @@ async function verifyLinuxPackages({
   workspaceCoreName,
   expectedWorkspaceCoreSha256,
 }) {
+  async function verifyCoreInPackage(entries, label) {
+    const matches = entries.files.filter(path => basename(path) === 'memstack-workspace-core'
+      && path.includes(`${sep}resources${sep}workspace-core${sep}`));
+    if (!workspaceCorePath) {
+      if (matches.length) throw new Error(`${label} contains an undeclared Workspace Core helper`);
+      return;
+    }
+    const core = requireFile(matches, workspaceCoreName);
+    if (await verifyWorkspaceCoreDigest(core, workspaceCoreName) !== expectedWorkspaceCoreSha256)
+      throw new Error(`${label} Workspace Core does not match the verified unpacked helper`);
+    verifyLinuxBinaryArchitecture(core, metadataResult.architecture, `${label} Workspace Core`);
+  }
   const architecture = metadataResult.architecture;
   const appImagePath = requireUniquePath(
     metadataResult.installers.filter((path) => path.endsWith('.AppImage')),
@@ -388,7 +400,7 @@ async function verifyLinuxPackages({
   }
   verifyLinuxBinaryArchitecture(appImagePath, architecture, 'Linux AppImage');
   verifyLinuxBinaryArchitecture(sidecarPath, architecture, 'Linux sidecar');
-  verifyLinuxBinaryArchitecture(workspaceCorePath, architecture, 'Linux Workspace Core');
+  if (workspaceCorePath) verifyLinuxBinaryArchitecture(workspaceCorePath, architecture, 'Linux Workspace Core');
 
   const debArchitecture = execFileSync('dpkg-deb', ['--field', debPath, 'Architecture'], {
     encoding: 'utf8',
@@ -433,20 +445,7 @@ async function verifyLinuxPackages({
       throw new Error('AppImage sidecar does not match the verified unpacked sidecar');
     }
     verifyLinuxBinaryArchitecture(appImageSidecar, architecture, 'AppImage sidecar');
-    const appImageWorkspaceCore = requireFile(
-      appImageEntries.files.filter((path) =>
-        path.includes(`${sep}resources${sep}workspace-core${sep}`),
-      ),
-      workspaceCoreName,
-    );
-    const appImageWorkspaceCoreSha256 = await verifyWorkspaceCoreDigest(
-      appImageWorkspaceCore,
-      workspaceCoreName,
-    );
-    if (appImageWorkspaceCoreSha256 !== expectedWorkspaceCoreSha256) {
-      throw new Error('AppImage Workspace Core does not match the verified unpacked helper');
-    }
-    verifyLinuxBinaryArchitecture(appImageWorkspaceCore, architecture, 'AppImage Workspace Core');
+    await verifyCoreInPackage(appImageEntries, 'AppImage');
 
     execFileSync('dpkg-deb', ['--extract', debPath, debTemp], {
       stdio: 'inherit',
@@ -469,26 +468,14 @@ async function verifyLinuxPackages({
       throw new Error('deb sidecar does not match the verified unpacked sidecar');
     }
     verifyLinuxBinaryArchitecture(debSidecar, architecture, 'deb sidecar');
-    const debWorkspaceCore = requireFile(
-      debEntries.files.filter((path) => path.includes(`${sep}resources${sep}workspace-core${sep}`)),
-      workspaceCoreName,
-    );
-    const debWorkspaceCoreSha256 = await verifyWorkspaceCoreDigest(
-      debWorkspaceCore,
-      workspaceCoreName,
-    );
-    if (debWorkspaceCoreSha256 !== expectedWorkspaceCoreSha256) {
-      throw new Error('deb Workspace Core does not match the verified unpacked helper');
-    }
-    verifyLinuxBinaryArchitecture(debWorkspaceCore, architecture, 'deb Workspace Core');
+    await verifyCoreInPackage(debEntries, 'deb');
 
     return {
       architecture,
       deb_architecture: debArchitecture,
       sidecar_executable: true,
-      workspace_core_executable: true,
+      ...(workspaceCorePath ? {workspace_core_executable: true, package_workspace_cores_identical: true} : {}),
       package_sidecars_identical: true,
-      package_workspace_cores_identical: true,
       appimage_executable: true,
       appimage_extract_smoke: true,
       deb_extract_smoke: true,
@@ -512,8 +499,8 @@ async function main() {
   }
   const sidecarName =
     platform === 'win32' ? 'agistack-desktop-sidecar.exe' : 'agistack-desktop-sidecar';
-  const workspaceCoreName =
-    platform === 'win32' ? 'memstack-workspace-core.exe' : 'memstack-workspace-core';
+  const full = process.env.AGISTACK_DESKTOP_PROFILE === 'full';
+  const workspaceCoreName = platform === 'win32' ? 'memstack-workspace-core.exe' : 'memstack-workspace-core';
   const metadataResult = await verifyReleaseRootMetadata({
     releaseRoot,
     platform,
@@ -541,22 +528,30 @@ async function main() {
       dmgPath,
       inspectAppBundle: async (appPath) => {
         const packagedSidecarPath = join(appPath, 'Contents', 'Resources', 'sidecar', sidecarName);
-        const packagedWorkspaceCorePath = join(
+        if (!full) {
+          try {
+            await access(join(appPath, 'Contents', 'Resources', 'workspace-core'));
+            throw new Error('macOS application contains an undeclared Workspace Core helper');
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+          }
+        }
+        const packagedWorkspaceCorePath = full ? join(
           appPath,
           'Contents',
           'Resources',
           'workspace-core',
           workspaceCoreName,
-        );
+        ) : null;
         const sidecarSha256 = await verifySidecarDigest(packagedSidecarPath, sidecarName);
-        const workspaceCoreSha256 = await verifyWorkspaceCoreDigest(
+        const workspaceCoreSha256 = full ? await verifyWorkspaceCoreDigest(
           packagedWorkspaceCorePath,
           workspaceCoreName,
-        );
+        ) : null;
         return {
           ...verifyMacSignatures(appPath, packagedSidecarPath, packagedWorkspaceCorePath, dmgPath),
           sidecar_sha256: sidecarSha256,
-          workspace_core_sha256: workspaceCoreSha256,
+          ...(full ? {workspace_core_sha256: workspaceCoreSha256} : {}),
         };
       },
     });
@@ -570,25 +565,25 @@ async function main() {
       installerPath,
       expectedArchitecture: metadataResult.architecture,
       sidecarName,
-      workspaceCoreName,
+      workspaceCoreName: full ? workspaceCoreName : null,
       inspectInstallerPayload: async ({ packagedSidecarPath, packagedWorkspaceCorePath }) => {
         const sidecarSha256 = await verifySidecarDigest(packagedSidecarPath, sidecarName);
-        const workspaceCoreSha256 = await verifyWorkspaceCoreDigest(
+        const workspaceCoreSha256 = full ? await verifyWorkspaceCoreDigest(
           packagedWorkspaceCorePath,
           workspaceCoreName,
-        );
+        ) : null;
         const sidecarArchitecture = inspectPortableExecutableArchitecture(
           await readFile(packagedSidecarPath),
         );
-        const workspaceCoreArchitecture = inspectPortableExecutableArchitecture(
+        const workspaceCoreArchitecture = full ? inspectPortableExecutableArchitecture(
           await readFile(packagedWorkspaceCorePath),
-        );
+        ) : null;
         return {
           ...verifyWindowsSignatures(installerPath, packagedSidecarPath, packagedWorkspaceCorePath),
           sidecar_sha256: sidecarSha256,
-          workspace_core_sha256: workspaceCoreSha256,
+          ...(full ? {workspace_core_sha256: workspaceCoreSha256} : {}),
           sidecar_architecture: sidecarArchitecture,
-          workspace_core_architecture: workspaceCoreArchitecture,
+          ...(full ? {workspace_core_architecture: workspaceCoreArchitecture} : {}),
         };
       },
     });
@@ -602,19 +597,19 @@ async function main() {
       files.filter((path) => path.includes(`linux-unpacked${sep}`)),
       sidecarName,
     );
-    workspaceCorePath = requireFile(
+    workspaceCorePath = full ? requireFile(
       files.filter(
         (path) =>
           path.includes(`linux-unpacked${sep}`) &&
           path.includes(`${sep}resources${sep}workspace-core${sep}`),
       ),
       workspaceCoreName,
-    );
+    ) : null;
     const sidecarSha256 = await verifySidecarDigest(sidecarPath, sidecarName);
-    const workspaceCoreSha256 = await verifyWorkspaceCoreDigest(
+    const workspaceCoreSha256 = full ? await verifyWorkspaceCoreDigest(
       workspaceCorePath,
       workspaceCoreName,
-    );
+    ) : null;
     packageVerification = {
       ...(await verifyLinuxPackages({
         metadataResult,
@@ -626,7 +621,7 @@ async function main() {
         expectedWorkspaceCoreSha256: workspaceCoreSha256,
       })),
       sidecar_sha256: sidecarSha256,
-      workspace_core_sha256: workspaceCoreSha256,
+      ...(full ? {workspace_core_sha256: workspaceCoreSha256} : {}),
     };
     verifiedSidecarSource = relative(releaseRoot, sidecarPath);
   } else {

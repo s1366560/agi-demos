@@ -2,9 +2,9 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, override
+from typing import Any, Literal, Self, override
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from sqlalchemy.engine import make_url
@@ -78,24 +78,69 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="memstack", alias="POSTGRES_DB")
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
     postgres_password: str = Field(default="password", alias="POSTGRES_PASSWORD")
-    database_url: SecretStr = Field(alias="DATABASE_URL", repr=False)
+    database_url: SecretStr | None = Field(default=None, alias="DATABASE_URL", repr=False)
+    relational_store: Literal["postgres", "sqlite"] = Field(
+        default="postgres",
+        alias="MEMSTACK_RELATIONAL_STORE",
+    )
+    sqlite_path: str | None = Field(default=None, alias="MEMSTACK_SQLITE_PATH")
 
     @field_validator("database_url", mode="before")
     @classmethod
-    def validate_database_url(cls, value: object) -> str:
+    def normalize_database_url(cls, value: object) -> str | None:
+        """Keep a blank URL absent so the sqlite driver can start without PostgreSQL."""
+        if value is None:
+            return None
         raw_url = value.get_secret_value() if isinstance(value, SecretStr) else value
-        if not isinstance(raw_url, str) or not raw_url.strip():
-            raise ValueError("DATABASE_URL must be a non-empty PostgreSQL URL")
+        if not isinstance(raw_url, str):
+            raise ValueError("DATABASE_URL must be a PostgreSQL URL")
         normalized_url = raw_url.strip()
+        return normalized_url or None
+
+    @field_validator("relational_store", mode="before")
+    @classmethod
+    def normalize_relational_store(cls, value: object) -> str:
+        """Accept only the two drivers this host can open."""
+        if value is None:
+            return "postgres"
+        if not isinstance(value, str):
+            raise ValueError("MEMSTACK_RELATIONAL_STORE must be postgres or sqlite")
+        normalized = value.strip().lower()
+        if normalized in {"", "postgres", "postgresql"}:
+            return "postgres"
+        if normalized == "sqlite":
+            return "sqlite"
+        raise ValueError("MEMSTACK_RELATIONAL_STORE must be postgres or sqlite")
+
+    @model_validator(mode="after")
+    def validate_relational_store(self) -> Self:
+        """Require PostgreSQL for the cloud driver and a file path for SQLite."""
+        if self.relational_store == "sqlite":
+            path_text = (self.sqlite_path or "").strip()
+            if not path_text:
+                raise ValueError(
+                    "MEMSTACK_SQLITE_PATH is required when MEMSTACK_RELATIONAL_STORE=sqlite"
+                )
+            if "://" in path_text:
+                raise ValueError("MEMSTACK_SQLITE_PATH must be a filesystem path")
+            path = Path(path_text).expanduser()
+            if path.exists() and not path.is_file():
+                raise ValueError("MEMSTACK_SQLITE_PATH must be a file path")
+            self.sqlite_path = str(path.resolve(strict=False))
+            return self
+
+        url = None if self.database_url is None else self.database_url.get_secret_value().strip()
+        if not url:
+            raise ValueError("DATABASE_URL must be a non-empty PostgreSQL URL")
         try:
-            parsed = make_url(normalized_url)
+            parsed = make_url(url)
         except (ArgumentError, ValueError) as exc:
             raise ValueError("DATABASE_URL must be a valid PostgreSQL URL") from exc
         if parsed.drivername not in {"postgres", "postgresql", "postgresql+asyncpg"}:
             raise ValueError("DATABASE_URL must use a PostgreSQL scheme")
         if not parsed.database:
             raise ValueError("DATABASE_URL must identify a PostgreSQL database")
-        return normalized_url
+        return self
 
     # PostgreSQL Connection Pool Settings (for high concurrency)
     postgres_pool_size: int = Field(default=20, alias="POSTGRES_POOL_SIZE")
@@ -591,11 +636,30 @@ class Settings(BaseSettings):
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    billing_policy_archive_directory: Path | None = Field(
+        default=None, alias="BILLING_POLICY_ARCHIVE_DIRECTORY"
+    )
+    project_sandbox_authority_url: HttpUrl | None = Field(
+        default=None, alias="PROJECT_SANDBOX_AUTHORITY_URL"
+    )
+    package_npm_registry_url: str | None = Field(default=None, alias="PACKAGE_NPM_REGISTRY_URL")
+    package_application_runtime_url: str | None = Field(
+        default=None, alias="PACKAGE_APPLICATION_RUNTIME_URL"
+    )
+    package_kernel_database_mode: Literal["shared", "standalone"] = Field(
+        default="shared", alias="PACKAGE_KERNEL_DATABASE_MODE"
+    )
+    package_kernel_bootstrap_directory: Path | None = Field(
+        default=None, alias="PACKAGE_KERNEL_BOOTSTRAP_DIRECTORY"
+    )
     plugin_marketplace_trusted_key_files: tuple[Path, ...] = Field(
         default=(), alias="PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES"
     )
     plugin_marketplace_allowed_registries: tuple[str, ...] = Field(
         default=(), alias="PLUGIN_MARKETPLACE_ALLOWED_REGISTRIES"
+    )
+    plugin_worker_allowed_registries: tuple[str, ...] = Field(
+        default=(), alias="PLUGIN_WORKER_ALLOWED_REGISTRIES"
     )
     plugin_v2_required_data_plane_ids: str = Field(
         default="",
@@ -741,6 +805,8 @@ class Settings(BaseSettings):
     @property
     def postgres_url(self) -> str:
         """Get PostgreSQL connection URL."""
+        if self.database_url is None:
+            raise RuntimeError("DATABASE_URL is not configured")
         database_url = make_url(self.database_url.get_secret_value())
         return database_url.set(drivername="postgresql+asyncpg").render_as_string(
             hide_password=False
@@ -758,4 +824,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     # DATABASE_URL is supplied by the authoritative repository dotenv source.
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

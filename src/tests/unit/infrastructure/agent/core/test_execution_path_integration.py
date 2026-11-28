@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from src.infrastructure.agent.core.react_agent import ReActAgent
-from src.infrastructure.agent.processor import ToolDefinition
+from plugins.business.agent.engine.processor import ToolDefinition
+from plugins.business.agent.engine.react.react_agent import ReActAgent
 from src.infrastructure.agent.routing.execution_router import ExecutionPath
 
 

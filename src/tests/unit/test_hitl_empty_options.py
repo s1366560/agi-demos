@@ -39,7 +39,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Empty options=[] should auto-enable allow_custom=True."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_clarification_tool,
         )
 
@@ -76,7 +76,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Missing options key defaults to [] and auto-enables allow_custom."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_clarification_tool,
         )
 
@@ -112,7 +112,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Non-empty options should preserve the original allow_custom=False."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_clarification_tool,
         )
 
@@ -153,7 +153,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Empty options=[] should auto-enable allow_custom=True for decisions."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 
@@ -189,7 +189,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Missing options key defaults to [] and auto-enables allow_custom."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 
@@ -225,7 +225,7 @@ class TestHITLToolHandlerEmptyOptions:
         self,
     ) -> None:
         """Non-empty options should preserve the original allow_custom=False."""
-        from src.infrastructure.agent.processor.hitl_tool_handler import (
+        from plugins.business.agent.engine.processor.hitl_tool_handler import (
             handle_decision_tool,
         )
 

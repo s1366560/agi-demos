@@ -217,3 +217,43 @@ async def test_reflection_handler_rejects_a_non_member_before_repository_access(
 
     assert error.value.status_code == 403
     verdicts.list_for_project.assert_not_awaited()
+
+
+async def test_package_playbooks_use_bound_scope_and_existing_membership(monkeypatch) -> None:
+    from contextlib import asynccontextmanager
+
+    from plugins.business.automation.backend import playbook_operation
+    from src.host.operations.application_commands import PackageOperationContext
+    from src.infrastructure.plugins.v2.signed_optional_business_v2 import ScopeBindingV2
+
+    membership = AsyncMock(return_value=True)
+    lookup = AsyncMock(return_value=[])
+    ctx = PackageOperationContext(
+        request=_request(),
+        db=AsyncSession(),
+        user=cast(User, SimpleNamespace(id="user-a")),
+        scope=ScopeBindingV2(tenant_id="signed-tenant", project_id="signed-project"),
+    )
+
+    @asynccontextmanager
+    async def authority(request, user, db, scope):
+        assert scope.project_id == "signed-project" and scope.tenant_id == "signed-tenant"
+        yield SimpleNamespace(
+            services=SimpleNamespace(
+                membership=SimpleNamespace(contains=membership),
+                playbooks=SimpleNamespace(find_by_project=lookup),
+            )
+        )
+
+    monkeypatch.setattr(playbook_operation, "reflection_authority", authority)
+    async with ctx.db:
+        assert await playbook_operation.read_playbooks(ctx, {}, None) == {"items": []}
+        lookup.assert_awaited_once_with("signed-project", limit=200)
+        membership.return_value = False
+        with pytest.raises(HTTPException) as denied:
+            await playbook_operation.read_playbooks(ctx, {}, None)
+        assert denied.value.status_code == 403
+        with pytest.raises(HTTPException) as other:
+            await playbook_operation.read_playbooks(ctx, {"project_id": "other"}, None)
+        assert other.value.status_code == 422
+        assert lookup.await_count == 1

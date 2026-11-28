@@ -32,7 +32,7 @@ def _next(host, *, nack=False):
     current = host.current_distribution
     entries = tuple(
         replace(entry, enabled=False)
-        if nack and entry.entry_id == "builtin-billing-http-routes"
+        if nack and entry.entry_id == "builtin-platform-plugins-http-routes"
         else entry
         for entry in current.snapshot.entries
     )

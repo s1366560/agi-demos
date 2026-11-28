@@ -515,7 +515,7 @@ fn member_from_row(row: &DbRow) -> Result<WorkspaceMemberResponse, ApiError> {
         id: required_string(row, "member_id")?,
         workspace_id: required_string(row, "workspace_id")?,
         user_id: required_string(row, "user_id")?,
-        user_email: Some(required_string(row, "user_email")?),
+        user_email: optional_string(row, "user_email")?,
         role: required_string(row, "role")?,
         invited_by: optional_string(row, "invited_by")?,
         created_at: required_string(row, "created_at")?,

@@ -1,0 +1,11 @@
+{
+  "plugin_id": "memstack-agent",
+  "version": "1.8.15",
+  "target": "python",
+  "tool_name": "validate_skill",
+  "worker": "worker.json",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/business/agent",
+  "kind": "business",
+  "device_capability": "device.local-chat"
+}

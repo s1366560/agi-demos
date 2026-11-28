@@ -1,5 +1,6 @@
 //! Persistent JavaScript cells; every device operation re-enters run authorization.
 #[cfg(all(test, target_os = "macos"))]
+#[cfg(feature = "legacy-business")]
 mod authority_revocation_tests;
 #[cfg(all(test, target_os = "macos"))]
 mod child_tests;

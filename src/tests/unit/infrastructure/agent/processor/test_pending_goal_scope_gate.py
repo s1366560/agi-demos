@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor
-from src.infrastructure.agent.processor.goal_evaluator import GoalEvaluator
-from src.infrastructure.agent.processor.processor import ProcessorResult, ProcessorState
+from plugins.business.agent.engine.processor import ProcessorConfig, SessionProcessor
+from plugins.business.agent.engine.processor.goal_evaluator import GoalEvaluator
+from plugins.business.agent.engine.processor.processor import ProcessorResult, ProcessorState
 from src.tests.unit.infrastructure.agent.processor.test_processor_goal_completion import (
     create_todoread_tool,
     goal_judgment_response,

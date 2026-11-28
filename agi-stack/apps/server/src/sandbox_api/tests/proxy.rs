@@ -196,7 +196,7 @@ fn desktop_proxy_helpers_match_python_path_contract() {
     );
     assert_eq!(
         build_terminal_websocket_target("ws://127.0.0.1:7681?token=ms_sk_secret").unwrap(),
-        "ws://127.0.0.1:7681/"
+        "ws://127.0.0.1:7681/ws"
     );
     assert_eq!(
         build_terminal_websocket_target("https://127.0.0.1:7681/terminal").unwrap(),

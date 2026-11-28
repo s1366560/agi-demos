@@ -667,11 +667,7 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         path: "/api/v1/graph/memory/graph/subgraph",
         match_kind: MethodMatchKind::Exact,
     },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/search-enhanced/advanced",
-        match_kind: MethodMatchKind::Exact,
-    },
+    // Advanced search resolves the project's selected signed reranker on the Python host.
     MethodRule {
         method: "POST",
         path: "/api/v1/search-enhanced/graph-traversal",
@@ -1442,33 +1438,6 @@ pub const STRANGLED_METHOD_RULES: &[MethodRule] = &[
         method: "GET",
         path: "/api/v1/genes",
         match_kind: MethodMatchKind::SingleChildExcept(&["genomes", "evolution", "instances"]),
-    },
-    // P7 billing exact slice. Tenant billing summary, invoice listing, and
-    // owner-only plan upgrade are Rust-owned; other billing writes stay Python.
-    // Rollback = delete this block.
-    MethodRule {
-        method: "GET",
-        path: "/api/v1/tenants",
-        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
-            suffix: "billing",
-            excluded: &[],
-        },
-    },
-    MethodRule {
-        method: "GET",
-        path: "/api/v1/tenants",
-        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
-            suffix: "invoices",
-            excluded: &[],
-        },
-    },
-    MethodRule {
-        method: "POST",
-        path: "/api/v1/tenants",
-        match_kind: MethodMatchKind::SingleChildWithSuffixExcept {
-            suffix: "upgrade",
-            excluded: &[],
-        },
     },
     // P7 support ticket slice. API-v1 and legacy ticket
     // list/detail/create/update/close are Rust-owned; unknown ticket children

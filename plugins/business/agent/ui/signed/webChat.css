@@ -1,0 +1,71 @@
+@import 'tailwindcss' source(none);
+@source './WebChatPage.tsx';
+@source './ChatExecutionPlacement.tsx';
+@source '../web/chat';
+@source '../web/canvas';
+@source '../web/hitl';
+@source './InteractionPanel.tsx';
+@custom-variant dark (&:where(.dark, .dark *));
+/* The original 80rem window has a 16rem sidebar. At its resulting 64rem
+   content width the action labels fit alongside the rest of the composer. */
+@theme {
+  --breakpoint-xl: 64rem;
+}
+@source '../../../../../web/src/components/agent/activity';
+@source '../../../../../web/src/components/agent/review';
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+.chat-history-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-anchor: none;
+  padding: 1rem;
+}
+/* Reasoning, tool steps and permission cards carry the spacing of the original
+   transcript themselves; only message bubbles are separated further. */
+.chat-history-viewport [data-row-kind='message'] {
+  margin-block: 0.875rem;
+}
+/* The transcript pieces of the original workbench: step cards, reasoning and cards. */
+@source '../web/transcript/timeline/ExecutionTimeline.tsx';
+@source '../web/transcript/timeline/JitContextCard.tsx';
+@source '../web/transcript/timeline/MemoryRecalledStep.tsx';
+@source '../web/transcript/timeline-items/AgentToolCards.tsx';
+@source '../web/transcript/timeline-items/shared.tsx';
+@source '../web/transcript/messageBubble/inlineEvents.tsx';
+@source '../web/transcript/messageBubble/ExecutionSummaryPanel.tsx';
+@source '../../../../../web/src/components/agent/results/MultiSourceResultsCard.tsx';
+@source '../../../../../web/src/components/agent/chat/AgentSection.tsx';
+@source './WebChatTranscript.tsx';
+@source './ChatTranscriptView.tsx';
+@source './Web*.tsx';
+@source '../../../../../web/src/components/agent/chat/OnboardingTour.tsx';
+@source '../../../../../web/src/components/agent/chat/{ChatSearch,ProjectContextCard,TrendingEntities,RecentSkills,ShortcutOverlay}.tsx';
+@source '../../../../../web/src/components/agent/{EmptyState,SplitPaneLayout,TaskList}.tsx';
+@source '../../../../../web/src/components/layout/Resizer.tsx';
+@source '../../../../../web/src/components/execution-target/*.tsx';
+.chat-history-viewport { height: 100%; }
+.chat-history-viewport > div { min-height: 100%; }
+
+@source '../../../../../web/src/components/agent/context/ContextStatusIndicator.tsx';
+
+@source '../../../../../web/src/components/agent/chat/MessageActionBar.tsx';
+/* The workbench SDK supplies an unlayered heading reset for generic pages.
+   Let this page's original Tailwind heading utilities determine size and leading. */
+html :where(h1, h2, h3, h4, h5, h6) {
+  font-size: revert-layer;
+  line-height: revert-layer;
+}
+
+@source '../../../../../web/src/components/agent/SlashCommandDropdown.tsx';
+
+
+/* Keep the draft editable when a native side panel leaves less than 10rem. */
+#agent-message-input {
+  min-width: min(10rem, 100%);
+}

@@ -7,7 +7,7 @@ import {
   requestProjectKnowledgeJson,
   projectKnowledgeError,
   type ProjectKnowledgeScope,
-} from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { requireNativeKnowledgeScope } from '../features/project-knowledge/nativeKnowledgeValidation';
 import { sameJson } from '../features/project-knowledge/nativeKnowledgeRelationships';
 import { identifier, literal, object } from '../features/project-knowledge/nativeKnowledgeSchema';

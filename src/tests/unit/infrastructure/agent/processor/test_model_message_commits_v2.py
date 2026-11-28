@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
+from plugins.business.agent.engine.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.actor.execution import _extract_event_side_effects
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.core.message import ToolState
-from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
 
 
@@ -46,7 +46,7 @@ async def test_text_only_step_commits_exact_assistant_message(
         yield _stream_event(StreamEventType.FINISH, reason="stop")
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
     processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])
@@ -79,7 +79,7 @@ async def test_tool_step_commits_assistant_then_ordered_success_and_error_messag
         yield _stream_event(StreamEventType.FINISH, reason="tool_calls")
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
     processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])
@@ -146,10 +146,10 @@ async def test_retry_discards_partial_attempt_and_commits_success_once(
         yield _stream_event(StreamEventType.FINISH, reason="stop")
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
-    monkeypatch.setattr("src.infrastructure.agent.processor.processor.asyncio.sleep", _no_sleep)
+    monkeypatch.setattr("plugins.business.agent.engine.processor.processor.asyncio.sleep", _no_sleep)
     processor = SessionProcessor(
         config=ProcessorConfig(model="test-model", max_attempts=2),
         tools=[],
@@ -185,7 +185,7 @@ async def test_hitl_wait_starts_only_after_assistant_commit(
         yield _stream_event(StreamEventType.FINISH, reason="tool_calls")
 
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.LLMStream.generate",
+        "plugins.business.agent.engine.processor.processor.LLMStream.generate",
         fake_generate,
     )
     processor = SessionProcessor(config=ProcessorConfig(model="test-model"), tools=[])

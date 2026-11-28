@@ -712,6 +712,7 @@ class NativeGraphAdapter(GraphStorePort):
             if project_id:
                 await self._save_discovered_types(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     entities=final_entities,
                     relationships=relationships,
                     existing_entity_types={ctx["entity_type_name"] for ctx in entity_types_context},
@@ -760,7 +761,9 @@ class NativeGraphAdapter(GraphStorePort):
             get_project_schema_context,
         )
 
-        return cast(dict[str, Any], await get_project_schema_context(project_id))
+        return cast(
+            dict[str, Any], await get_project_schema_context(project_id, persist_defaults=False)
+        )
 
     @staticmethod
     def _resolve_mentioned_entities(
@@ -955,6 +958,7 @@ class NativeGraphAdapter(GraphStorePort):
         entities: list[EntityNode],
         relationships: list[EntityEdge],
         existing_entity_types: set[str],
+        tenant_id: str | None = None,
     ) -> None:
         """
         Save discovered entity types and edge types to PostgreSQL.
@@ -1020,11 +1024,20 @@ class NativeGraphAdapter(GraphStorePort):
                 )
                 seen_maps.add(map_key)
 
-        # Save to database if there are new types
-        if new_entity_types or new_edge_types or new_edge_type_maps:
+        if not (new_entity_types or new_edge_types or new_edge_type_maps):
+            return
+
+        # The schema trigger locks the project row. Defer its transaction until the
+        # graph fence is released, including any separate journal completion writes.
+        from src.infrastructure.adapters.secondary.persistence.graph_discovery_session import (
+            persist_after_graph_commit,
+        )
+
+        async def persist() -> None:
             try:
                 result = await save_discovered_types_batch(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     entity_types=new_entity_types,
                     edge_types=list(new_edge_types),
                     edge_type_maps=new_edge_type_maps,
@@ -1041,6 +1054,8 @@ class NativeGraphAdapter(GraphStorePort):
                     "Failed to save discovered types: error_type=%s",
                     type(e).__name__,
                 )
+
+        await persist_after_graph_commit(project_id, tenant_id, persist)
 
     async def _get_existing_entities(
         self, project_id: str | None = None, limit: int = 10000

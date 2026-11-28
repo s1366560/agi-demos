@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import delete, func, select
 
-from src.application.services.automation_command_service import (
+from plugins.business.automation.backend.automation_command_service import (
     AutomationActor,
     AutomationCommandIdempotencyConflictError,
     AutomationCommandRevisionConflictError,

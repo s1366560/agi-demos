@@ -28,7 +28,9 @@ from src.domain.ports.services.sandbox_mcp_server_port import SandboxMCPServerSt
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-    from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
+    from plugins.business.environments.backend.sandbox.sandbox_mcp_server_manager import (
+        SandboxMCPServerManager,
+    )
 
 
 def _utcnow() -> datetime:

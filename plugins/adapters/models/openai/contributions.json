@@ -1,0 +1,53 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "adapt_chat",
+      "abi": "invoke",
+      "permissions": [
+        "tools.execute",
+        "model.chat.adapt.openai"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "enum": [
+              "openai"
+            ]
+          },
+          "token_limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "has_tools": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "token_limit",
+          "has_tools"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "token_limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "publish_reasoning": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token_limit",
+          "publish_reasoning"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

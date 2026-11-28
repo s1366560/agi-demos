@@ -41,8 +41,8 @@ jobs:
       - name: Build complete Sandbox image
         uses: docker/build-push-action@v6
         with:
-          context: sandbox-mcp-server
-          file: sandbox-mcp-server/Dockerfile
+          context: plugins/business/environments/sandbox-mcp-server
+          file: plugins/business/environments/sandbox-mcp-server/Dockerfile
           load: true
           platforms: linux/amd64
           tags: sandbox-mcp-server:full-ci

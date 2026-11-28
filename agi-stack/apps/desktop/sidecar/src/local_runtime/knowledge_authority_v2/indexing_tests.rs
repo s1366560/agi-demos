@@ -18,6 +18,7 @@ mod agent_semantic_tests;
 mod embedding_configuration_tests;
 #[path = "indexing_lifecycle_tests.rs"]
 mod lifecycle;
+#[cfg(feature = "legacy-business")]
 #[path = "processing_rpc_tests.rs"]
 mod processing_rpc_tests;
 #[path = "embedding_profile_tests.rs"]

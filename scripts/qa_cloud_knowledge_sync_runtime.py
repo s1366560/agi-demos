@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, override
 
 from scripts.qa_cloud_knowledge_sync_graph import create_qa_graph
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
+from plugins.business.automation.workflow.tasks import TaskManager
 from src.infrastructure.plugins.v2.background_task_services import (
     BACKGROUND_TASK_MANAGER_MODULE_V2,
     background_task_manager_definition_v2,
@@ -13,7 +13,7 @@ from src.infrastructure.plugins.v2.background_task_services import (
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 
 if TYPE_CHECKING:
-    from src.infrastructure.adapters.secondary.background_tasks import BackgroundTask
+    from plugins.business.automation.workflow.tasks import BackgroundTask
     from src.infrastructure.plugins.v2.runtime import PluginDefinitionV2
 
 

@@ -3,15 +3,16 @@ use super::*;
 use crate::trusted_session::{TrustedSessionRuntimeMode, TrustedSessionSnapshot};
 use sha2::{Digest, Sha256};
 
-pub(super) struct CloudOwner {
+pub(in crate::local_runtime) struct CloudOwner {
     broker: TrustedSessionBroker,
     snapshot: TrustedSessionSnapshot,
     installation: String,
-    pub(super) tenant: String,
-    pub(super) project: String,
-    pub(super) scope: McpScope,
-    pub(super) token: String,
-    pub(super) manager: bool,
+    pub(in crate::local_runtime) user_id: String,
+    pub(in crate::local_runtime) tenant: String,
+    pub(in crate::local_runtime) project: String,
+    pub(in crate::local_runtime) scope: McpScope,
+    pub(in crate::local_runtime) token: String,
+    pub(in crate::local_runtime) manager: bool,
 }
 
 fn digest(value: &Value) -> String {
@@ -125,18 +126,88 @@ async fn read_json(client: &reqwest::Client, url: &str, credential: &str) -> Res
 }
 
 impl CloudOwner {
-    pub(super) async fn resolve(
+    pub(in crate::local_runtime) async fn resolve(
         broker: &TrustedSessionBroker,
         installation: &str,
         tenant: &str,
         project: &str,
     ) -> Result<Self, String> {
-        for value in [tenant, project, installation] {
-            identifier(value)?;
-        }
         let snapshot = broker
             .snapshot()
             .map_err(|_| "device_mcp_trusted_cloud_required")?;
+        Self::resolve_in_snapshot(broker, installation, tenant, project, snapshot).await
+    }
+
+    pub(in crate::local_runtime) async fn resolve_for_plugin(
+        broker: &TrustedSessionBroker,
+        installation: &str,
+        tenant: &str,
+        project: &str,
+    ) -> Result<Self, String> {
+        let snapshot = broker
+            .snapshot()
+            .map_err(|_| "device_plugin_session_required")?;
+        crate::plugin_data_plane_credential_v2::validate_base_url_v2(&cloud_base(&snapshot)?)
+            .map_err(|_| "device_plugin_tls_required")?;
+        Self::resolve_in_snapshot(broker, installation, tenant, project, snapshot).await
+    }
+
+    /// Authenticate the caller against the current vault epoch before any cloud request.
+    pub(in crate::local_runtime) async fn resolve_project_http(
+        broker: &TrustedSessionBroker,
+        installation: &str,
+        project: &str,
+        bearer: &str,
+    ) -> Result<Option<Self>, String> {
+        let snapshot = broker
+            .snapshot()
+            .map_err(|_| "device_plugin_session_required")?;
+        let Some(record) = snapshot.record.as_ref() else {
+            return Ok(None);
+        };
+        if record.runtime_mode != TrustedSessionRuntimeMode::Cloud
+            || !crate::local_runtime::workspace_core_bridge::secret_matches(
+                &record.credential,
+                bearer,
+            )
+        {
+            return Ok(None);
+        }
+        let base = cloud_base(&snapshot)?;
+        crate::plugin_data_plane_credential_v2::validate_base_url_v2(&base)
+            .map_err(|_| "device_plugin_tls_required")?;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| "device_mcp_cloud_authority_unavailable")?;
+        let context = read_json(
+            &client,
+            &format!("{base}/api/v1/workspace-context"),
+            &record.credential,
+        )
+        .await?;
+        if context["context"]["project_id"] != project {
+            return Err("device_mcp_scope_mismatch".into());
+        }
+        let tenant = context["context"]["tenant_id"]
+            .as_str()
+            .ok_or("device_mcp_cloud_authority_invalid")?;
+        Self::resolve_in_snapshot(broker, installation, tenant, project, snapshot)
+            .await
+            .map(Some)
+    }
+
+    async fn resolve_in_snapshot(
+        broker: &TrustedSessionBroker,
+        installation: &str,
+        tenant: &str,
+        project: &str,
+        snapshot: TrustedSessionSnapshot,
+    ) -> Result<Self, String> {
+        for value in [tenant, project, installation] {
+            identifier(value)?;
+        }
         let base = cloud_base(&snapshot)?;
         let record = snapshot
             .record
@@ -195,7 +266,9 @@ impl CloudOwner {
             revision,
             role
         ]));
+        let user_id = user.to_owned();
         let owner = Self {
+            user_id,
             broker: broker.clone(),
             snapshot,
             installation: installation.into(),
@@ -209,7 +282,10 @@ impl CloudOwner {
         Ok(owner)
     }
 
-    pub(super) fn fence<T>(&self, action: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    pub(in crate::local_runtime) fn fence<T>(
+        &self,
+        action: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
         self.broker
             .with_snapshot(|snapshot| {
                 if snapshot != self.snapshot {
@@ -221,19 +297,87 @@ impl CloudOwner {
             .map_err(|_| "device_mcp_context_changed")?
     }
 
-    pub(super) async fn recheck(&self) -> Result<(), String> {
+    pub(in crate::local_runtime) async fn recheck(&self) -> Result<(), String> {
         self.fence(|| Ok(()))?;
-        let current = Self::resolve(
+        let current = Self::resolve_in_snapshot(
             &self.broker,
             &self.installation,
             &self.tenant,
             &self.project,
+            self.snapshot.clone(),
         )
         .await?;
         if current.token != self.token {
             return Err("device_mcp_context_changed".into());
         }
         self.fence(|| Ok(()))
+    }
+
+    /// Private P4 admission for the exact conversation selected by this cloud project.
+    pub(in crate::local_runtime) async fn local_run_session(
+        &self,
+        conversation: &str,
+    ) -> Result<(String, String), String> {
+        self.fence(|| Ok(()))?;
+        let base = cloud_base(&self.snapshot)?;
+        let record = self
+            .snapshot
+            .record
+            .as_ref()
+            .ok_or("device_plugin_session_required")?;
+        let mut url = url::Url::parse(&format!("{base}/api/v1/agent/conversations/"))
+            .map_err(|_| "device_plugin_origin_invalid")?;
+        url.path_segments_mut()
+            .map_err(|_| "device_plugin_origin_invalid")?
+            .pop_if_empty()
+            .push(conversation);
+        url.query_pairs_mut()
+            .append_pair("project_id", &self.project);
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+            .map_err(|_| "device_plugin_transport_unavailable")?;
+        let view = read_json(&client, url.as_str(), &record.credential).await?;
+        if view["id"] != conversation
+            || view["project_id"] != self.project
+            || view["tenant_id"] != self.tenant
+            || view["execution_target"] != "local"
+        {
+            return Err("device_local_conversation_scope_mismatch".into());
+        }
+        self.fence(|| Ok((base, format!("Bearer {}", record.credential))))
+    }
+
+    pub(in crate::local_runtime) fn plugin_grant_request(
+        &self,
+        method: reqwest::Method,
+        suffix: &str,
+    ) -> Result<reqwest::RequestBuilder, String> {
+        self.fence(|| Ok(()))?;
+        let base = cloud_base(&self.snapshot)?;
+        crate::plugin_data_plane_credential_v2::validate_base_url_v2(&base)
+            .map_err(|_| "device_plugin_tls_required")?;
+        let record = self
+            .snapshot
+            .record
+            .as_ref()
+            .ok_or("device_plugin_session_required")?;
+        let mut url = url::Url::parse(&format!("{base}/api/v1/projects/"))
+            .map_err(|_| "device_plugin_origin_invalid")?;
+        url.path_segments_mut()
+            .map_err(|_| "device_plugin_origin_invalid")?
+            .pop_if_empty()
+            .push(&self.project)
+            .push("device-plugin-grants")
+            .push(suffix);
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+            .map_err(|_| "device_plugin_transport_unavailable")?;
+        Ok(client.request(method, url).bearer_auth(&record.credential))
     }
 
     pub(super) fn response(&self, result: Value) -> Value {

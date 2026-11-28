@@ -733,7 +733,7 @@ fn validate_authority(
     Ok(())
 }
 
-fn secret_matches(left: &str, right: &str) -> bool {
+pub(super) fn secret_matches(left: &str, right: &str) -> bool {
     let left = Sha256::digest(left.as_bytes());
     let right = Sha256::digest(right.as_bytes());
     left.iter()

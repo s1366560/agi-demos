@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.application.services.sandbox_url_service import (
+from plugins.business.environments.backend.sandbox.sandbox_url_service import (
     SandboxInstanceInfo,
     SandboxUrlService,
 )

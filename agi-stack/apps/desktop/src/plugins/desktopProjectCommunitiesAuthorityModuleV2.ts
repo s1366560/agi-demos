@@ -8,8 +8,8 @@ import {
 import type {
   ProjectCommunitiesClient,
   ProjectCommunitiesSnapshot,
-} from '../features/project-knowledge/projectCommunitiesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectCommunitiesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 import { createDesktopProjectCommunitiesHttpAuthorityV2 } from './desktopProjectCommunitiesHttpProjectionV2';
 import {

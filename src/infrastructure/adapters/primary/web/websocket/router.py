@@ -56,7 +56,7 @@ def get_container_from_app(websocket: WebSocket) -> DIContainer:
 
 
 @router.websocket("/ws")
-async def agent_websocket_endpoint(
+async def agent_websocket_endpoint(  # noqa: PLR0912, PLR0915
     websocket: WebSocket,
     token: str | None = Query(None, description="Legacy API key query parameter"),
     session_id: str | None = Query(None, description="Client session ID for multi-tab support"),
@@ -139,19 +139,26 @@ async def agent_websocket_endpoint(
     - conversation_created: Project conversation created
       {type: 'conversation_created', routing_key: str, project_id: str, sequence_id: str, data: {...}}
     """
-    # Authenticate
-    api_key = extract_websocket_api_key(websocket, token)
-    if not api_key:
+    # Authenticate. An admitted command guest opens this socket without a bearer token.
+    from src.host.operations.agent_package.admission import admitted_actor
+
+    actor = admitted_actor()
+    if actor is not None:
+        user_id, tenant_id = actor
+        api_key = None
+    else:
+        api_key = extract_websocket_api_key(websocket, token)
+    if actor is None and not api_key:
         await websocket.close(code=4001, reason="Authentication failed")
         return
 
-    async with async_session_factory() as auth_db:
-        auth_result = await authenticate_websocket(api_key, auth_db)
-    if not auth_result:
-        await websocket.close(code=4001, reason="Authentication failed")
-        return
-
-    user_id, tenant_id = auth_result
+    if actor is None:
+        async with async_session_factory() as auth_db:
+            auth_result = await authenticate_websocket(api_key or "", auth_db)
+        if not auth_result:
+            await websocket.close(code=4001, reason="Authentication failed")
+            return
+        user_id, tenant_id = auth_result
 
     # Generate session_id if not provided (for backward compatibility)
     if not session_id:

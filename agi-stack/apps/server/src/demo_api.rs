@@ -17,12 +17,12 @@ use agistack_plugin_host::{ConfigAck, NativeToolFactory, PluginManifest, ToolDec
 
 use crate::{
     admin_dlq_api, agent_commands_api, agent_conversations_api, agent_events_api, agent_ws,
-    artifacts_api, attachments_api, audit_api, auth, billing_api, channel_api,
-    conversation_session_api, cron_api, data_api, deploy_api, engines_api, enhanced_search_api,
-    events_api, gene_api, graph_api, graph_stores_api, hitl_api, identity_api, instance_api,
-    llm_providers_api, maintenance_api, notifications_api, prod_api, retrieval_stores_api,
-    sandbox_api, schema_api, shares_api, skill_api, subagents_api, support_api, system_api,
-    tenant_skill_config_api, tenant_webhooks_api, trust_api, AppState,
+    artifacts_api, attachments_api, audit_api, auth, channel_api, conversation_session_api,
+    cron_api, data_api, deploy_api, engines_api, enhanced_search_api, events_api, gene_api,
+    graph_api, graph_stores_api, hitl_api, identity_api, instance_api, llm_providers_api,
+    maintenance_api, notifications_api, prod_api, retrieval_stores_api, sandbox_api, schema_api,
+    shares_api, skill_api, subagents_api, support_api, system_api, tenant_skill_config_api,
+    tenant_webhooks_api, trust_api, AppState,
 };
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -323,7 +323,6 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(events_api::router())
         .merge(audit_api::router())
         .merge(notifications_api::router())
-        .merge(billing_api::router())
         .merge(support_api::router())
         .merge(system_api::router())
         .merge(maintenance_api::router())

@@ -16,6 +16,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "paths": {
+      "@desktop/*": ["./src/*"],
+      "@xterm/*": ["./node_modules/@xterm/*"],
+      "@business/*": ["../../../plugins/business/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "@radix-ui/themes": ["./node_modules/@radix-ui/themes/dist/cjs/index.d.ts"],
+      "@radix-ui/react-icons": ["./node_modules/@radix-ui/react-icons/dist/index.d.ts"],
       "@agistack/plugin-runtime": ["./../../packages/plugin-runtime/src/index.ts"],
       "@agistack/plugin-slots": ["./../../packages/plugin-slots/src/index.ts"]
     }

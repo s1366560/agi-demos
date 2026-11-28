@@ -1,3 +1,4 @@
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn explicit_embedding_declaration_is_revision_bound_and_visible_in_saved_catalog() {
     let (base, shutdown) = spawn_provider_model_server(&["opaque-a", "opaque-b"]).await;
@@ -48,6 +49,7 @@ async fn explicit_embedding_declaration_is_revision_bound_and_visible_in_saved_c
     let _ = shutdown.send(());
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn embedding_declaration_rejects_nonmembers_and_stale_revision_and_can_be_cleared() {
     let state = test_state("embedding-membership-test");

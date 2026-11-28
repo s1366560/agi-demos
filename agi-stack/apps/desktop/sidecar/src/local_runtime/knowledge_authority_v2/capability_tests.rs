@@ -40,6 +40,7 @@ fn role(state: &LocalRuntimeState, auth: &AuthenticatedContext, role: &str) {
         .unwrap();
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn closed_release_publishes_existing_observed_entry_without_storage_or_actions() {
     let state = test_state(TOKEN);
@@ -88,6 +89,7 @@ async fn closed_release_publishes_existing_observed_entry_without_storage_or_act
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn validation_publication_uses_live_role_and_preserves_all_existing_native_actions() {
     let state = test_state(TOKEN);

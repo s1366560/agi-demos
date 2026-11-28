@@ -328,7 +328,7 @@ class TestToolInfoWrapperRunContext:
         """The stub ToolContext must reuse the per-run abort_signal, not a fresh Event."""
         import asyncio
 
-        from src.infrastructure.agent.processor.run_context import (
+        from plugins.business.agent.engine.processor.run_context import (
             RunContext,
             set_current_run_context,
         )
@@ -365,7 +365,7 @@ class TestToolInfoWrapperRunContext:
         """Without an active RunContext (e.g. ad-hoc call) a fresh signal is used."""
         import asyncio
 
-        from src.infrastructure.agent.processor.run_context import (
+        from plugins.business.agent.engine.processor.run_context import (
             RunContext,
             set_current_run_context,
         )

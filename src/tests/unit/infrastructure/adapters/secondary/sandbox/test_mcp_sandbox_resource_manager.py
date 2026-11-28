@@ -126,16 +126,20 @@ class TestSandboxConcurrencyLimit:
             ),
         )
 
-        config = SandboxConfig(image="sandbox-mcp-server:latest")
+        config = SandboxConfig(
+            image="sandbox-mcp-server:latest",
+            environment={"MEMSTACK_PLATFORM_URL": "http://caller", "MCP_PROJECT_ID": "caller"},
+        )
         container_config = adapter._build_rebuild_container_config(
             sandbox_id="sandbox-1",
             config=config,
             old_ports=[8765, 6080, 7681],
             project_path="/tmp/workspace",
-            labels={},
+            labels={"memstack.project_id": "bound-project"},
         )
 
         environment = container_config["environment"]
+        assert environment["MCP_PROJECT_ID"] == "bound-project"
         assert environment["MEMSTACK_PLATFORM_URL"] == "http://platform"
         assert environment["MEMSTACK_PLATFORM_SERVICE_TOKEN"] == "service-secret"
 

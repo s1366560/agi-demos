@@ -1,10 +1,14 @@
 """Real signed archive admission; no replacement loader or executable definitions."""
 
+import base64
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import wasmtime
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.generated_v2 import DataPlaneTargetV2, RuntimeKindV2
 from src.infrastructure.plugins.v2.bundle_archive import (
     BundleArchiveV2Error,
@@ -13,20 +17,57 @@ from src.infrastructure.plugins.v2.bundle_archive import (
     require_signed_archive_verification_v2,
 )
 from src.infrastructure.plugins.v2.external_wasm_admission import admit_external_wasm_artifacts_v2
+from src.infrastructure.plugins.v2.layer_composer import bundle_manifest_digest_v2
 from src.infrastructure.plugins.v2.protocol import build_profile_snapshot_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_contracts import generated_target_catalog_v2
+from src.tests.unit.infrastructure.plugins.v2.test_bundle_archive_v2 import (
+    _archive,
+    _public_key_pem,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "signed_wasm_marker"
 
 
 @pytest.fixture
-def verified():
-    return parse_bundle_archive_v2(
+def verified(request):
+    original = parse_bundle_archive_v2(
         (FIXTURE / "marker.mspkg").read_bytes(),
         source="fixture://signed-marker",
         trusted_public_keys=((FIXTURE / "signer-public.pem").read_text(),),
+        approved_permissions=frozenset({"tools.execute"}),
+        require_signature=True,
+        require_provenance=True,
+    )
+    if getattr(request, "param", None) != "invoke":
+        return original
+    wasm = bytes(
+        wasmtime.wat2wasm(
+            '(module (memory (export "memory") 2) (func (export "invoke") (param $n i32) '
+            "(result i32) i32.const 65536 i32.const 0 local.get $n memory.copy local.get $n))"
+        )
+    )
+    bundle = original.manifest
+    manifest = bundle.manifests[0]
+    module = manifest.modules[0]
+    digest = artifact_digest_v2(wasm)
+    module = replace(module, entrypoint="invoke", artifact=replace(module.artifact, digest=digest))
+    quotas = replace(manifest.quotas, max_wasm_memory_bytes=131072)
+    layer = bundle.layers[0]
+    bundle = replace(
+        bundle,
+        manifests=(replace(manifest, modules=(module,), quotas=quotas),),
+        layers=(replace(layer, entries=(replace(layer.entries[0], quotas=quotas),)),),
+        artifacts=(replace(bundle.artifacts[0], size_bytes=len(wasm), digest=digest),),
+    )
+    digest = bundle_manifest_digest_v2(bundle)
+    signer = Ed25519PrivateKey.generate()
+    signature = base64.b64encode(signer.sign(digest.encode("ascii"))).decode()
+    return parse_bundle_archive_v2(
+        _archive(replace(bundle, digest=digest, signature=signature), artifact_bytes=wasm),
+        source="fixture://signed-content",
+        trusted_public_keys=(_public_key_pem(signer),),
         approved_permissions=frozenset({"tools.execute"}),
         require_signature=True,
         require_provenance=True,

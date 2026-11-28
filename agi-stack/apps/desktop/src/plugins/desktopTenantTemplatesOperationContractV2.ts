@@ -5,7 +5,7 @@ import type {
   TemplatesRouteObservation,
   TemplatesRouteQuery,
   TemplatesRouteScope,
-} from '../features/settings-routes/templatesRouteClient';
+} from '@business/environments/ui/desktop/settings-routes/templatesRouteClient';
 import type {
   DesktopRuntimeConfig,
   ManagedSubAgent,

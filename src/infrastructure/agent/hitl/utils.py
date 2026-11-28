@@ -13,6 +13,10 @@ from html import escape, unescape
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from src.infrastructure.agent.hitl.response_metadata import ordinary_resume_metadata
+from src.infrastructure.security.secret_text import (
+    contains_secret_like_text as contains_secret_like_text,
+    is_secret_like_env_var_value as is_secret_like_env_var_value,
+)
 
 if TYPE_CHECKING:
     from src.infrastructure.security.encryption_service import EncryptionService
@@ -51,34 +55,6 @@ _SENSITIVE_CONTEXT_KEYWORDS = (
     "secret",
     "token",
 )
-_SECRET_LIKE_ENV_VAR_PATTERNS = (
-    re.compile(r"^(?:AKIA|ASIA)[A-Z0-9]{16}$"),
-    re.compile(r"^GHP_[A-Z0-9]{20,}$"),
-    re.compile(r"^GH(?:S|U|O|P)_[A-Z0-9]{20,}$"),
-    re.compile(r"^GITHUB_PAT_[A-Z0-9_]{20,}$"),
-    re.compile(r"^SK-PROJ-[A-Z0-9_-]{16,}$"),
-    re.compile(r"^SK(?:_LIVE|_TEST)?_[A-Z0-9_]{16,}$"),
-    re.compile(r"^MS_SK_[A-F0-9]{16,}$"),
-    re.compile(r"^XOX[COPRSAB]-[A-Z0-9-]{10,}$"),
-    re.compile(r"^XOX[BAPRS]_[A-Z0-9_]{10,}$"),
-)
-_SECRET_LIKE_TEXT_PATTERNS = (
-    re.compile(r"(?i)\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
-    re.compile(r"(?i)\bGHP_[A-Z0-9]{20,}\b"),
-    re.compile(r"(?i)\bGH(?:S|U|O|P)_[A-Z0-9]{20,}\b"),
-    re.compile(r"(?i)\bGITHUB_PAT_[A-Z0-9_]{20,}\b"),
-    re.compile(r"(?i)\bBEARER\s+[A-Z0-9._-]{16,}\b"),
-    re.compile(r"(?i)\bSK-PROJ-[A-Z0-9_-]{16,}\b"),
-    re.compile(r"(?i)\bSK-[A-Z0-9]{16,}\b"),
-    re.compile(r"(?i)\bSK(?:_LIVE|_TEST)?_[A-Z0-9_]{16,}\b"),
-    re.compile(r"(?i)\bMS_SK_[A-F0-9]{16,}\b"),
-    re.compile(r"(?i)\bXOX[COPRSAB]-[A-Z0-9-]{10,}\b"),
-    re.compile(r"(?i)\bXOX[BAPRS]_[A-Z0-9_]{10,}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
-)
-_SECRET_TEXT_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{8,}")
-
-
 class HITLRequestRecord(Protocol):
     """Attribute-based view of a persisted HITL request."""
 
@@ -489,12 +465,6 @@ def sanitize_hitl_text(value: object) -> str | None:
     return escape(candidate)
 
 
-def is_secret_like_env_var_value(candidate: str) -> bool:
-    """Return True when a value fully matches a high-confidence secret shape."""
-    normalized = candidate.upper()
-    return any(pattern.fullmatch(normalized) for pattern in _SECRET_LIKE_ENV_VAR_PATTERNS)
-
-
 def normalize_env_var_name(value: object) -> str:
     """Validate and normalize an env-var identifier for HITL requests."""
     if not isinstance(value, str):
@@ -505,15 +475,6 @@ def normalize_env_var_name(value: object) -> str:
     if is_secret_like_env_var_value(candidate):
         return ""
     return candidate
-
-
-def contains_secret_like_text(value: str) -> bool:
-    """Detect secret-like tokens in freeform text."""
-    if any(pattern.search(value) for pattern in _SECRET_LIKE_TEXT_PATTERNS):
-        return True
-    return any(
-        is_secret_like_env_var_value(token) for token in _SECRET_TEXT_TOKEN_RE.findall(value)
-    )
 
 
 def sanitize_env_var_plain_text(value: object) -> str | None:

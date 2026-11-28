@@ -10,12 +10,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
+    _resolve_agent_capabilities_from_runtime_v2,
+)
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import AgentTrigger, SubAgent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
-    _resolve_agent_capabilities_from_runtime_v2,
-)
 from src.infrastructure.plugins.v2.agent_capabilities import (
     AGENT_CAPABILITY_MODULE_V2,
     AGENT_CAPABILITY_RESOLVER_SERVICE_V2,

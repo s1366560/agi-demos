@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import AbstractAsyncContextManager, nullcontext
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.memory.processing import MemoryProcessingSource
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -32,6 +35,20 @@ _RUNNABLE = ("PENDING", "PROCESSING")
 
 Extract = Callable[[dict[str, Any]], Awaitable[None]]
 Index = Callable[[dict[str, Any]], Awaitable[None]]
+type JobStage = Callable[[], Awaitable[None]]
+type AcquireStages = Callable[
+    [dict[str, Any]], AbstractAsyncContextManager[tuple[JobStage, JobStage]]
+]
+
+
+def stage_provider(
+    extract: Extract | None, index: Index | None, acquire_stages: AcquireStages | None
+) -> AcquireStages:
+    if acquire_stages is not None and extract is None and index is None:
+        return acquire_stages
+    if acquire_stages is None and extract is not None and index is not None:
+        return lambda payload: nullcontext((partial(extract, payload), partial(index, payload)))
+    raise ValueError("configure a stage lease or both indexing stages")
 
 
 class MemoryUpdateJobError(RuntimeError):
@@ -99,6 +116,14 @@ def _source(payload: dict[str, Any]) -> MemoryProcessingSource | None:
     return MemoryProcessingSource.from_payload(payload)
 
 
+def _retryable_failure() -> ColumnElement[bool]:
+    return and_(
+        TaskLog.status == "FAILED",
+        TaskLog.retry_count < MAX_ATTEMPTS,
+        TaskLog.error_message.is_distinct_from("stale_or_deleted"),
+    )
+
+
 async def _claim_job(
     session_factory: Callable[[], AsyncSession],
     task_id: str,
@@ -109,7 +134,7 @@ async def _claim_job(
     worker_id = str(uuid4())
     claimable = [
         TaskLog.status == "PENDING",
-        and_(TaskLog.status == "FAILED", TaskLog.retry_count < MAX_ATTEMPTS),
+        _retryable_failure(),
     ]
     if stage_timeout_s is not None and stage_timeout_s > 0:
         claimable.append(
@@ -117,7 +142,7 @@ async def _claim_job(
                 TaskLog.status == "PROCESSING",
                 or_(
                     TaskLog.started_at.is_(None),
-                    TaskLog.started_at < now - timedelta(seconds=stage_timeout_s),
+                    TaskLog.started_at < now - timedelta(seconds=stage_timeout_s * 3),
                 ),
             )
         )
@@ -168,8 +193,9 @@ async def execute_memory_update_job(  # noqa: C901
     session_factory: Callable[[], AsyncSession],
     task_id: str,
     *,
-    extract: Extract,
-    index: Index,
+    extract: Extract | None = None,
+    index: Index | None = None,
+    acquire_stages: AcquireStages | None = None,
     stage_timeout_s: float | None = None,
 ) -> str:
     """Run one durable job. Returns a terminal outcome name.
@@ -177,6 +203,7 @@ async def execute_memory_update_job(  # noqa: C901
     ``stage_timeout_s`` reuses the caller-supplied budget, normally the
     configured LLM timeout. ``None`` waits until the stage finishes.
     """
+    acquire = stage_provider(extract, index, acquire_stages)
     claimed = await _claim_job(session_factory, task_id, stage_timeout_s)
     if isinstance(claimed, str):
         return claimed
@@ -184,29 +211,40 @@ async def execute_memory_update_job(  # noqa: C901
 
     stages: dict[str, str] = {}
     try:
-        if payload.get("content_changed") is True:
+        # Admission, extraction and indexing share one bounded claim. A sweeper may
+        # reclaim a dead process only after this entire window, not after stage one.
+        deadline = None if stage_timeout_s is None else stage_timeout_s * 3
+        async with asyncio.timeout(deadline), acquire(payload) as (extract_stage, index_stage):
+            if payload.get("content_changed") is True:
+                try:
+                    await _run_stage(extract_stage, stage_timeout_s)
+                    stages["extraction"] = "succeeded"
+                except ExtractionQueued:
+                    stages["extraction"] = "queued"
+                except GraphNotReady:
+                    raise
+                except Exception as exc:
+                    stages["extraction"] = type(exc).__name__
             try:
-                await _run_stage(extract, payload, stage_timeout_s)
-                stages["extraction"] = "succeeded"
+                await _run_stage(index_stage, stage_timeout_s)
+                stages["index"] = "succeeded"
             except GraphNotReady:
-                await _defer_until_ready(session_factory, task_id, worker_id)
-                return "not_ready"
-            except ExtractionQueued:
-                stages["extraction"] = "queued"
-            except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                stages["extraction"] = type(exc).__name__
-        try:
-            await _run_stage(index, payload, stage_timeout_s)
-            stages["index"] = "succeeded"
-        except GraphNotReady:
-            await _defer_until_ready(session_factory, task_id, worker_id)
-            return "not_ready"
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            stages["index"] = type(exc).__name__
+                stages["index"] = type(exc).__name__
+    except GraphNotReady:
+        await _defer_until_ready(session_factory, task_id, worker_id)
+        return "not_ready"
+    except Exception as exc:
+        await _record_attempt(
+            session_factory,
+            task_id,
+            error=f"runtime:{type(exc).__name__}",
+            failed=True,
+            stages=stages,
+            worker_id=worker_id,
+        )
+        return "failed"
     except asyncio.CancelledError:
         await _record_attempt(
             session_factory,
@@ -242,47 +280,67 @@ async def execute_memory_update_job(  # noqa: C901
 async def resume_memory_update_jobs(
     session_factory: Callable[[], AsyncSession],
     *,
-    extract: Extract,
-    index: Index,
-    limit: int = 20,
+    extract: Extract | None = None,
+    index: Index | None = None,
+    acquire_stages: AcquireStages | None = None,
+    limit: int | None = 20,
     stage_timeout_s: float | None = None,
 ) -> list[str]:
     """Replay durable jobs left pending or retryable after a worker stop."""
-    session = session_factory()
-    try:
-        rows = (
-            await session.scalars(
-                select(TaskLog)
-                .where(
-                    TaskLog.task_type == MEMORY_UPDATE_JOB,
-                    or_(
-                        TaskLog.status.in_(_RUNNABLE),
-                        and_(TaskLog.status == "FAILED", TaskLog.retry_count < MAX_ATTEMPTS),
-                    ),
-                )
-                .order_by(TaskLog.created_at.asc(), TaskLog.id.asc())
-                .limit(limit)
-            )
-        ).all()
-        task_ids = [row.id for row in rows if not _handed_to_queue(row)]
-    finally:
-        await session.close()
     outcomes: list[str] = []
-    for task_id in task_ids:
+    async for task_id in _runnable_tasks(session_factory, limit):
         outcomes.append(
             await execute_memory_update_job(
                 session_factory,
                 task_id,
                 extract=extract,
                 index=index,
+                acquire_stages=acquire_stages,
                 stage_timeout_s=stage_timeout_s,
             )
         )
     return outcomes
 
 
+async def _runnable_tasks(
+    sessions: Callable[[], AsyncSession], limit: int | None
+) -> AsyncIterator[str]:
+    """Page past pending jobs from unavailable projects and completed queue handoffs."""
+    cursor: tuple[datetime, str] | None = None
+    count = 0
+    while limit is None or count < limit:
+        statement = select(TaskLog).where(
+            TaskLog.task_type == MEMORY_UPDATE_JOB,
+            or_(
+                TaskLog.status.in_(_RUNNABLE),
+                _retryable_failure(),
+            ),
+        )
+        if cursor is not None:
+            created, task_id = cursor
+            statement = statement.where(
+                or_(
+                    TaskLog.created_at > created,
+                    and_(TaskLog.created_at == created, TaskLog.id > task_id),
+                )
+            )
+        async with sessions() as session:
+            page = (
+                await session.scalars(statement.order_by(TaskLog.created_at, TaskLog.id).limit(20))
+            ).all()
+            if not page:
+                return
+            cursor = (page[-1].created_at, page[-1].id)
+            ids = [row.id for row in page if not _handed_to_queue(row)]
+        for task_id in ids:
+            if limit is not None and count >= limit:
+                return
+            count += 1
+            yield task_id
+
+
 class GraphNotReady(RuntimeError):
-    """The process has no graph or index runtime bound yet."""
+    """The job's admitted project generation cannot supply its graph or index yet."""
 
 
 class ExtractionQueued(RuntimeError):
@@ -294,14 +352,14 @@ def _handed_to_queue(row: TaskLog) -> bool:
     result = raw_result if isinstance(raw_result, dict) else {}
     raw_stages = result.get("stages")
     stages = raw_stages if isinstance(raw_stages, dict) else {}
-    return stages.get("extraction") == "queued"
+    return stages.get("extraction") == "queued" and stages.get("index") == "succeeded"
 
 
-async def _run_stage(func: Extract, payload: dict[str, Any], timeout_s: float | None) -> None:
+async def _run_stage(func: JobStage, timeout_s: float | None) -> None:
     if timeout_s is None:
-        await func(payload)
+        await func()
         return
-    await asyncio.wait_for(func(payload), timeout_s)
+    await asyncio.wait_for(func(), timeout_s)
 
 
 async def _defer_until_ready(

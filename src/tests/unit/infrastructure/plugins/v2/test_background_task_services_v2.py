@@ -10,9 +10,14 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from plugins.business.automation.backend.workflow_runtime import (
+    WORKFLOW_RUNTIME_MODULE_V2,
+    WORKFLOW_RUNTIME_SERVICE_V2,
+    WorkflowRuntimeServiceV2,
+)
+from plugins.business.automation.workflow.engine import AsyncioWorkflowEngine
+from plugins.business.automation.workflow.tasks import TaskManager
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
-from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 from src.infrastructure.plugins.v2.background_task_services import (
     BACKGROUND_TASK_ACCESS_PROVIDER_MODULE_V2,
     BACKGROUND_TASK_APPLICATION_MODULE_V2,
@@ -29,11 +34,6 @@ from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_prof
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.workflow_runtime import (
-    WORKFLOW_RUNTIME_MODULE_V2,
-    WORKFLOW_RUNTIME_SERVICE_V2,
-    WorkflowRuntimeServiceV2,
-)
 
 pytestmark = pytest.mark.unit
 

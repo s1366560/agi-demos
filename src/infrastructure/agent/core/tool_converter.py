@@ -146,7 +146,7 @@ def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
         """Wrapper that supplies a stub ToolContext when none is provided."""
         import asyncio
 
-        from src.infrastructure.agent.processor.run_context import RunContext
+        from plugins.business.agent.engine.processor.run_context import RunContext
         from src.infrastructure.agent.tools.context import ToolContext
 
         # Synthesize a non-empty call_id so error correlation is never lost

@@ -4,8 +4,8 @@ import {
   PROJECT_COMMUNITIES_DEGRADED_REASON,
   type ProjectCommunitiesSnapshot,
   type ProjectCommunity,
-} from '../features/project-knowledge/projectCommunitiesClient';
-import type { ProjectKnowledgeScope } from '../features/project-knowledge/projectKnowledgeClient';
+} from '@business/knowledge/ui/desktop/project-knowledge/projectCommunitiesClient';
+import type { ProjectKnowledgeScope } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectCommunitiesLoadOperationInputV2 = Readonly<{

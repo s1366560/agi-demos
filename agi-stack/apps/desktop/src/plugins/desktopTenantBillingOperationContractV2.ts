@@ -4,7 +4,7 @@ import type {
   TenantBillingPlan,
   TenantBillingSnapshot,
   TenantBillingTenant,
-} from '../features/tenant-admin/tenantBillingClient';
+} from '@business/billing/ui/desktop/tenant-admin/tenantBillingClient';
 import type { TenantAdminScope } from '../features/tenant-admin/tenantAdminHttp';
 import type { DesktopRuntimeConfig } from '../types';
 

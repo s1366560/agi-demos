@@ -7,7 +7,7 @@ import type {
   TenantOverviewScope,
   TenantOverviewSnapshot,
   TenantOverviewStorage,
-} from '../features/tenant/tenantOverviewClient';
+} from '@business/workspace/ui/desktop/tenant/tenantOverviewClient';
 
 export function projectDesktopTenantOverviewResponseV2(
   payload: unknown,

@@ -6,12 +6,12 @@ import {
   requireNonnegativeInteger,
   requireProjectAgentScope,
   type ProjectAgentScope,
-} from '../features/project-agent/projectAgentClient';
+} from '@business/agent/ui/desktop/project-agent/projectAgentClient';
 import {
   PROJECT_AGENT_DASHBOARD_LOCAL_REASON,
   type ProjectAgentDashboardSnapshot,
-} from '../features/project-agent/projectAgentDashboardClient';
-import { parseProjectAgentRuns } from '../features/project-agent/projectAgentRuns';
+} from '@business/agent/ui/desktop/project-agent/projectAgentDashboardClient';
+import { parseProjectAgentRuns } from '@business/agent/ui/desktop/project-agent/projectAgentRuns';
 import type { DesktopRuntimeConfig } from '../types';
 import {
   cloneDesktopProjectAgentDashboardRuntimeConfigV2,

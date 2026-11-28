@@ -20,7 +20,7 @@ from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 from .feature_operations import FeatureOperationOwnerV2, builtin_feature_owner_v2
 from .openapi import build_openapi_schema_v2
-from .runtime import RuntimeV2Error
+from .runtime import RuntimeGenerationV2, RuntimeV2Error
 
 WEBSOCKET_ROUTE_METHOD_V2 = "WEBSOCKET"
 type ResponseModelFilterV2 = set[int] | set[str] | dict[int, Any] | dict[str, Any]
@@ -196,6 +196,7 @@ class RoutePublicationV2:
     descriptor: PluginGenerationDescriptorV2
     table: RouteTableV2
     openapi: OpenApiSnapshotV2
+    owner: RuntimeGenerationV2 | None = field(default=None, compare=False, repr=False)
 
 
 class RouteTableRegistryV2:
@@ -204,6 +205,7 @@ class RouteTableRegistryV2:
     def __init__(self) -> None:
         self._lock = RLock()
         self._by_descriptor: dict[PluginGenerationDescriptorV2, RoutePublicationV2] = {}
+        self._owned: dict[RuntimeGenerationV2, RoutePublicationV2] = {}
         self._current: RoutePublicationV2 | None = None
 
     @property
@@ -230,23 +232,82 @@ class RouteTableRegistryV2:
             self._by_descriptor[descriptor] = publication
         return publication
 
+    def stage_root(
+        self, generation: RuntimeGenerationV2, table: RouteTableV2
+    ) -> RoutePublicationV2:
+        """Prepare a ROOT graph that becomes visible when the candidate commits."""
+        return self._stage_owned(generation, table)
+
+    def stage_scoped(self, generation: RuntimeGenerationV2, table: RouteTableV2) -> None:
+        """A scoped graph is reachable exclusively through its leased generation."""
+        _ = self._stage_owned(generation, table)
+
+    def _stage_owned(
+        self, generation: RuntimeGenerationV2, table: RouteTableV2
+    ) -> RoutePublicationV2:
+        descriptor = generation.descriptor
+        publication = RoutePublicationV2(
+            descriptor=descriptor,
+            table=table,
+            openapi=table.openapi_snapshot(descriptor),
+            owner=generation,
+        )
+
+        def release() -> None:
+            with self._lock:
+                if self._owned.get(generation) is publication:
+                    del self._owned[generation]
+                if self._by_descriptor.get(descriptor) is publication:
+                    del self._by_descriptor[descriptor]
+                if self._current is publication:
+                    self._current = None
+
+        with self._lock:
+            if generation in self._owned:
+                raise RuntimeV2Error(
+                    "route_generation_conflict", "generation already has HTTP routes"
+                )
+            generation.on_dispose(release)
+            self._owned[generation] = publication
+        return publication
+
+    def resolve_generation(self, generation: RuntimeGenerationV2) -> RoutePublicationV2:
+        with self._lock:
+            publication = self._owned.get(generation)
+            if publication is not None:
+                return publication
+            root = self.resolve(generation.descriptor)
+            if root.owner is not None:
+                raise RuntimeV2Error(
+                    "route_generation_unavailable", "pinned generation has no HTTP publication"
+                )
+            return root
+
     def activate(self, publication: RoutePublicationV2) -> None:
         """Make one exactly staged route/OpenAPI pair visible without awaiting."""
         with self._lock:
-            staged = self._by_descriptor.get(publication.descriptor)
+            staged = (
+                self._by_descriptor.get(publication.descriptor)
+                if publication.owner is None
+                else self._owned.get(publication.owner)
+            )
             if staged is not publication:
                 raise RuntimeV2Error(
                     "route_generation_not_staged",
                     "HTTP route table must be staged before activation",
                 )
+            self._by_descriptor[publication.descriptor] = publication
             self._current = publication
 
     def discard(self, publication: RoutePublicationV2) -> None:
         """Remove a failed, invisible staged publication."""
         with self._lock:
-            staged = self._by_descriptor.get(publication.descriptor)
-            if staged is publication and self._current is not publication:
+            if self._current is publication:
+                return
+            if self._by_descriptor.get(publication.descriptor) is publication:
                 del self._by_descriptor[publication.descriptor]
+            if publication.owner is not None and self._owned.get(publication.owner) is publication:
+                del self._owned[publication.owner]
 
     async def publish(
         self,
@@ -283,8 +344,7 @@ class GenerationRouteDispatcherV2:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         from .boundary import current_generation_v2
 
-        descriptor = current_generation_v2().descriptor
-        publication = self._registry.resolve(descriptor)
+        publication = self._registry.resolve_generation(current_generation_v2())
         await publication.table(scope, receive, send)
 
 

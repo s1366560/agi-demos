@@ -300,3 +300,180 @@ test('cloud plugin scope drift fails before mutations and server denial remains 
     403,
   );
 });
+
+test('signed cloud page and command are scoped to one release', async () => {
+  const base = '/api/v1/platform-plugins/v2/optional-business/memstack-billing';
+  const digest = 'sha256:' + 'a'.repeat(64);
+  const params = new URLSearchParams({
+    ...scope,
+    target: 'desktop-renderer',
+    expected_digest: digest,
+  });
+  const h = harness();
+  for (const request of [
+    { path: base + '/ui?' + params, method: 'GET' },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: { ...scope, expected_digest: digest, command_id: 'quote-pro' },
+    },
+  ]) {
+    const result = await executeVaultBoundCloudRequest(request, h.dependencies);
+    assert.equal(result.status, 200);
+  }
+  for (const request of [
+    { path: base + '/ui?' + params + '&extra=1', method: 'GET' },
+    { path: base + '/ui?' + params + '&project_id=other', method: 'GET' },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: { ...scope, command_id: 'quote-pro' },
+    },
+    {
+      path: base + '/commands',
+      method: 'POST',
+      body: {
+        ...scope,
+        command_id: 'quote-pro',
+        expected_digest: digest,
+        arbitrary: true,
+      },
+    },
+  ]) {
+    const denied = harness();
+    await assert.rejects(
+      executeVaultBoundCloudRequest(request, denied.dependencies),
+      /endpoint is not allowed/,
+    );
+    assert.deepEqual(denied.requests, []);
+  }
+});
+
+test('npm source accepts a scoped package and exact version from the selected cloud project', async () => {
+  const path = '/api/v1/platform-plugins/v2/optional-business/npm/resolve';
+  const body = { ...scope, package_name: '@memstack/agent', version: '1.2.3-rc.1+dev' };
+  const h = harness();
+  const result = await executeVaultBoundCloudRequest({ path, method: 'POST', body }, h.dependencies);
+  assert.equal(result.status, 200);
+  assert.deepEqual(h.requests.at(-1), { path, method: 'POST', body });
+  for (const changed of [
+    { version: '^1.2.0' }, { version: 'latest' }, { package_name: 'https://registry.invalid/x' },
+    { registry: 'https://registry.invalid' }, { project_id: 'another-project' },
+  ]) {
+    const before = h.requests.filter((item) => item.path === path).length;
+    await assert.rejects(executeVaultBoundCloudRequest({
+      path, method: 'POST', body: { ...body, ...changed },
+    }, h.dependencies));
+    assert.equal(h.requests.filter((item) => item.path === path).length, before);
+  }
+});
+
+test('market catalog, detail and reviewed updates stay bound to exact project requests', async () => {
+  const base = '/api/v1/platform-plugins/v2/optional-business/npm';
+  const query = new URLSearchParams(scope).toString();
+  const read = (suffix) => ({ method: 'GET', path: base + suffix });
+  const candidate = { ...scope, package_name: '@memstack/workspace', version: '1.2.0',
+    expected_digest: 'sha256:' + '1'.repeat(64), expected_revision: 1, approved_permissions: [] };
+  const apply = (body) => ({ method: 'POST', path: base + '/apply', body });
+  const h = harness();
+  for (const request of [
+    read('/catalog?' + query + '&q=memory&view=updates&limit=24&offset=0'),
+    read('/detail?' + query + '&plugin_id=memstack-workspace&package_name=%40memstack%2Fworkspace&version=1.2.0'),
+    apply(candidate),
+  ]) assert.equal((await executeVaultBoundCloudRequest(request, h.dependencies)).status, 200);
+
+  for (const request of [
+    read('/catalog?' + query + '&origin=https://other.invalid'),
+    read('/catalog?' + query + '&limit=0'),
+    read('/catalog?' + query + '&offset=-1'),
+    read('/catalog?' + query + '&project_id=elsewhere'),
+    read('/detail?' + query + '&plugin_id=memstack-workspace&version=latest'),
+    apply({ ...candidate, expected_digest: 'unsigned' }),
+    apply({ ...candidate, project_id: 'elsewhere' }),
+    apply({ ...candidate, expected_revision: null }),
+    apply({ ...candidate, alternate_registry: 'another' }),
+  ]) await assert.rejects(executeVaultBoundCloudRequest(request, h.dependencies));
+});
+
+test('only verified npm archive resolution receives the larger JSON response budget', async () => {
+  const path = '/api/v1/platform-plugins/v2/optional-business/npm/';
+  const archive = 'A'.repeat(2 * 1024 * 1024 + 1);
+  const h = harness();
+  const fetch = h.dependencies.fetch;
+  h.dependencies.fetch = async (url, init) => new URL(url).pathname.startsWith(path)
+    ? Response.json({archive_base64: archive})
+    : fetch(url, init);
+  const resolved = await executeVaultBoundCloudRequest(
+    { path: path + 'resolve', method: 'POST',
+      body: { ...scope, package_name: '@memstack/knowledge', version: '1.0.0' } },
+    h.dependencies,
+  );
+  assert.equal(resolved.body.archive_base64.length, archive.length);
+  await assert.rejects(
+    executeVaultBoundCloudRequest(
+      { path: path + 'catalog?' + new URLSearchParams(scope), method: 'GET' },
+      h.dependencies,
+    ),
+    /cloud response is too large/,
+  );
+});
+
+test('only a digest-bound rich page can transfer larger signed resources', async () => {
+  const h = harness();
+  const fetch = h.dependencies.fetch;
+  const content = 'A'.repeat(2 * 1024 * 1024 + 1);
+  h.dependencies.fetch = (url, init) => new URL(url).pathname.endsWith('/ui')
+    ? Response.json({entry: {bytes_base64: content}}) : fetch(url, init);
+  const params = new URLSearchParams({
+    ...scope, target: 'desktop-renderer', expected_digest: 'sha256:' + 'a'.repeat(64),
+  });
+  const path = '/api/v1/platform-plugins/v2/optional-business/memstack-agent/ui?' + params;
+  const loaded = await executeVaultBoundCloudRequest(
+    {path: path + '&page_id=chat', method: 'GET'}, h.dependencies,
+  );
+  assert.equal(loaded.body.entry.bytes_base64.length, content.length);
+  await assert.rejects(executeVaultBoundCloudRequest(
+    {path, method: 'GET'}, h.dependencies,
+  ), /cloud response is too large/);
+});
+
+test('tenant releases admit the active tenant without borrowing a project or device grant', async () => {
+  const base = '/api/v1/tenant-packages';
+  const query = '?tenant_id=tenant-1';
+  const digest = 'sha256:' + '1'.repeat(64);
+  const body = {tenant_id: 'tenant-1', command_id:'get-account', expected_digest:digest};
+  const h = harness();
+  for (const path of ['/tenants', '/' + query, '/npm/catalog' + query,
+    '/npm/detail' + query + '&plugin_id=memstack-billing',
+    '/memstack-billing/ui' + query + '&target=desktop-renderer&expected_digest=' + digest]) {
+    assert.equal((await executeVaultBoundCloudRequest({path:base + path, method:'GET'}, h.dependencies)).status, 200);
+  }
+  const command = data => ({path:base + '/memstack-billing/commands',method:'POST',body:data});
+  assert.equal((await executeVaultBoundCloudRequest(command(body), h.dependencies)).status, 200);
+  for (const request of [command({...body, tenant_id:'foreign'}),command({...body, project_id:'project-1'}),
+    {path:base+'/npm/catalog'+query+'&project_id=project-1',method:'GET'},
+    {path:base+'/npm/resolve',method:'POST',body:{tenant_id:'tenant-1',package_name:'@memstack/billing',version:'1.2.0'}}]) {
+    await assert.rejects(executeVaultBoundCloudRequest(request,h.dependencies));
+  }
+});
+
+test('a tenant-only operation rechecks membership when no project has been selected', async () => {
+  const h = harness();
+  const send = h.dependencies.fetch;
+  h.dependencies.fetch = async (url, init) => {
+    const path = new URL(url).pathname;
+    if (path === '/api/v1/workspace-context') {
+      return Response.json({detail:{code:'workspace_context_unavailable'}}, {status:404});
+    }
+    if (path === '/api/v1/tenant-packages/tenants') {
+      return Response.json({items:[{tenant_id:'member-tenant'}]});
+    }
+    return send(url, init);
+  };
+  const catalog = tenant => ({
+    path:'/api/v1/tenant-packages/npm/catalog?tenant_id=' + tenant, method:'GET',
+  });
+  assert.equal((await executeVaultBoundCloudRequest(catalog('member-tenant'), h.dependencies)).status, 200);
+  await assert.rejects(executeVaultBoundCloudRequest(catalog('foreign-tenant'), h.dependencies), /tenant scope mismatch/);
+  assert.equal(h.requests.length, 1);
+});

@@ -28,11 +28,28 @@ export async function createVerifiedSignedSlotDocumentV2(
   }
   const actions = parsed.actions
     .map(
-      (action) =>
-        `<button type="button" data-action="${escapeAttribute(action.id)}">${escapeText(action.label)}</button>`
+      (action) => {
+        const input = action.input
+          ? `<label>${escapeText(action.input.label)}<textarea rows="6" maxlength="32768">${escapeText(JSON.stringify(action.input.initial, null, 2))}</textarea></label>`
+          : '';
+        return `<section>${input}<button type="button" data-action="${escapeAttribute(action.id)}">${escapeText(action.label)}</button></section>`;
+      }
     )
     .join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'"><style nonce="${nonce}">body{font:13px system-ui}</style></head><body><h1>${escapeText(parsed.title)}</h1><nav>${actions}</nav><script nonce="${nonce}">document.querySelectorAll('button').forEach((node)=>{node.addEventListener('click',()=>{parent.postMessage({source:'memstack-plugin-slot-v2',type:'slot:action',action:{type:'plugin.ui',id:node.dataset.action}},'*')})})</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'"><style nonce="${nonce}">body{font:14px system-ui;color-scheme:light dark}section{margin-block:1em}textarea{display:block;width:95%;margin:.5em 0;font:13px monospace}button{padding:.4em .7em}</style></head><body><h1>${escapeText(parsed.title)}</h1><nav>${actions}</nav><script nonce="${nonce}">document.querySelectorAll('section').forEach(section=>{
+    const field=section.querySelector('textarea');
+    const button=section.querySelector('button');
+    field?.addEventListener('input',()=>field.setCustomValidity(''));
+    button.addEventListener('click',()=>{
+      const action={type:'plugin.ui',id:button.dataset.action};
+      if(field){try{
+        const value=JSON.parse(field.value);
+        if(!value || typeof value!=='object' || Array.isArray(value))throw new Error();
+        action.payload=value;
+      }catch{field.setCustomValidity(field.labels[0].firstChild.textContent);field.reportValidity();return}}
+      parent.postMessage({source:'memstack-plugin-slot',type:'slot:action',action},'*');
+    })
+  })</script></body></html>`;
 }
 
 async function sha256(bytes: Uint8Array): Promise<string> {

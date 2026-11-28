@@ -1,0 +1,479 @@
+# Sandbox MCP Server
+
+A WebSocket-based MCP (Model Context Protocol) server for sandbox file system operations with **remote desktop environment support**.
+
+## Features
+
+- **WebSocket Transport**: Bidirectional communication via WebSocket
+- **File Operations**: read, write, edit, glob, grep
+- **Bash Execution**: Secure command execution
+- **Web Terminal**: Browser-based terminal access via ttyd
+- **Computer Use Desktop**: Minimal Xfce/X11 with KasmVNC, AT-SPI, and sky-cua
+- **Browser Automation**: Pinned Chromium with the sky-cua extension and native host
+- **Docker Ready**: Isolated sandbox environment
+- **Web Development Runtime**: Python 3.12, Node.js 22, and pnpm 11.15.1
+
+## Tool configuration
+
+Set `MCP_TOOLSETS` in the server process environment to a comma-separated list of
+`files`, `workspace-files`, `artifacts`, `shell`, `code-index`, `editing`, `git`,
+`terminal`, `desktop`, `imports`, `mcp-management` and `dependencies`. An unset
+variable loads the default groups. An empty value starts with no tools.
+For example, `MCP_TOOLSETS=files,mcp-management` enables file tools and the existing
+platform-managed MCP server install, discovery and invocation operations. These
+operations run installed package tools through their managed MCP transport.
+
+### Signed project tools
+
+An authenticated MCP client can use the Rust gateway WebSocket at
+`/api/v1/projects/{project_id}/sandbox/mcp/proxy`. For this connection, use the
+cloud bearer header or the browser subprotocols `memstack.auth` and the cloud
+access token. The gateway gets signed tools for the current actor from
+`AGISTACK_PYTHON_UPSTREAM`. The upstream sandbox receives only its sandbox
+credential. Direct sandbox connections and cookie-only MCP App frames expose
+the configured sandbox tools.
+
+`tools/list` returns the sandbox tools plus enabled project tools whose signed
+permissions the administrator approved. Pass the advertised `name` unchanged to
+`tools/call`. Names bind the actor, project, active generation, release digest
+and authorization epoch.
+Refresh the list after an upgrade or rollback. An already admitted invocation can
+complete on its original release. Disabling a package, revoking the credential,
+or removing the caller's execution role invalidates access. The gateway handles
+`notifications/cancelled` for a project invocation and cancels outstanding work
+when its client disconnects. Cloud packages run in the configured Wasm or OCI
+executor and receive their declared structured input.
+
+## Quick Start
+
+### Local Development
+
+```bash
+# Install dependencies
+pip install -e .
+
+# Run server
+python -m src.server.main --workspace ./workspace --debug
+```
+
+### Docker (Recommended)
+
+```bash
+# Build image
+docker build -t sandbox-mcp-server .
+
+# Run container (with desktop support)
+export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
+docker run \
+  -e SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN" \
+  -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
+  -p 127.0.0.1:8765:8765 \
+  -p 127.0.0.1:7681:7681 \
+  -p 127.0.0.1:6080:6080 \
+  --shm-size=1g \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --security-opt seccomp=./docker/seccomp-profile.json \
+  -v $(pwd)/workspace:/workspace \
+  -v sandbox-chromium:/home/sandbox/.config/chromium \
+  sandbox-mcp-server
+
+# Or use Docker Compose
+export SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN"
+docker compose up -d
+```
+
+### Accessing Services
+
+After starting the container:
+
+- **MCP Server**: `ws://localhost:8765` (WebSocket)
+- **Web Terminal**: `http://localhost:7681` (ttyd)
+- **Remote Desktop**: `https://localhost:6080` (KasmVNC web client)
+
+## Available Tools
+
+### File System Tools
+
+| Tool | Description |
+|------|-------------|
+| `read` | Read file contents with line numbers |
+| `batch_read` | Read multiple files in one call |
+| `write` | Write/create files |
+| `edit` | Replace text in files |
+| `glob` | Find files by pattern |
+| `grep` | Search file contents with regex |
+| `list` | List files/directories with recursive and detailed modes |
+| `patch` | Apply unified diff patches |
+| `bash` | Execute shell commands |
+
+### Artifact Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_artifacts` | Discover exportable files in output directories |
+| `export_artifact` | Export one file with MIME and encoding metadata |
+| `batch_export_artifacts` | Export multiple files in one call |
+
+### Code Analysis Tools
+
+| Tool | Description |
+|------|-------------|
+| `code_index_build` | Build a Python symbol/reference index |
+| `find_definition` | Locate symbol definitions in the index |
+| `find_references` | Locate symbol references in the index |
+| `call_graph` | Show outgoing/incoming call relationships |
+| `dependency_graph` | Summarize import relationships |
+
+### Edit and Refactor Tools
+
+| Tool | Description |
+|------|-------------|
+| `batch_edit` | Apply multiple string edits in one call |
+| `preview_edit` | Preview a unified diff before editing |
+
+### Git Tools
+
+| Tool | Description |
+|------|-------------|
+| `git_diff` | Inspect current git changes |
+| `git_log` | Show recent commits |
+| `generate_commit` | Draft a commit message from current changes |
+
+### Import / Dependency Tools
+
+| Tool | Description |
+|------|-------------|
+| `import_file` | Import a single file from MemStack storage |
+| `import_files_batch` | Import multiple files from MemStack storage |
+| `deps_check` | Check Python/system/command dependencies |
+| `deps_install` | Install Python/system/npm dependencies |
+| `plugin_tool_exec` | Run plugin-scoped helper commands |
+
+### Desktop Tools
+
+| Tool | Description |
+|------|-------------|
+| `start_desktop` | Start the Xfce/X11 remote desktop (KasmVNC) |
+| `stop_desktop` | Stop remote desktop |
+| `get_desktop_status` | Get desktop status and connection URL |
+| `restart_desktop` | Restart desktop with new config |
+
+### Terminal Tools
+
+| Tool | Description |
+|------|-------------|
+| `start_terminal` | Start web terminal (ttyd) |
+| `stop_terminal` | Stop web terminal |
+| `get_terminal_status` | Get terminal status |
+| `restart_terminal` | Restart web terminal |
+
+## Configuration
+
+Environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_HOST` | `0.0.0.0` | Server host |
+| `MCP_PORT` | `8765` | Server port |
+| `MCP_WORKSPACE` | `/workspace` | Workspace directory |
+| `TERMINAL_PORT` | `7681` | Web terminal port |
+| `DESKTOP_ENABLED` | `true` | Enable desktop environment |
+| `DESKTOP_RESOLUTION` | `1920x1080` | Desktop resolution |
+| `DESKTOP_PORT` | `6080` | KasmVNC web client port |
+
+## Remote Desktop
+
+### Starting the Desktop
+
+**Via MCP Tool**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "start_desktop",
+    "arguments": {
+      "display": ":1",
+      "resolution": "1920x1080",
+      "port": 6080
+    }
+  }
+}
+```
+
+**Direct Access**:
+```bash
+# Start container with authenticated desktop and loopback-only publication
+export SANDBOX_TOKEN="$(openssl rand -base64 32 | tr -d '\n')"
+docker run --rm \
+  -e SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN" \
+  -e MCP_STATIC_TOKEN="$SANDBOX_TOKEN" \
+  --shm-size=1g \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --security-opt seccomp=./docker/seccomp-profile.json \
+  -v sandbox-chromium:/home/sandbox/.config/chromium \
+  -p 127.0.0.1:6080:6080 \
+  sandbox-mcp-server
+
+# Open browser and authenticate as "sandbox" with $SANDBOX_TOKEN
+open https://localhost:6080
+```
+
+### Desktop Features
+
+- **Xfce/X11 Desktop**: Xfwm4, panel, desktop, terminal, and file manager on KasmVNC's real X11 display
+- **sky-cua Desktop and Browser Surfaces**: Screenshot, XTEST input, AT-SPI semantics, and Chromium tab control
+- **Pinned Chromium**: Playwright 1.57.0 Chromium with the pinned sky-cua extension and native host
+- **KasmVNC** (all-in-one): A single process provides X server + VNC server + WebSocket server + built-in web client
+- **Built-in Web Client**: No browser plugin or separate noVNC/websockify stack required
+- **WebP/QOI/JPEG Encoding**: Modern encodings for efficient remote display
+- **Dynamic Resize**: Live resolution changes via xrandr (no restart needed)
+- **Bi-directional Clipboard**: Text and image clipboard sync
+- **Workspace Downloads**: Browser downloads are stored in `/workspace/Downloads`
+- **Multiple Resolutions**: 1920x1080 (default), 1600x900, 1280x720, and more supported
+
+The container contract follows the useful parts of
+[LinuxServer Webtop](https://github.com/linuxserver/docker-webtop): browser-delivered GUI,
+loopback-first port publication, a persistent browser profile, explicit authentication, and
+`1g` shared memory. It keeps the smaller all-in-one KasmVNC X server instead of Webtop's
+Xvfb/Selkies service stack because sky-cua uses the XTEST, MIT-SHM, EWMH, and AT-SPI path in this
+image.
+
+Only Chromium state (cookies, sessions, and browser configuration) is persisted in the dedicated
+volume. Project files and downloads remain under `/workspace`; desktop runtime files under `$HOME`
+are ephemeral.
+
+The custom seccomp profile explicitly permits the four System V shared-memory calls required by
+X11 MIT-SHM. This keeps unattended sky-cua screenshots valid before anyone opens the GUI while the
+container still runs with all capabilities dropped and `no-new-privileges` enabled.
+
+### VNC Server
+
+The sandbox runtime is **KasmVNC-centric**. The previous TigerVNC + noVNC + websockify
+stack is no longer the documented runtime path. Some repository orchestration still accepts
+a `VNC_SERVER_TYPE`/`VNC` compatibility flag for older commands, but new behavior should be
+validated against the KasmVNC path.
+
+Relevant runtime details:
+
+- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -KasmPasswordFile /home/sandbox/.kasmpasswd -SecurityTypes None`
+- Display: `:1`
+- Process name: `Xvnc` (KasmVNC package alternative)
+- Auth file: `/home/sandbox/.kasmpasswd` (read from `$HOME`, not `~/.vnc/kasmpasswd`)
+- Auth mode: KasmVNC HTTP Basic Auth with the per-sandbox runtime capability; the API proxy injects this credential without placing it in URLs
+- Web port: `6080` (no 5901 VNC port is exposed; the built-in web client is served on the same port)
+
+**Example: Run with desktop**
+```bash
+# Use the authenticated, hardened "Direct Access" command above, or Docker Compose.
+export SANDBOX_SERVICE_AUTH_TOKEN="$SANDBOX_TOKEN"
+docker compose up -d
+```
+
+## Protocol
+
+The server implements MCP over WebSocket with JSON-RPC 2.0 messages.
+
+### Example Connection
+
+```python
+import aiohttp
+import asyncio
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect('ws://localhost:8765') as ws:
+            # Initialize
+            await ws.send_json({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "clientInfo": {"name": "test", "version": "1.0"}
+                }
+            })
+            response = await ws.receive_json()
+            print(response)
+
+            # List tools
+            await ws.send_json({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/list",
+                "params": {}
+            })
+            tools = await ws.receive_json()
+            print(tools)
+
+asyncio.run(main())
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Browser                              │
+├──────────────────────┬──────────────────────────────────┤
+│   Web Terminal       │      Remote Desktop              │
+│   (ttyd)             │      (KasmVNC web client)        │
+│   Port 7681          │      Port 6080                    │
+└──────────┬───────────┴──────────────┬───────────────────┘
+           │                          │
+┌──────────▼──────────────────────────▼───────────────────┐
+│                 sandbox-mcp-server                      │
+├──────────────────────┬──────────────────────────────────┤
+│   ttyd               │   KasmVNC :1 (all-in-one)        │
+│   (shell access)     │   ├─ X server (built-in)         │
+│                      │   ├─ Xfce + Chromium             │
+│                      │   └─ VNC + WebSocket + web       │
+│                      │      client on port 6080         │
+├──────────────────────┴──────────────────────────────────┤
+│   MCP Server (Port 8765)                                │
+│   ├─ File Tools (read, write, edit, glob, grep)        │
+│   ├─ Bash Tool                                          │
+│   ├─ Desktop Tools (start, stop, status, restart)       │
+│   └─ Terminal Tools (start, stop, status, restart)      │
+└──────────────────────┬──────────────────────────────────┘
+           │
+    ┌──────▼──────┐
+    │  Workspace  │
+    │  /workspace │
+    └─────────────┘
+```
+
+## Development Tools
+
+Pre-installed in the sandbox:
+
+- **Python 3.12**: Isolated MCP runtime and pip
+- **Node.js 22**: npm and pnpm 11.15.1
+- **Git**: Version control
+- **Shell tools**: bash, curl, jq, nano, and standard X11 diagnostics
+
+## Security
+
+- Commands executed within workspace directory
+- Dangerous commands blocked
+- Non-root user in Docker (UID 10001)
+- Project-specific Chromium configuration is stored only in its managed Docker volume
+- Resource limits enforced
+- Per-sandbox KasmVNC and ttyd authentication enabled
+- Session timeout management (optional)
+
+## Troubleshooting
+
+### Desktop Won't Start
+
+```bash
+# Check Xfce, X11, and the browser bridge
+docker exec <container> wmctrl -m
+docker exec <container> pgrep -a -x xfce4-panel
+docker exec <container> pgrep -a -x xfdesktop
+docker exec <container> xdpyinfo -display :1 -queryExtensions
+docker exec <container> find /run/user/10001/sky-cua/browser -name 'extension-*.sock'
+
+# Check KasmVNC server logs
+docker exec <container> ps aux | grep -i kasmvnc
+docker exec <container> cat /tmp/kasmvnc.log
+
+# Confirm the web client port is listening
+docker exec <container> netstat -tln | grep 6080
+```
+
+### Connection Refused
+
+```bash
+# Verify ports are exposed
+docker ps
+
+# Check port mapping
+docker port <container>
+
+# Test KasmVNC web client
+curl -k -u "sandbox:$SANDBOX_TOKEN" https://localhost:6080
+```
+
+### Performance Issues
+
+- **Reduce resolution**: Try 1280x720 instead of 1920x1080
+- **Adjust compression**: Modify `-compression` value (0-9)
+- **Check bandwidth`: Ensure >2 Mbps available
+
+## Default CUA Image
+
+The default image is a minimal Xfce/X11 Computer Use and web-development runtime. It intentionally
+does not include the former KDE applications, Firefox, Java, Go, Rust, Bun, LibreOffice, Pandoc,
+or duplicate Chrome/Puppeteer browser payloads.
+
+Key changes:
+- Xfce provides a visible panel, desktop, terminal, and file manager while keeping compositing disabled
+- Earlier TigerVNC/x11vnc + noVNC + websockify stack → KasmVNC (single process)
+- Chromium state persists in a project-scoped named volume across sandbox replacement
+- sky-cua receives the same X11, D-Bus, and AT-SPI session environment as the main MCP server
+- Better encoding options (WebP, QOI, JPEG) plus dynamic resize and clipboard
+
+See `MIGRATION.md` for detailed migration guide.
+
+## Testing
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test suites
+pytest tests/test_desktop_manager.py -v
+pytest tests/integration/test_vnc_performance.py -v
+
+# Include RED-phase Docker/KasmVNC desktop tests
+RUN_SANDBOX_RED_TESTS=1 pytest tests/integration/ -v
+
+# Run with coverage
+pytest --cov=src/server --cov=src/tools --cov-report=html
+```
+
+RED-phase Docker/KasmVNC desktop tests are skipped by default in local runs because they
+require the desktop container stack.
+
+## Documentation
+
+- `README.md` (this file) - Quick start guide
+- `MIGRATION.md` - Migration guide for existing users
+- `DEPLOYMENT.md` - Deployment guide for operations
+- `TROUBLESHOOTING.md` - Common issues and solutions
+- `PERFORMANCE.md` - Performance tuning guide
+- `docs/README.md` - Index for historical desktop/VNC phase records
+
+## Contributing
+
+Contributions welcome! Please run tests before submitting:
+
+```bash
+# Format code
+ruff format src/ tests/
+
+# Run linter
+ruff check src/ tests/
+
+# Run tests
+pytest tests/ -v
+```
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Version History
+
+- **v3.1** (2026-08-21): Minimal Xfce/X11 desktop on the Chromium sky-cua runtime
+- **v3.0** (2026-08-21): Openbox/X11 + Chromium sky-cua runtime
+- **v2.0** (2026-01-28): KDE Plasma + KasmVNC desktop migration (superseded)
+- **v1.0** (2025-01-15): Initial release with LXDE desktop
+
+---
+
+**Generated**: 2026-08-21
+**Status**: Production Ready

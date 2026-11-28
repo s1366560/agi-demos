@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from plugins.business.agent.skill_validation.markdown_parser import MarkdownParser
 from src.application.services.skill_reverse_sync import SkillReverseSync
 from src.domain.model.agent.skill import Skill, SkillScope
 from src.domain.model.agent.skill.skill_source import SkillSource
 from src.domain.model.agent.skill.skill_version import SkillVersion
-from src.infrastructure.skill.markdown_parser import MarkdownParser
 
 SAMPLE_SKILL_MD = """---
 name: test-skill

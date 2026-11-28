@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from plugins.business.agent.engine.react import project_react_agent as project_agent_mod
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.persistence import (
     database as database_mod,
@@ -14,7 +15,6 @@ from src.infrastructure.adapters.secondary.persistence import (
 )
 from src.infrastructure.agent.actor import execution as execution_mod
 from src.infrastructure.agent.actor.state import snapshot_repo as snapshot_repo_mod
-from src.infrastructure.agent.core import project_react_agent as project_agent_mod
 from src.infrastructure.agent.hitl import (
     generation_recovery_v2 as generation_recovery_mod,
     utils as hitl_utils,

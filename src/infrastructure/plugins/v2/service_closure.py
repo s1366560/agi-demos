@@ -8,6 +8,7 @@ from dataclasses import replace
 from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
     ProfileSnapshotV2,
+    ScopeKindV2,
     ScopeV2,
     ServiceRequiredV2,
 )
@@ -40,6 +41,7 @@ def project_service_closure_v2(
     scope: ScopeV2,
     required_services: Sequence[ServiceRequiredV2],
     isolate: Mapping[str, str] | None = None,
+    include_scoped_http: bool = False,
 ) -> ProfileSnapshotV2:
     """Project a composed snapshot; callers retain authentication and publication ownership.
 
@@ -73,6 +75,16 @@ def project_service_closure_v2(
         )
         for requirement in required_services
     ]
+    if include_scoped_http:
+        pending.extend(
+            key
+            for key, entry in entries.items()
+            if entry.scope.kind != ScopeKindV2.ROOT
+            and any(
+                item.service == ROUTE_TABLE_BUILDER_SERVICE_V2
+                for item in modules[key].contract.services.requires
+            )
+        )
     selected: set[str] = set()
     while pending:
         entry_id = pending.pop()
@@ -83,12 +95,9 @@ def project_service_closure_v2(
                 "missing_parent_entry", "service closure requires an unavailable parent entry"
             )
         contract = modules[entry_id].contract
-        if any(
-            declaration.service in _GLOBAL_ROUTE_SERVICES
-            for declaration in contract.services.provides
-        ) or any(
-            declaration.service in _GLOBAL_ROUTE_SERVICES
-            for declaration in contract.services.requires
+        if entries[entry_id].scope.kind == ScopeKindV2.ROOT and _GLOBAL_ROUTE_SERVICES.intersection(
+            {item.service for item in contract.services.provides}
+            | {item.service for item in contract.services.requires}
         ):
             raise RuntimeV2Error(
                 "scope_global_route_service",

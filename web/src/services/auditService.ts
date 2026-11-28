@@ -1,4 +1,4 @@
-import { httpClient } from './client/httpClient';
+import { hostControlClient } from './client/hostControlClient';
 
 // ============================================================================
 // TYPES
@@ -114,7 +114,7 @@ export const auditService = {
     const path = hasFilters
       ? `/tenants/${tenantId}/audit-logs/filter`
       : `/tenants/${tenantId}/audit-logs`;
-    const response = await httpClient.get<BackendAuditListResponse>(path, { params: queryParams });
+    const response = await hostControlClient.get<BackendAuditListResponse>(path, { params: queryParams });
 
     return normalizeAuditListResponse(response);
   },
@@ -132,7 +132,7 @@ export const auditService = {
     if (params?.hook_family) queryParams.hook_family = params.hook_family;
     if (params?.isolation_mode) queryParams.isolation_mode = params.isolation_mode;
 
-    const response = await httpClient.get<BackendAuditListResponse>(
+    const response = await hostControlClient.get<BackendAuditListResponse>(
       `/tenants/${tenantId}/audit-logs/runtime-hooks`,
       { params: queryParams }
     );
@@ -141,7 +141,7 @@ export const auditService = {
   },
 
   getRuntimeHookSummary: (tenantId: string, params?: RuntimeHookAuditSummaryParams) =>
-    httpClient.get<RuntimeHookAuditSummary>(
+    hostControlClient.get<RuntimeHookAuditSummary>(
       `/tenants/${tenantId}/audit-logs/runtime-hooks/summary`,
       {
         params,
@@ -172,7 +172,7 @@ export const auditService = {
       queryParams.set('isolation_mode', exportParams.isolation_mode);
     }
 
-    return httpClient.get<Blob>(
+    return hostControlClient.get<Blob>(
       `/tenants/${tenantId}/audit-logs/export?${queryParams.toString()}`,
       {
         responseType: 'blob',

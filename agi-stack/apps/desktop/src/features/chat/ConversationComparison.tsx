@@ -9,8 +9,8 @@ import {
   conversationComparisonCandidates,
   conversationComparisonMessages,
   conversationComparisonRequestMatches,
-} from './conversationComparisonModel';
-import type { ConversationComparisonMessage } from './conversationComparisonModel';
+} from '@business/agent/ui/desktop/chat/conversationComparisonModel';
+import type { ConversationComparisonMessage } from '@business/agent/ui/desktop/chat/conversationComparisonModel';
 
 export type ConversationComparisonClient = {
   listConversations: NonNullable<ComposerCatalogClient['listConversations']>;

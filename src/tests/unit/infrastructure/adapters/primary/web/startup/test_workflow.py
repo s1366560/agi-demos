@@ -10,23 +10,24 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-import src.infrastructure.adapters.primary.web.startup.workflow as workflow_module
-from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
-from src.infrastructure.adapters.primary.web.startup.workflow import (
+import plugins.business.knowledge.backend.graph_workflows as workflow_module
+from plugins.business.automation.workflow.tasks import TaskManager
+from plugins.business.knowledge.backend.graph_workflows import (
     _run_episode_processing_workflow,
     _run_incremental_refresh_workflow,
     _run_rebuild_communities_workflow,
     build_asyncio_workflow_engine_v2,
 )
-from src.infrastructure.adapters.secondary.background_tasks import TaskManager
+from src.domain.model.knowledge_sync.contracts import KnowledgeSyncError
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.startup.project_graph_lease import project_graph_lease
+from src.infrastructure.adapters.primary.web.startup.workflow_graph_authority import (
+    bind_workflow_graph,
+)
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, TaskLog, User
-from src.infrastructure.plugins.v2.boundary import (
-    clear_process_generation_host_v2,
-    install_process_generation_host_v2,
-)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
@@ -106,6 +107,9 @@ async def test_build_asyncio_workflow_engine_registers_task_handlers() -> None:
 @pytest.mark.asyncio
 async def test_workflow_handler_holds_an_independent_generation_lease(
     monkeypatch: pytest.MonkeyPatch,
+    test_db,
+    test_project_db,
+    test_user,
 ) -> None:
     handler_started = asyncio.Event()
     finish_handler = asyncio.Event()
@@ -144,13 +148,34 @@ async def test_workflow_handler_holds_an_independent_generation_lease(
         nonce="workflow-generation-1",
     )
     assert first.accepted is True
-    install_process_generation_host_v2(host)
+    scope = ScopeV2(
+        kind=ScopeKindV2.PROJECT, tenant_id=test_project_db.tenant_id, project_id=test_project_db.id
+    )
+    sessions = async_sessionmaker(test_db.bind, expire_on_commit=False)
+
+    class ScopedRuntime:
+        async def acquire(self, selected):
+            assert selected == scope
+            return SimpleNamespace(scope=selected, lease=await host.acquire(), claim=lambda: None)
+
+        def project_graph(self, payload, *, actor_id):
+            assert actor_id == test_user.id
+            return project_graph_lease(sessions, self, payload, actor_id=actor_id)
+
+    scoped = ScopedRuntime()
 
     try:
         engine = build_asyncio_workflow_engine_v2(manager=TaskManager())
         assert engine is not None
-        task = asyncio.create_task(engine._workflow_handlers["episode_processing"]({}))
-        await handler_started.wait()
+        with bind_workflow_graph(scoped, scope, test_user.id):
+            await engine.start_workflow(
+                "episode_processing",
+                "queued-workflow",
+                {"project_id": scope.project_id, "memory_id": "memory", "source_revision": 1},
+                "default",
+            )
+        async with asyncio.timeout(3):
+            await handler_started.wait()
 
         second = await host.bootstrap(
             profile_path=_PROFILE_PATH,
@@ -165,13 +190,12 @@ async def test_workflow_handler_holds_an_independent_generation_lease(
         assert graph_services[0].close_calls == 0
 
         finish_handler.set()
-        await task
+        await engine.get_workflow_result("queued-workflow")
 
         assert graph_services[0].close_calls == 1
         assert graph_services[1].close_calls == 0
     finally:
         finish_handler.set()
-        clear_process_generation_host_v2(host)
         await host.close()
 
 
@@ -803,3 +827,29 @@ async def test_failed_extraction_enqueues_nothing(
     assert stored is None and changes == 0
     await test_db.refresh(memory)
     assert memory.processing_status == "FAILED"
+
+
+@pytest.mark.parametrize(
+    "project,tenant,code",
+    [
+        ("another-project", "tenant-a", "workflow_project_scope_mismatch"),
+        ("project-a", "another-tenant", "workflow_tenant_scope_mismatch"),
+    ],
+)
+async def test_background_handler_rejects_scope_switch_before_graph_resolution(
+    project, tenant, code
+):
+    from unittest.mock import Mock
+
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+    runtime = Mock()
+    scope = ScopeV2(kind=ScopeKindV2.PROJECT, project_id="project-a", tenant_id="tenant-a")
+    handler = AsyncMock()
+    with bind_workflow_graph(runtime, scope, "actor"), pytest.raises(RuntimeV2Error) as failure:
+        await workflow_module._run_with_graph_runtime_v2(
+            handler, {"project_id": project, "tenant_id": tenant}
+        )
+    assert failure.value.code == code
+    handler.assert_not_awaited()
+    runtime.project_graph.assert_not_called()

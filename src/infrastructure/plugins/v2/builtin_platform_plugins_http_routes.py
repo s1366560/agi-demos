@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+from fastapi.routing import APIRoute
+
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
     PlatformPluginDataPlaneCredentialIssuedResponseV2,
@@ -14,20 +16,11 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginPublicationReadinessResponseV2,
     PlatformPluginRouteAuthorityReadinessResponseV2,
 )
-from src.infrastructure.adapters.primary.web.routers.optional_business_http_v2 import (
-    command_optional_business_v2,
-    disable_optional_business_v2,
-    enable_optional_business_v2,
-    get_optional_business_storage_v2,
-    install_optional_business_v2,
-    invoke_optional_business_v2,
-    projection_optional_business_v2,
-    purge_optional_business_v2,
-    put_optional_business_storage_v2,
-    rollback_optional_business_v2,
-    ui_optional_business_v2,
-    uninstall_optional_business_v2,
+from src.host.identity.device_plugin_grants import (
+    router as device_grants_router,
 )
+from src.host.transport.project_package_routes import project_package_router
+from src.host.transport.tenant_packages import router as tenant_package_router
 from src.infrastructure.adapters.primary.web.routers.platform_plugin_instances_v2 import (
     apply_plugin_instances_v2,
     get_plugin_instances_v2,
@@ -248,102 +241,6 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             PlatformPluginPublicationReadinessResponseV2,
             _PROTOCOL_V2_TAGS_V2,
         ),
-        (
-            f"{v2}/optional-business/install",
-            ("POST",),
-            install_optional_business_v2,
-            "install_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}",
-            ("GET",),
-            projection_optional_business_v2,
-            "projection_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/enable",
-            ("POST",),
-            enable_optional_business_v2,
-            "enable_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/disable",
-            ("POST",),
-            disable_optional_business_v2,
-            "disable_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/uninstall",
-            ("POST",),
-            uninstall_optional_business_v2,
-            "uninstall_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/purge",
-            ("POST",),
-            purge_optional_business_v2,
-            "purge_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/rollback",
-            ("POST",),
-            rollback_optional_business_v2,
-            "rollback_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/invoke",
-            ("POST",),
-            invoke_optional_business_v2,
-            "invoke_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/commands",
-            ("POST",),
-            command_optional_business_v2,
-            "command_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("PUT",),
-            put_optional_business_storage_v2,
-            "put_optional_business_storage_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/storage/{{item_key}}",
-            ("GET",),
-            get_optional_business_storage_v2,
-            "get_optional_business_storage_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
-        (
-            f"{v2}/optional-business/{{plugin_id}}/ui",
-            ("GET",),
-            ui_optional_business_v2,
-            "ui_optional_business_v2",
-            dict[str, Any],
-            _PROTOCOL_V2_TAGS_V2,
-        ),
     )
     v2_routes = tuple(
         _platform_plugins_route_v2(
@@ -379,7 +276,21 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         tags=("Platform Plugins",),
         include_in_schema=False,
     )
-    return (*v2_routes, retired_v1_root, retired_v1_descendants)
+    package_routes = (
+        _platform_plugins_route_v2(
+            path=route.path,
+            methods=tuple(sorted(route.methods)),
+            endpoint=route.endpoint,
+            name=route.name,
+            response_model=route.response_model,
+            status_code=route.status_code,
+            tags=_PROTOCOL_V2_TAGS_V2,
+        )
+        for router in (project_package_router, tenant_package_router, device_grants_router)
+        for route in router.routes
+        if isinstance(route, APIRoute)
+    )
+    return (*v2_routes, *package_routes, retired_v1_root, retired_v1_descendants)
 
 
 def builtin_platform_plugins_http_routes_definition_v2() -> PluginDefinitionV2:

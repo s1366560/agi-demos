@@ -1,0 +1,10 @@
+{
+  "plugin_id": "memstack-automation",
+  "version": "1.5.4",
+  "kind": "business",
+  "target": "python",
+  "tool_name": "next_scheduled_run",
+  "worker": "worker.json",
+  "contribution": "contributions.json",
+  "provenance": "repo://memstack/plugins/business/automation"
+}

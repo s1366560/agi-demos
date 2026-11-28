@@ -37,6 +37,11 @@ from src.application.services.plugin_marketplace_publication_service_v2 import (
     PluginMarketplacePublicationServiceV2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.project_marketplace import (
+    catalog_entry as _catalog_entry,
+    has_project_contributions,
+    install_verified_project_package,
+)
 from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 import (
     HttpRoutePublicationCoordinatorV2,
 )
@@ -46,7 +51,6 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
-    PlatformPluginPackageModel,
     User,
     UserTenant,
 )
@@ -69,6 +73,7 @@ from src.infrastructure.plugins.v2.production_bundle import (
     production_bundle_sources_v2,
 )
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.signed_optional_business_v2 import OptionalBusinessError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/plugin-marketplace", tags=["Plugin Marketplace"])
@@ -135,9 +140,10 @@ async def _service(
     async with httpx.AsyncClient(timeout=15.0) as client:
         yield PluginMarketplaceInstallService(
             PlatformPluginGovernanceRepository(db),
-            _desired_bundle_service(db),
+            lambda: _desired_bundle_service(db),
             OciPluginArtifactClient(client),
             trusted_public_keys=_trusted_public_keys(request),
+            allowed_registries=getattr(request.app.state, "plugin_marketplace_allowed_registries_v2", frozenset()),
         )
 
 
@@ -192,25 +198,6 @@ async def _require_tenant_admin(  # pyright: ignore[reportUnusedFunction]  # Use
         )
 
 
-def _catalog_entry(package: PlatformPluginPackageModel) -> MarketplacePackageCatalogEntry:
-    return MarketplacePackageCatalogEntry(
-        plugin_id=package.plugin_id,
-        version=package.version,
-        publisher=package.publisher,
-        artifact_digest=package.artifact_digest,
-        artifact_registry=package.artifact_registry,
-        artifact_repository=package.artifact_repository,
-        oci_manifest_digest=package.oci_manifest_digest,
-        install_status=package.install_status,
-        manifest=package.manifest,
-        signature=package.signature,
-        provenance=package.provenance,
-        security_scan_status=package.security_scan_status,
-        revoked=package.revoked,
-        revocation_reason=package.revocation_reason,
-    )
-
-
 @router.get("/packages", response_model=list[MarketplacePackageCatalogEntry])
 async def list_packages(
     include_revoked: bool = False,
@@ -261,6 +248,8 @@ async def install_package(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Plugin path and request body must identify the same package"),
         )
+    if has_project_contributions(request.manifest):
+        return await install_verified_project_package(plugin_id, http_request, request, _current_user, service, db)
     from .plugin_marketplace_v3 import authorize_scope
 
     await authorize_scope(db, _current_user, request.tenant_id, request.project_id)
@@ -380,6 +369,23 @@ async def uninstall_package(
     db: AsyncSession = Depends(get_db),
 ) -> MarketplacePackageUninstallResponse:
     """Uninstall a package and remove it from the next desired snapshot."""
+    if request.project_id:
+        from .optional_business_http_v2 import _authorize_write, _service as project_packages
+
+        await _authorize_write(db, current_user, request.tenant_id, request.project_id)
+        scoped = project_packages(http_request, db, request.tenant_id, request.project_id)
+        if await scoped.is_installed(plugin_id):
+            try:
+                await scoped.mutate(plugin_id, "uninstall", expected_version=request.version)
+            except OptionalBusinessError as exc:
+                raise HTTPException(409, _(str(exc))) from exc
+            return MarketplacePackageUninstallResponse(
+                plugin_id=plugin_id,
+                version=request.version,
+                status="uninstalled",
+                desired_removed=True,
+                revoked_permissions=0,
+            )
     from .plugin_marketplace_v3 import authorize_scope
 
     await authorize_scope(db, current_user, request.tenant_id, request.project_id)

@@ -78,31 +78,15 @@ pub(crate) fn retire_local_workspace_history(
     if let Some(reason) = queue_guard.blocked {
         return Ok(deferred(reason));
     }
-    if active_execution(session)? {
+    let transaction =
+        rusqlite::Transaction::new_unchecked(session, rusqlite::TransactionBehavior::Immediate)
+            .map_err(|error| error.to_string())?;
+    if active_execution(&transaction)? {
         return Ok(deferred("active_run"));
     }
-
-    session
-        .execute_batch("BEGIN IMMEDIATE")
-        .map_err(|error| error.to_string())?;
-    let deleted = delete_whitelisted_rows(session);
-    match deleted {
-        Ok(deleted_rows) => {
-            if let Err(error) = session.execute_batch("COMMIT") {
-                let _ = session.execute_batch("ROLLBACK");
-                return Err(error.to_string());
-            }
-            Ok(json!({
-                "status": "retired",
-                "reason": null,
-                "deleted_rows": deleted_rows,
-            }))
-        }
-        Err(error) => {
-            let _ = session.execute_batch("ROLLBACK");
-            Err(error)
-        }
-    }
+    let deleted_rows = delete_whitelisted_rows(&transaction)?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(json!({"status": "retired", "reason": null, "deleted_rows": deleted_rows}))
 }
 
 struct QueueGuard {

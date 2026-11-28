@@ -1,6 +1,6 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import type { ProjectOverviewScope } from '../features/project/projectOverviewClient';
+import type { ProjectOverviewScope } from '@business/workspace/ui/desktop/project/projectOverviewClient';
 import type { DesktopRuntimeConfig } from '../types';
 
 export type DesktopProjectOverviewOperationInputV2 = Readonly<{

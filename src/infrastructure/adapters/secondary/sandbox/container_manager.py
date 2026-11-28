@@ -116,10 +116,11 @@ class ContainerManager:
 
         # Build environment
         env = {
+            **(environment or {}),
             "SANDBOX_ID": sandbox_id,
             "PROJECT_ID": project_id or "",
+            "MCP_PROJECT_ID": project_id or "",
             "TENANT_ID": tenant_id or "",
-            **(environment or {}),
         }
 
         # Build labels

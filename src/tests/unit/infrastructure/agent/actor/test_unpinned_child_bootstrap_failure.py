@@ -286,7 +286,7 @@ async def test_local_queue_admission_failure_uses_the_same_spawn_record() -> Non
     execute = AsyncMock()
     with (
         patch(
-            "src.infrastructure.agent.core.project_react_agent.ProjectReActAgent.initialize",
+            "plugins.business.agent.engine.react.project_react_agent.ProjectReActAgent.initialize",
             new=initialize,
         ),
         patch(

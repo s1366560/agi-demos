@@ -12,8 +12,8 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
 @pytest.fixture(autouse=True)
 async def _projects_v2_runtime(test_app, monkeypatch):
     """Exercise the migrated projects row through the production generation dispatcher."""
+    from plugins.business.environments.backend.sandbox import sandbox_projection
     from src.infrastructure.agent.plugins.skill_evolution.scheduler import EvolutionScheduler
-    from src.infrastructure.plugins.v2 import sandbox_projection
 
     monkeypatch.setattr(EvolutionScheduler, "start", AsyncMock())
     purge = AsyncMock()

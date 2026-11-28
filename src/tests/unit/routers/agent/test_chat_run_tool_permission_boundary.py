@@ -7,6 +7,11 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from plugins.business.agent.engine.processor.processor import (
+    ProcessorConfig,
+    SessionProcessor,
+    ToolDefinition,
+)
 from src.application.services.chat_run_tool_permission_v2 import prepare_chat_run_guard_v2
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.models import Conversation
@@ -14,11 +19,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_chat_run_authority,
 )
 from src.infrastructure.agent.core.message import Message, MessageRole, ToolPart, ToolState
-from src.infrastructure.agent.processor.processor import (
-    ProcessorConfig,
-    SessionProcessor,
-    ToolDefinition,
-)
 from src.infrastructure.agent.tools.hooks import ToolHookRegistry
 from src.infrastructure.agent.tools.pipeline import ToolPipeline
 from src.infrastructure.agent.tools.truncation import OutputTruncator
@@ -85,7 +85,7 @@ async def test_ordinary_chat_ask_requires_confirmation_before_declared_write(
         AsyncMock(return_value={"revision": 3, "permission_mode": "ask"}),
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.processor.processor.complete_hitl_request", AsyncMock()
+        "plugins.business.agent.engine.processor.processor.complete_hitl_request", AsyncMock()
     )
     conversation = Conversation(
         id="ordinary-ask-conversation",

@@ -133,12 +133,12 @@ async def dispatch_marketplace_hooks(
     """Resolve existing generation-owned DB/sandbox services, without host-side execution."""
     if event not in _EVENTS:
         return
-    from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
-    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-    from src.infrastructure.plugins.v2.sandbox_operation_services import (
+    from plugins.business.environments.backend.sandbox.sandbox_operation_services import (
         SANDBOX_OPERATION_APPLICATION_SERVICE_V2,
         SandboxOperationApplicationResolverProtocolV2,
     )
+    from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
     try:
         db = operation.require(OPERATION_DB_SESSION_SERVICE_V2)

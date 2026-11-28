@@ -10,8 +10,10 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_orchestrator import SandboxOrchestrator
+from plugins.business.environments.backend.sandbox.sandbox_event_service import (
+    SandboxEventPublisher,
+)
+from plugins.business.environments.backend.sandbox.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_token_service import SandboxTokenService
 from src.infrastructure.adapters.primary.web.dependencies import (  # noqa: F401
     get_current_user,
@@ -24,14 +26,16 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MC
 from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
-    from src.infrastructure.plugins.v2.sandbox_runtime import SandboxToolRegistryProtocolV2
+    from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+        SandboxToolRegistryProtocolV2,
+    )
 
 logger = logging.getLogger(__name__)
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
     """Project the adapter from the generation pinned to this ASGI boundary."""
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -40,7 +44,7 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
 
 def get_sandbox_token_service() -> SandboxTokenService:
     """Project the token service from the pinned sandbox generation."""
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -49,7 +53,7 @@ def get_sandbox_token_service() -> SandboxTokenService:
 
 def get_sandbox_orchestrator() -> SandboxOrchestrator:
     """Project the orchestrator from the pinned sandbox generation."""
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -59,7 +63,7 @@ def get_sandbox_orchestrator() -> SandboxOrchestrator:
 def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Project the event publisher from the pinned sandbox generation."""
     _ = request
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 
@@ -68,7 +72,7 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
 
 def get_sandbox_tool_registry() -> SandboxToolRegistryProtocolV2:
     """Project the tool registry from the generation pinned to this ASGI boundary."""
-    from src.infrastructure.plugins.v2.sandbox_projection import (
+    from plugins.business.environments.backend.sandbox.sandbox_projection import (
         current_sandbox_application_services_v2,
     )
 

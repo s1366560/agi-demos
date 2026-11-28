@@ -6,6 +6,7 @@
   "global_roles": [],
   "is_active": true,
   "is_superuser": false,
+  "must_change_password": false,
   "created_at": "2026-09-08T00:00:00Z",
   "profile": {},
   "preferred_language": null

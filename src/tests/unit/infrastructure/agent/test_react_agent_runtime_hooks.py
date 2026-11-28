@@ -10,7 +10,7 @@ from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
 
 
 def _make_agent():
-    from src.infrastructure.agent.core.react_agent import ReActAgent
+    from plugins.business.agent.engine.react.react_agent import ReActAgent
 
     return ReActAgent(
         model="test-model",

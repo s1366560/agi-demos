@@ -1,0 +1,1128 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "next_scheduled_run",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "at",
+              "every",
+              "cron"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "run_at": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "interval_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 315576000
+              },
+              "expr": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "start": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "kind",
+          "config",
+          "start"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "next_run_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "next_run_at"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "run_schedule_workflow",
+      "description": "Run a workflow of schedule evaluations and return the result of each step in order.",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "at",
+                    "every",
+                    "cron"
+                  ]
+                },
+                "config": {
+                  "type": "object",
+                  "properties": {
+                    "run_at": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "interval_seconds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 315576000
+                    },
+                    "expr": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "timezone": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "timezone": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "start": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "kind",
+                "config",
+                "start"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "next_run_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "next_run_at"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "save_schedule_workflow",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999999998
+          },
+          "intervals": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31536000
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "expected_revision",
+          "intervals"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "saved": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "saved",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute",
+        "storage.read",
+        "storage.write"
+      ]
+    },
+    {
+      "name": "list_schedule_workflows",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 999999999
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "intervals": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31536000
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "revision",
+                "name",
+                "intervals"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute",
+        "storage.read"
+      ]
+    },
+    {
+      "name": "execute_schedule_workflow",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "start": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "start"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "next_run_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "next_run_at"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute",
+        "storage.read"
+      ]
+    },
+    {
+      "name": "automation.list-playbooks",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-playbooks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.playbooks.read"
+      ]
+    },
+    {
+      "name": "automation.list-schedules",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-schedules command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.read"
+      ]
+    },
+    {
+      "name": "automation.save-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed save-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.write"
+      ]
+    },
+    {
+      "name": "automation.run-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed run-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.run"
+      ]
+    },
+    {
+      "name": "automation.delete-schedule",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-schedule command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.schedules.delete"
+      ]
+    },
+    {
+      "name": "automation.list-patterns",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-patterns command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.patterns.read"
+      ]
+    },
+    {
+      "name": "automation.delete-pattern",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-pattern command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.patterns.delete"
+      ]
+    },
+    {
+      "name": "automation.list-verdicts",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-verdicts command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.verdicts.read"
+      ]
+    },
+    {
+      "name": "automation.read-events",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-events command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.events.read"
+      ]
+    },
+    {
+      "name": "automation.event-types",
+      "abi": "mcp.stdio",
+      "description": "Run the signed event-types command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.events.types"
+      ]
+    },
+    {
+      "name": "automation.list-webhooks",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-webhooks command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.read"
+      ]
+    },
+    {
+      "name": "automation.create-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.create"
+      ]
+    },
+    {
+      "name": "automation.update-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed update-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.update"
+      ]
+    },
+    {
+      "name": "automation.delete-webhook",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-webhook command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.webhooks.delete"
+      ]
+    },
+    {
+      "name": "automation.schedule-conversations",
+      "abi": "mcp.stdio",
+      "description": "Run the signed schedule-conversations command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.automation.conversations.read"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "next-scheduled-run",
+      "tool": "next_scheduled_run",
+      "payload": {
+        "kind": "every",
+        "config": {
+          "interval_seconds": 60
+        },
+        "start": "2026-01-01T00:00:00Z"
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "run-workflow",
+      "tool": "run_schedule_workflow",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "steps": []
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "list-playbooks",
+      "permissions": [
+        "app.automation.playbooks.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.list-playbooks"
+    },
+    {
+      "id": "list-schedules",
+      "permissions": [
+        "app.automation.schedules.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.list-schedules"
+    },
+    {
+      "id": "save-schedule",
+      "permissions": [
+        "app.automation.schedules.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.save-schedule"
+    },
+    {
+      "id": "run-schedule",
+      "permissions": [
+        "app.automation.schedules.run"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.run-schedule"
+    },
+    {
+      "id": "save-workflow",
+      "tool": "save_schedule_workflow",
+      "permissions": [
+        "tools.execute",
+        "storage.read",
+        "storage.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "list-workflows",
+      "tool": "list_schedule_workflows",
+      "permissions": [
+        "tools.execute",
+        "storage.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "execute-workflow",
+      "tool": "execute_schedule_workflow",
+      "permissions": [
+        "tools.execute",
+        "storage.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "delete-schedule",
+      "permissions": [
+        "app.automation.schedules.delete"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.delete-schedule"
+    },
+    {
+      "id": "list-patterns",
+      "permissions": [
+        "app.automation.patterns.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.list-patterns"
+    },
+    {
+      "id": "delete-pattern",
+      "permissions": [
+        "app.automation.patterns.delete"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.delete-pattern"
+    },
+    {
+      "id": "list-verdicts",
+      "permissions": [
+        "app.automation.verdicts.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.list-verdicts"
+    },
+    {
+      "id": "read-events",
+      "permissions": [
+        "app.automation.events.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.read-events"
+    },
+    {
+      "id": "event-types",
+      "permissions": [
+        "app.automation.events.types"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.event-types"
+    },
+    {
+      "id": "list-webhooks",
+      "permissions": [
+        "app.automation.webhooks.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.list-webhooks"
+    },
+    {
+      "id": "create-webhook",
+      "permissions": [
+        "app.automation.webhooks.create"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.create-webhook"
+    },
+    {
+      "id": "update-webhook",
+      "permissions": [
+        "app.automation.webhooks.update"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.update-webhook"
+    },
+    {
+      "id": "delete-webhook",
+      "permissions": [
+        "app.automation.webhooks.delete"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.delete-webhook"
+    },
+    {
+      "id": "schedule-conversations",
+      "permissions": [
+        "app.automation.conversations.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "automation.schedule-conversations"
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:f501e16ab39cf256dc5d253857e7628ff7fabd79f92f1b37e09287931fa06b18",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "workflow",
+      "title": "Schedule workflow",
+      "routes": [
+        "/automation",
+        "/tenant/:tenantId/project/:projectId/automation",
+        "/project/:projectId/automation"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workflow.js",
+        "digest": "sha256:ff5256fd54f34648585638098726ef8a2a28744ca02c4143c398a3e617eb4a54"
+      },
+      "commands": [
+        "run-workflow",
+        "save-workflow",
+        "list-workflows",
+        "execute-workflow"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "workflow",
+        "revision"
+      ]
+    },
+    {
+      "id": "playbooks",
+      "title": "Project playbooks",
+      "routes": [
+        "/playbooks",
+        "/tenant/:tenantId/project/:projectId/playbooks"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/playbooks-web.js",
+        "digest": "sha256:a6513f9d60f0a4eca21b25da6eca3906a324911f69b08d5d5fffbe82c775a3e2"
+      },
+      "commands": [
+        "list-playbooks",
+        "list-verdicts"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/playbooks-web.css",
+        "digest": "sha256:37bcb83a78e3be3ba5622e81964c6176580fe2595ef32470da3935434d720522"
+      },
+      "workbench": true
+    },
+    {
+      "id": "schedules",
+      "title": "Project schedules",
+      "routes": [
+        "/cron-jobs",
+        "/tenant/:tenantId/project/:projectId/cron-jobs"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/cron-jobs.js",
+        "digest": "sha256:c6ba02e719bcdc0c67eb47711d2ba95cae3d76a518695989bcf1cdfe1a6fa6b0"
+      },
+      "commands": [
+        "list-schedules",
+        "save-schedule",
+        "run-schedule",
+        "delete-schedule",
+        "schedule-conversations"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/cron-jobs.css",
+        "digest": "sha256:7d380871b1400ac64fb1442ee3c03147c5518b69f78eeee48cd76cc5f5974170"
+      },
+      "workbench": true,
+      "query_params": [
+        "panel",
+        "job",
+        "runsPage"
+      ],
+      "page_links": [
+        "memstack-agent/chat"
+      ]
+    },
+    {
+      "id": "workflow-patterns",
+      "title": "Workflow patterns",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/patterns"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/workflow-patterns.js",
+        "digest": "sha256:ec2a6957b880e4b713afa4ac30f572d4360d9d089c5899d0c688394c918333d6"
+      },
+      "style": {
+        "path": "ui/workflow-patterns.css",
+        "digest": "sha256:4b6990f64595fa2308b8364dad8a1604eab1159cded28825822cbbd4af68c521"
+      },
+      "commands": [
+        "list-patterns",
+        "delete-pattern"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "events",
+      "title": "Events",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/events"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-activity.js",
+        "digest": "sha256:63b4c5d4aebbb0d8acd6c317c18aea5b5782ea9eee54c8597b533f78f4ecd060"
+      },
+      "style": {
+        "path": "ui/tenant-activity.css",
+        "digest": "sha256:e5b352de54f2be43f9310c1fa9ca5fcdaf0372b292917b872d5baf528937daf3"
+      },
+      "commands": [
+        "read-events",
+        "event-types"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "page",
+        "type"
+      ]
+    },
+    {
+      "id": "webhooks",
+      "title": "Webhooks",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/webhooks"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-activity.js",
+        "digest": "sha256:63b4c5d4aebbb0d8acd6c317c18aea5b5782ea9eee54c8597b533f78f4ecd060"
+      },
+      "style": {
+        "path": "ui/tenant-activity.css",
+        "digest": "sha256:e5b352de54f2be43f9310c1fa9ca5fcdaf0372b292917b872d5baf528937daf3"
+      },
+      "commands": [
+        "event-types",
+        "list-webhooks",
+        "create-webhook",
+        "update-webhook",
+        "delete-webhook"
+      ],
+      "device_tools": [],
+      "query_params": []
+    }
+  ],
+  "storage": {
+    "schema_version": 1,
+    "permissions": [
+      "storage.read",
+      "storage.write"
+    ]
+  }
+}

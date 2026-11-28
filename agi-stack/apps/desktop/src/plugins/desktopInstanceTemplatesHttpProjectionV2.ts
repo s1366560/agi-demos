@@ -14,7 +14,7 @@ import type {
   InstanceTemplatesPage,
   InstanceTemplatesQuery,
   InstanceTemplatesScope,
-} from '../features/instance-templates/instanceTemplatesTypes';
+} from '@business/environments/ui/desktop/instance-templates/instanceTemplatesTypes';
 
 type Fetch = typeof globalThis.fetch;
 type FetchPath = (path: string, init: RequestInit) => Promise<Response>;
@@ -23,8 +23,8 @@ export type InstanceTemplatesClientDependencies = Readonly<{
   fetch?: Fetch;
 }>;
 
-export { InstanceTemplatesUnavailableError } from '../features/instance-templates/instanceTemplatesClient';
-import { InstanceTemplatesUnavailableError } from '../features/instance-templates/instanceTemplatesClient';
+export { InstanceTemplatesUnavailableError } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesClient';
+import { InstanceTemplatesUnavailableError } from '@business/environments/ui/desktop/instance-templates/instanceTemplatesClient';
 
 export function createDesktopInstanceTemplatesHttpProjectionV2(
   config: DesktopRuntimeConfig,

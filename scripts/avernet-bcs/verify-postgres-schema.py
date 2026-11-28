@@ -145,6 +145,10 @@ async def _create_legacy_workspace_link_fixtures(test_dsn: str) -> None:
     connection = await asyncpg.connect(test_dsn)
     try:
         await connection.execute(
+            # Package grants, pinned Agent runs, and graph jobs reference these legacy IDs.
+            "CREATE TABLE users (id varchar PRIMARY KEY);"
+            "CREATE TABLE agent_run_authorities (id varchar PRIMARY KEY);"
+            "CREATE TABLE task_logs (id varchar PRIMARY KEY);"
             "CREATE TABLE tenants (id varchar PRIMARY KEY);"
             "CREATE TABLE projects (id varchar PRIMARY KEY, tenant_id varchar NOT NULL "
             "REFERENCES tenants (id));"
@@ -645,11 +649,7 @@ def _downgrade_past_forward_only_promotion(
     target_revision: str,
     head_revision: str,
 ) -> DBAPIError:
-    """Reach a guard that rejects downgrade, then restore the head pointer.
-
-    The first attempt rolls back when it reaches the promotion, so the schema is
-    still at head. The retried downgrade is expected to roll back as well.
-    """
+    """Exercise the data guard on the actual schema below the forward-only promotion."""
     try:
         command.downgrade(alembic_config, target_revision)
     except DBAPIError as error:
@@ -660,18 +660,16 @@ def _downgrade_past_forward_only_promotion(
     else:
         raise RuntimeError(f"downgrade to {target_revision} was accepted")
 
+    command.downgrade(alembic_config, _FORWARD_ONLY_PROMOTION_REVISION)
     command.stamp(alembic_config, _forward_only_promotion_parent(alembic_config))
     try:
         command.downgrade(alembic_config, target_revision)
     except DBAPIError as error:
-        failure: DBAPIError | None = error
-    else:
-        failure = None
-    finally:
-        command.stamp(alembic_config, head_revision)
-    if failure is None:
-        raise RuntimeError(f"downgrade to {target_revision} was accepted")
-    return failure
+        # The guard rolled back to the parent. The skipped promotion only changes data.
+        command.stamp(alembic_config, _FORWARD_ONLY_PROMOTION_REVISION)
+        command.upgrade(alembic_config, head_revision)
+        return error
+    raise RuntimeError(f"downgrade to {target_revision} was accepted")
 
 
 def _downgrade_through_forward_only_promotion(

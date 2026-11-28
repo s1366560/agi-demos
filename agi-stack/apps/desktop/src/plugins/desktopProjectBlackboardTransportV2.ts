@@ -9,7 +9,7 @@ import type { DesktopRuntimeConfig } from '../types';
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
-} from '../features/project-blackboard/projectBlackboardClient';
+} from '@business/workspace/ui/desktop/project-blackboard/projectBlackboardClient';
 import {
   normalizeWorkspaceCollaborationAuthorityContract,
   normalizeWorkspaceCollaborationCapabilityContract,

@@ -27,11 +27,6 @@ fn builtin_surfaces_use_their_declared_feature_owner() {
             "/api/v1/tenants/:tenant_id/audit-logs",
             "tenant-audit-logs",
         ),
-        (
-            "POST",
-            "/api/v1/tenants/:tenant_id/upgrade",
-            "tenant-billing",
-        ),
         ("GET", "/api/v1/deploys/", "tenant-deploy"),
         ("GET", "/api/v1/instances/", "tenant-instances"),
         (

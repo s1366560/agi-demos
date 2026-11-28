@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 
 import { runsInElectronShell } from './features/auth/loginRuntimeModel';
 import type { AgentTaskSignal } from './features/chat/agentTaskSignalModel';
@@ -10,21 +9,7 @@ import type { SessionCanvasTabId } from './features/session/sessionCanvasModel';
 import { unavailableWorkspaceAuthority } from './utils/format';
 import type { AgentConversation, AuthState, DesktopRuntimeConfig, RuntimeDataset } from './types';
 
-export type CommandPaletteItem = {
-  id: string;
-  kind: 'route' | 'settings' | 'action';
-  groupId: string;
-  groupLabel: string;
-  routeId?: string;
-  label: string;
-  description: string;
-  icon: ReactNode;
-  shortcut?: string;
-  disabled?: boolean;
-  disabledReason?: string;
-  searchText: string;
-  onSelect: () => void;
-};
+export type { CommandPaletteItem } from './features/navigation/CommandPaletteSurface';
 
 export type SidebarRunItem = {
   id: string;

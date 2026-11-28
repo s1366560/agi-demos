@@ -558,6 +558,7 @@ async fn renderer_artifact_contract_mismatch_is_rejected_before_saving() {
     }
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn accepted_business_disable_blocks_new_operations_and_keeps_recovery_access() {
     use tower::ServiceExt;

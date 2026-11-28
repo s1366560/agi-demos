@@ -5,7 +5,14 @@
     "main": "index.js",
     "scripts": {
         "dev": "vite --config vite.config.ts",
-        "build": "tsc && vite build --config vite.config.ts",
+        "build": "tsc -p tsconfig.project-packages.json && vite build --config vite.config.ts",
+        "build:full": "tsc -p tsconfig.full.json && vite build --config vite.config.ts --mode full",
+        "build:project-packages": "tsc -p tsconfig.project-packages.json && vite build --mode project-packages",
+        "build:compat": "tsc -p tsconfig.compat.json && vite build --mode compat",
+        "dev:compat": "vite --mode compat --port 3001",
+        "preview:compat": "vite preview --mode compat --port 3001",
+        "dev:full": "vite --mode full",
+        "dev:project-packages": "vite --mode project-packages --open /project-packages.html",
         "preview": "vite preview --config vite.config.ts",
         "lint": "eslint . --report-unused-disable-directives --max-warnings 9999 --fix",
         "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
@@ -14,7 +21,8 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
-        "test:e2e": "playwright test"
+        "test:e2e": "playwright test",
+        "test:e2e:package-pages": "playwright test -c playwright.project-packages.config.ts"
     },
     "keywords": [],
     "author": "",

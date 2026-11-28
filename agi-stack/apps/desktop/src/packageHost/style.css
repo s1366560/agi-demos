@@ -1,0 +1,59 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, system-ui, sans-serif;
+}
+body,
+#root {
+  background: Canvas;
+  color: CanvasText;
+}
+main {
+  max-width: 76rem;
+  margin: auto;
+  padding: 2rem;
+}
+header,
+nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+header h1 {
+  margin-right: auto;
+}
+form {
+  max-width: 28rem;
+  margin: 8vh auto;
+}
+label,
+details,
+nav {
+  margin: 1rem 0;
+}
+label {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+form label {
+  justify-content: space-between;
+}
+input,
+button,
+select,
+textarea {
+  font: inherit;
+  padding: 0.4rem;
+}
+button,
+summary {
+  cursor: pointer;
+}
+code {
+  overflow-wrap: anywhere;
+}
+button {
+  margin-right: 0.4rem;
+}

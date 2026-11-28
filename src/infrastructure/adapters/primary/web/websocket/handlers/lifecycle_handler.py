@@ -26,11 +26,14 @@ from src.infrastructure.adapters.primary.web.websocket.lifecycle_stream_bridge_v
     stop_lifecycle_bridge_v2,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.agent.actor.lifecycle_snapshot import project_lifecycle_snapshot
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 if TYPE_CHECKING:
-    from src.application.services.project_sandbox_lifecycle_service import SandboxInfo
+    from plugins.business.environments.backend.sandbox.project_sandbox_lifecycle_service import (
+        SandboxInfo,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +47,6 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
 
     async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Subscribe to agent lifecycle state updates and send current state."""
-        from src.infrastructure.adapters.secondary.ray.client import await_ray
-        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
-
         project_id = message.get("project_id")
 
         if not project_id:
@@ -69,55 +69,15 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
 
             # Query current agent state and send immediately
             try:
-                actor = await get_actor_if_exists(
-                    tenant_id=context.tenant_id,
-                    project_id=project_id,
-                    agent_mode="default",
-                )
-                if not actor:
-                    await context.send_json(
-                        {
-                            "type": "lifecycle_state_change",
-                            "project_id": project_id,
-                            "data": {
-                                "lifecycle_state": "uninitialized",
-                                "is_active": False,
-                                "is_initialized": False,
-                            },
-                            "timestamp": datetime.now(UTC).isoformat(),
-                        }
-                    )
-                    logger.debug(f"[WS] Agent actor not found for {project_id}, sent uninitialized")
-                    return
-
-                status = await await_ray(actor.status.remote())
-                lifecycle_state = "ready"
-                if not status.is_initialized:
-                    lifecycle_state = "initializing"
-                elif status.is_executing:
-                    lifecycle_state = "executing"
-
+                state = await project_lifecycle_snapshot(context.tenant_id, project_id)
                 await context.send_json(
                     {
                         "type": "lifecycle_state_change",
                         "project_id": project_id,
-                        "data": {
-                            "lifecycle_state": lifecycle_state,
-                            "is_active": status.is_active,
-                            "is_initialized": status.is_initialized,
-                            "tool_count": status.tool_count or 0,
-                            "skill_count": status.skill_count or 0,
-                            "subagent_count": status.subagent_count or 0,
-                            "error_message": None,
-                        },
+                        "data": state,
                         "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
-                logger.debug(
-                    f"[WS] Sent current lifecycle state for {project_id}: "
-                    f"lifecycle={lifecycle_state}, is_active={status.is_active}"
-                )
-
             except Exception as state_err:
                 logger.warning(f"[WS] Could not query current agent state: {state_err}")
 

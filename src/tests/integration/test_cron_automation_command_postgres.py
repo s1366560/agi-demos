@@ -7,12 +7,12 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.application.services.automation_command_service import (
+from plugins.business.automation.backend.automation_command_service import (
     AutomationActor,
     AutomationCommandService,
     QueueManualRunCommand,
 )
-from src.application.services.automation_runtime_projection_service import (
+from plugins.business.automation.backend.automation_runtime_projection_service import (
     AutomationRuntimeIdentity,
     AutomationRuntimeOutcome,
     AutomationRuntimeProjectionService,

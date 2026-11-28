@@ -6,6 +6,7 @@ mod cloud_candidate_tests;
 #[path = "continuation_tests.rs"]
 mod continuation_tests;
 #[cfg(target_os = "macos")]
+#[cfg(feature = "legacy-business")]
 #[path = "formal_resume_tests.rs"]
 mod formal_resume_tests;
 #[path = "renderer_callback_nonce_tests.rs"]

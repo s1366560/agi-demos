@@ -815,7 +815,6 @@ pub(crate) mod unit {
     use crate::attachments_api::{DevAttachmentService, SharedAttachments};
     use crate::audit_api::{DevAuditLogService, SharedAuditLogs};
     use crate::auth::{DevAuthenticator, SharedAuthenticator};
-    use crate::billing_api::{DevBillingService, SharedBilling};
     use crate::channel_api::{DevChannelService, SharedChannels};
     use crate::cron_api::{DevCronJobService, SharedCronJobs};
     use crate::data_api::{DevDataStatsScopeService, SharedDataStats};
@@ -881,7 +880,6 @@ pub(crate) mod unit {
         let event_logs: SharedEventLogs = Arc::new(DevEventLogService::default());
         let audit_logs: SharedAuditLogs = Arc::new(DevAuditLogService::default());
         let notifications: SharedNotifications = Arc::new(DevNotificationService::default());
-        let billing: SharedBilling = Arc::new(DevBillingService::default());
         let support: SharedSupport = Arc::new(DevSupportService::default());
         let artifacts: SharedArtifacts = Arc::new(DevArtifactService::default());
         let attachments: SharedAttachments = Arc::new(DevAttachmentService::default());
@@ -946,7 +944,6 @@ pub(crate) mod unit {
             event_logs,
             audit_logs,
             notifications,
-            billing,
             support,
             artifacts,
             attachments,

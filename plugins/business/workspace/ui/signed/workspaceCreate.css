@@ -1,0 +1,33 @@
+@import 'tailwindcss' source(none);
+@source '../web/tenant/WorkspaceCreateView.tsx';
+@variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-primary: #262626;
+  --color-primary-light: #525252;
+  --color-surface-light: #ffffff;
+  --color-surface-dark: #121212;
+  --color-surface-dark-alt: #181818;
+  --color-border-light: #e3e3e3;
+  --color-border-dark: #333333;
+  --color-text-primary: #141414;
+  --color-text-secondary: #4f4f4f;
+  --color-text-muted: #6b6b6b;
+  --color-text-inverse: #ededed;
+  --color-surface-muted: #f7f7f7;
+  --color-success: #35d399;
+  --color-success-dark: #059669;
+  --color-error: #ff6978;
+  --color-error-dark: #dc2626;
+  --color-status-text-success: #059669;
+  --color-status-text-success-dark: #35d399;
+  --color-status-text-error: #dc2626;
+  --color-status-text-error-dark: #ff6978;
+  --color-purple: #8b5cf6;
+}
+
+.dark {
+  --color-primary: #f2f2f2;
+  --color-primary-light: #d9d9d9;
+  --color-text-secondary: #9c9c9c;
+  --color-text-muted: #9c9c9c;
+}

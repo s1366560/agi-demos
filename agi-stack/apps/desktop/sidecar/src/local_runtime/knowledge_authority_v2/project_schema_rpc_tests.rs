@@ -52,6 +52,7 @@ fn document(state: &LocalRuntimeState, revision: u32) -> Value {
 fn command(state: &LocalRuntimeState, revision: u32) -> Value {
     json!({"scope":scope(state),"change_id":Uuid::new_v4().to_string(),"expected_revision":revision-1,"document":document(state,revision)})
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_producer_replays_original_receipt_and_snapshot_history() {
     let directory = TestDirectory::new();
@@ -115,6 +116,7 @@ async fn project_schema_rpc_producer_replays_original_receipt_and_snapshot_histo
     }
     state.platform_plugin_authority_v2.deactivate().await;
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_rejects_raw_duplicates_tokens_and_conflicting_headers() {
     let directory = TestDirectory::new();
@@ -168,6 +170,7 @@ async fn project_schema_rpc_rejects_raw_duplicates_tokens_and_conflicting_header
     );
     state.platform_plugin_authority_v2.deactivate().await;
 }
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_release_closed_never_opens_storage() {
     let directory = TestDirectory::new();
@@ -198,6 +201,7 @@ async fn project_schema_rpc_release_closed_never_opens_storage() {
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_live_viewer_cannot_replay_a_previously_accepted_write() {
     let directory = TestDirectory::new();
@@ -237,6 +241,7 @@ async fn project_schema_rpc_live_viewer_cannot_replay_a_previously_accepted_writ
     state.platform_plugin_authority_v2.deactivate().await;
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_generated_methods_and_paths_match_router() {
     use super::super::project_schema::SchemaAction;
@@ -341,6 +346,7 @@ fn project_schema_response_budget_reserves_nine_to_ten_cursor_and_true_to_false(
     ));
 }
 
+#[cfg(feature = "legacy-business")]
 #[tokio::test]
 async fn project_schema_rpc_rejects_capability_body_and_bound_action_substitution() {
     use super::super::project_schema::{ProjectSchemaOperationV2, SchemaAction};

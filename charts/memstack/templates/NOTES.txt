@@ -2,17 +2,24 @@ MemStack has been installed.
 
 Services:
   API: {{ include "memstack.fullname" . }}-api:{{ .Values.api.service.port }}
+{{- if .Values.web.enabled }}
   Web: {{ include "memstack.fullname" . }}-web:{{ .Values.web.service.port }}
+{{- end }}
   PostgreSQL: {{ include "memstack.postgresHost" . }}:{{ .Values.postgres.service.port }}
   Redis: {{ include "memstack.redisHost" . }}:{{ .Values.redis.service.port }}
+{{- if not .Values.api.packageKernel }}
   Neo4j: {{ include "memstack.neo4jUri" . }}
   MinIO: {{ include "memstack.minioEndpoint" . }}
+{{- end }}
 
 Check the deployment:
   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
 
+{{- if .Values.web.enabled }}
+
 Port-forward the web UI:
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "memstack.fullname" . }}-web 3000:{{ .Values.web.service.port }}
+{{- end }}
 
 Port-forward the API:
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "memstack.fullname" . }}-api 8000:{{ .Values.api.service.port }}

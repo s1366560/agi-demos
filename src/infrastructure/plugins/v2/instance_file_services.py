@@ -8,8 +8,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.instance_file_service import InstanceFileService
-from src.application.services.instance_service import InstanceService
+from plugins.business.environments.backend.instance_file_service import InstanceFileService
+from plugins.business.environments.backend.instance_service import InstanceService
 from src.infrastructure.adapters.secondary.persistence.sql_deploy_record_repository import (
     SqlDeployRecordRepository,
 )

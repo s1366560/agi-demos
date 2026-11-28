@@ -1,4 +1,4 @@
-import { DesktopApiError } from '../../api/client';
+import { DesktopApiError } from '../../api/desktopApiError';
 import type { TenantAdminScope } from './tenantAdminHttp';
 
 export type TenantAdminViewState =

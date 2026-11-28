@@ -21,8 +21,10 @@ mod project_schema_rpc_tests;
 mod project_schema_storage_tests;
 #[path = "push_http_tests.rs"]
 mod push_http_tests;
+#[cfg(feature = "legacy-business")]
 #[path = "push_session_tests.rs"]
 mod push_session_tests;
+#[cfg(feature = "legacy-business")]
 #[path = "renderer_contract_tests.rs"]
 mod renderer_contract_tests;
 #[path = "schema_cloud_transport_tests.rs"]
@@ -431,11 +433,13 @@ async fn contract_rejects_attempt_to_open_release_through_profile_config() {
     assert!(!directory.0.exists());
 }
 
+#[cfg(feature = "legacy-business")]
 #[path = "graph_sync_http_tests.rs"]
 mod graph_sync_http_tests;
 #[path = "pull_http_tests.rs"]
 mod pull_http_tests;
 
+#[cfg(feature = "legacy-business")]
 #[path = "pull_session_tests.rs"]
 mod pull_session_tests;
 
@@ -445,9 +449,11 @@ mod pull_admission_tests;
 #[path = "resolution_http_tests.rs"]
 mod resolution_http_tests;
 
+#[cfg(feature = "legacy-business")]
 #[path = "context_route_tests.rs"]
 mod context_route_tests;
 
+#[cfg(feature = "legacy-business")]
 #[path = "cloud_resolution_http_tests.rs"]
 mod cloud_resolution_http_tests;
 
@@ -473,8 +479,10 @@ mod sync_auth_tests;
 #[path = "sync_cloud_fixture.rs"]
 mod sync_cloud_fixture;
 
+#[cfg(feature = "legacy-business")]
 #[path = "sync_connection_tests.rs"]
 mod sync_connection_tests;
 
+#[cfg(feature = "legacy-business")]
 #[path = "unbind_http_tests.rs"]
 mod unbind_http_tests;

@@ -1,0 +1,1172 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "cluster_health",
+      "abi": "mcp.stdio",
+      "description": "Project node count and CPU and memory utilization from supplied cluster statistics.",
+      "permissions": [
+        "tools.execute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "total_nodes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "node_count": {
+            "type": "number",
+            "minimum": 0
+          },
+          "nodes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cpu_usage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "used_cpu": {
+            "type": "number"
+          },
+          "total_cpu": {
+            "type": "number"
+          },
+          "memory_usage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "used_memory_gb": {
+            "type": "number"
+          },
+          "total_memory_gb": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "node_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cpu_usage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "memory_usage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "node_count",
+          "cpu_usage",
+          "memory_usage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "patch_text",
+      "description": "Apply a single-file unified diff to supplied text using the sandbox patch engine.",
+      "abi": "mcp.stdio",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "patch": {
+            "type": "string",
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "content",
+          "patch"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "permissions": [
+        "tools.execute"
+      ]
+    },
+    {
+      "name": "environments.sandbox-status",
+      "abi": "mcp.stdio",
+      "description": "Run the signed sandbox-status command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.read"
+      ]
+    },
+    {
+      "name": "environments.prepare-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed prepare-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.prepare"
+      ]
+    },
+    {
+      "name": "environments.authorize-run-terminal",
+      "abi": "mcp.stdio",
+      "description": "Run the signed authorize-run-terminal command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.terminal.authorize"
+      ]
+    },
+    {
+      "name": "environments.environment-inventory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed environment-inventory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.inventory.read"
+      ]
+    },
+    {
+      "name": "environments.write-cluster",
+      "abi": "mcp.stdio",
+      "description": "Run the signed write-cluster command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.clusters.write"
+      ]
+    },
+    {
+      "name": "environments.delete-cluster",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-cluster command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.clusters.delete"
+      ]
+    },
+    {
+      "name": "environments.restart-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed restart-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.restart"
+      ]
+    },
+    {
+      "name": "environments.terminate-sandbox",
+      "abi": "mcp.stdio",
+      "description": "Run the signed terminate-sandbox command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.sandbox.terminate"
+      ]
+    },
+    {
+      "name": "environments.project-terminal",
+      "abi": "mcp.stdio",
+      "description": "Run the signed project-terminal command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.terminal.interact"
+      ]
+    },
+    {
+      "name": "environments.project-desktop",
+      "abi": "mcp.stdio",
+      "description": "Run the signed project-desktop command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.desktop.interact"
+      ]
+    },
+    {
+      "name": "environments.list-runner-pools",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-runner-pools command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.read"
+      ]
+    },
+    {
+      "name": "environments.create-runner-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-runner-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.create"
+      ]
+    },
+    {
+      "name": "environments.register-runner",
+      "abi": "mcp.stdio",
+      "description": "Run the signed register-runner command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.runners.register"
+      ]
+    },
+    {
+      "name": "environments.read-deploys",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-deploys command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.deploys.read"
+      ]
+    },
+    {
+      "name": "environments.change-deploy",
+      "abi": "mcp.stdio",
+      "description": "Run the signed change-deploy command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.deploys.write"
+      ]
+    },
+    {
+      "name": "environments.read-instance-templates",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-instance-templates command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.templates.read"
+      ]
+    },
+    {
+      "name": "environments.change-instance-template",
+      "abi": "mcp.stdio",
+      "description": "Run the signed change-instance-template command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.templates.write"
+      ]
+    },
+    {
+      "name": "environments.create-runtime-instance",
+      "abi": "mcp.stdio",
+      "description": "Run the signed create-runtime-instance command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.instances.create"
+      ]
+    },
+    {
+      "name": "environments.read-runtime-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-runtime-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.read"
+      ]
+    },
+    {
+      "name": "environments.control-runtime-pool",
+      "abi": "mcp.stdio",
+      "description": "Run the signed control-runtime-pool command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.control"
+      ]
+    },
+    {
+      "name": "environments.set-runtime-pool-tier",
+      "abi": "mcp.stdio",
+      "description": "Run the signed set-runtime-pool-tier command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.environments.pool.tier"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "cluster-health",
+      "tool": "cluster_health",
+      "payload": {
+        "total_nodes": 2,
+        "total_cpu": 4,
+        "used_cpu": 1
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "patch-text",
+      "tool": "patch_text",
+      "permissions": [
+        "tools.execute"
+      ],
+      "payload": {
+        "content": "",
+        "patch": ""
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "sandbox-status",
+      "permissions": [
+        "app.environments.sandbox.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.sandbox-status"
+    },
+    {
+      "id": "prepare-sandbox",
+      "permissions": [
+        "app.environments.sandbox.prepare"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.prepare-sandbox"
+    },
+    {
+      "id": "authorize-run-terminal",
+      "permissions": [
+        "app.environments.terminal.authorize"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.authorize-run-terminal"
+    },
+    {
+      "id": "environment-inventory",
+      "permissions": [
+        "app.environments.inventory.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.environment-inventory"
+    },
+    {
+      "id": "write-cluster",
+      "permissions": [
+        "app.environments.clusters.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.write-cluster"
+    },
+    {
+      "id": "delete-cluster",
+      "permissions": [
+        "app.environments.clusters.delete"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.delete-cluster"
+    },
+    {
+      "id": "restart-sandbox",
+      "permissions": [
+        "app.environments.sandbox.restart"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.restart-sandbox"
+    },
+    {
+      "id": "terminate-sandbox",
+      "permissions": [
+        "app.environments.sandbox.terminate"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.terminate-sandbox"
+    },
+    {
+      "id": "project-terminal",
+      "permissions": [
+        "app.environments.terminal.interact"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.project-terminal"
+    },
+    {
+      "id": "project-desktop",
+      "permissions": [
+        "app.environments.desktop.interact"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.project-desktop"
+    },
+    {
+      "id": "list-runner-pools",
+      "permissions": [
+        "app.environments.runners.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.list-runner-pools"
+    },
+    {
+      "id": "create-runner-pool",
+      "permissions": [
+        "app.environments.runners.create"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.create-runner-pool"
+    },
+    {
+      "id": "register-runner",
+      "permissions": [
+        "app.environments.runners.register"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.register-runner"
+    },
+    {
+      "id": "read-deploys",
+      "permissions": [
+        "app.environments.deploys.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.read-deploys"
+    },
+    {
+      "id": "change-deploy",
+      "permissions": [
+        "app.environments.deploys.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.change-deploy"
+    },
+    {
+      "id": "read-instance-templates",
+      "permissions": [
+        "app.environments.templates.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.read-instance-templates"
+    },
+    {
+      "id": "change-instance-template",
+      "permissions": [
+        "app.environments.templates.write"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.change-instance-template"
+    },
+    {
+      "id": "create-runtime-instance",
+      "permissions": [
+        "app.environments.instances.create"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.create-runtime-instance"
+    },
+    {
+      "id": "read-runtime-pool",
+      "permissions": [
+        "app.environments.pool.read"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.read-runtime-pool"
+    },
+    {
+      "id": "control-runtime-pool",
+      "permissions": [
+        "app.environments.pool.control"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.control-runtime-pool"
+    },
+    {
+      "id": "set-runtime-pool-tier",
+      "permissions": [
+        "app.environments.pool.tier"
+      ],
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "environments.set-runtime-pool-tier"
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:003d111eada076fdf2a0a4ca69f0fe7a6b726e24b2169e1f24d9920e31b65d23",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "sandbox",
+      "title": "Project sandbox",
+      "routes": [
+        "/environments/sandbox",
+        "/tenant/:tenantId/project/:projectId/sandbox"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/project-sandbox.js",
+        "digest": "sha256:ec37e3bbd127209219c7480db21d6c3320b980c84f457f05a702048831595abe"
+      },
+      "commands": [
+        "sandbox-status",
+        "prepare-sandbox",
+        "restart-sandbox",
+        "terminate-sandbox"
+      ],
+      "device_tools": [],
+      "style": {
+        "path": "ui/project-sandbox.css",
+        "digest": "sha256:32faeeabbde32ad30a128a55be1a9f793a9f25440596566d637f244b83790ce2"
+      },
+      "workbench": true
+    },
+    {
+      "id": "patch",
+      "title": "Sandbox patch preview",
+      "routes": [
+        "/environments/patch"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/patch.js",
+        "digest": "sha256:1bd26fc558664e4e4a26cd07d823c261a6adb144016adb4bb03a16c421964d26"
+      },
+      "commands": [
+        "patch-text"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "tenant-instances",
+      "title": "Instances",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/instances",
+        "/tenant/:tenantId/environments/instances/:resourceId",
+        "/tenant/:tenantId/instances",
+        "/tenant/:tenantId/instances/:resourceId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/inventory.js",
+        "digest": "sha256:8a2a35efc5a42756e7a0033b8b175f72739f1417457382deff27c5cb72d20bee"
+      },
+      "commands": [
+        "environment-inventory"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "tenant-clusters",
+      "title": "Clusters",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/clusters",
+        "/tenant/:tenantId/clusters"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
+      },
+      "commands": [
+        "environment-inventory",
+        "write-cluster",
+        "delete-cluster"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "page",
+        "page_size",
+        "search",
+        "status",
+        "highlight"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      }
+    },
+    {
+      "id": "org-clusters",
+      "title": "Organization clusters",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/org-settings/clusters"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
+      },
+      "commands": [
+        "environment-inventory"
+      ],
+      "device_tools": [],
+      "query_params": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      }
+    },
+    {
+      "id": "cluster-details",
+      "title": "Cluster details",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/environments/clusters/:clusterId",
+        "/tenant/:tenantId/clusters/:clusterId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/clusters-web.js",
+        "digest": "sha256:d2235f2670b762dc5f682da7082ee698e57fd97d921ace9d701430625aa66837"
+      },
+      "commands": [
+        "environment-inventory",
+        "write-cluster",
+        "delete-cluster",
+        "list-runner-pools",
+        "create-runner-pool",
+        "register-runner"
+      ],
+      "device_tools": [],
+      "query_params": [],
+      "workbench": true,
+      "style": {
+        "path": "ui/clusters-web.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      }
+    },
+    {
+      "id": "sandbox-runtime",
+      "title": "Sandbox runtime access",
+      "routes": [
+        "/environments/sandbox/runtime",
+        "/tenant/:tenantId/project/:projectId/sandbox/runtime"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/sandbox.js",
+        "digest": "sha256:a687d849a36dc123d949b58108b68c7062379f137e8c409db0865d03ed3113aa"
+      },
+      "commands": [
+        "sandbox-status",
+        "prepare-sandbox",
+        "authorize-run-terminal"
+      ],
+      "device_tools": []
+    },
+    {
+      "id": "sandbox-interaction",
+      "title": "Terminal and remote desktop",
+      "routes": [
+        "/environments/sandbox/connect",
+        "/tenant/:tenantId/project/:projectId/sandbox/connect"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/interaction.js",
+        "digest": "sha256:1eabf27c07735cb449d7b0c65379750e641945ca44e7ea0a0635ed4c54166f19"
+      },
+      "style": {
+        "path": "ui/interaction.css",
+        "digest": "sha256:915e202132d1de283bb3fc8522173b392d6a32c255831541b3a7c6c3d6d80323"
+      },
+      "commands": [
+        "sandbox-status",
+        "project-terminal",
+        "project-desktop",
+        "authorize-run-terminal"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "run_id",
+        "revision"
+      ]
+    },
+    {
+      "id": "deployments",
+      "title": "Deployments",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/deploy",
+        "/tenant/:tenantId/deploy/:deployId",
+        "/tenant/:tenantId/instances/:instanceId/deploy"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "read-deploys",
+        "change-deploy"
+      ],
+      "device_tools": [],
+      "workbench": true
+    },
+    {
+      "id": "instance-templates",
+      "title": "Instance templates",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/instance-templates",
+        "/tenant/:tenantId/instance-templates/:templateId"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "read-instance-templates",
+        "change-instance-template"
+      ],
+      "device_tools": [],
+      "workbench": true
+    },
+    {
+      "id": "create-instance",
+      "title": "Create instance",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/instances/create"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/tenant-deploy.js",
+        "digest": "sha256:4780f00f6faa5e22ec52396597d67f6c5d505a42032e1de72ba520d1971a4895"
+      },
+      "style": {
+        "path": "ui/tenant-deploy.css",
+        "digest": "sha256:a4b990c4ffaa8b082ffa769445e290c5b41df87a7d25bf3cae2470d54e5b0323"
+      },
+      "commands": [
+        "create-runtime-instance",
+        "read-instance-templates",
+        "environment-inventory"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "query_params": [
+        "templateId"
+      ]
+    },
+    {
+      "id": "runtime-pool",
+      "title": "Runtime pool",
+      "scope": "tenant",
+      "routes": [
+        "/tenant/:tenantId/pool"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/runtime-pool.js",
+        "digest": "sha256:f4457fb50742c610b4672ae85d23234887a7144723fa910e97c178a2a9d6a4e3"
+      },
+      "style": {
+        "path": "ui/runtime-pool.css",
+        "digest": "sha256:94c7358dbba3eb6a3499fe63e59ff0ff2c7f3e1888f91950b7fdb6b70a59a1aa"
+      },
+      "commands": [
+        "read-runtime-pool",
+        "control-runtime-pool",
+        "set-runtime-pool-tier"
+      ],
+      "device_tools": [],
+      "workbench": true,
+      "query_params": [
+        "page",
+        "tier"
+      ]
+    },
+    {
+      "id": "agent-code",
+      "title": "Terminal and remote desktop",
+      "routes": [],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "workbench": true,
+      "entry": {
+        "path": "ui/interaction.js",
+        "digest": "sha256:1eabf27c07735cb449d7b0c65379750e641945ca44e7ea0a0635ed4c54166f19"
+      },
+      "style": {
+        "path": "ui/interaction.css",
+        "digest": "sha256:915e202132d1de283bb3fc8522173b392d6a32c255831541b3a7c6c3d6d80323"
+      },
+      "commands": [
+        "sandbox-status",
+        "project-terminal",
+        "project-desktop",
+        "authorize-run-terminal"
+      ],
+      "device_tools": [],
+      "query_params": [
+        "run_id",
+        "revision"
+      ],
+      "contributes_to": "memstack-agent/code@1"
+    }
+  ]
+}

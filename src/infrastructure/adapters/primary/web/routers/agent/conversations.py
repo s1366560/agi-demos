@@ -14,6 +14,8 @@ from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.domain.model.agent import ConversationStatus
 from src.domain.model.agent.execution.run_execution_placement import (
     CLOUD_RUN_EXECUTION_PLACEMENT,
+    ExecutionTarget,
+    RunExecutionPlacement,
 )
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
@@ -357,21 +359,23 @@ def _merge_workspace_groups(
     return merged
 
 
+def _default_placement(conversation: "Conversation") -> RunExecutionPlacement:
+    if conversation.metadata and conversation.metadata.get("execution_target") == "local":
+        return RunExecutionPlacement(execution_target=ExecutionTarget.LOCAL)
+    return CLOUD_RUN_EXECUTION_PLACEMENT
+
+
 def _conversation_responses(
     conversations: list["Conversation"],
     *,
     workspace_names: dict[str, str],
-    placements: dict[str, Any] | None = None,
+    placements: dict[str, RunExecutionPlacement] | None = None,
 ) -> list[ConversationResponse]:
     resolved = placements or {}
     responses: list[ConversationResponse] = []
     for conversation in conversations:
         placement = resolved.get(conversation.id)
-        fields = (
-            placement.public_dict()
-            if placement is not None
-            else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
-        )
+        fields = (placement or _default_placement(conversation)).public_dict()
         responses.append(
             ConversationResponse.from_domain(
                 conversation,
@@ -751,7 +755,7 @@ async def get_conversation(
             **(
                 placement.public_dict()
                 if placement is not None
-                else CLOUD_RUN_EXECUTION_PLACEMENT.public_dict()
+                else _default_placement(conversation).public_dict()
             ),
         )
 

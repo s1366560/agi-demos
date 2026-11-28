@@ -3,7 +3,7 @@ import type {
   RuntimeNodeLoadState,
   RuntimeNodeState,
   WorkspaceSummary,
-} from '../../types';
+} from '@desktop/types';
 
 export type WorkspaceTreeNode = {
   workspace: WorkspaceSummary;

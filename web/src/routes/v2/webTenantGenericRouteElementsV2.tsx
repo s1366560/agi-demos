@@ -14,12 +14,9 @@ import {
   Analytics,
   Events,
   Webhooks,
-  Billing,
   TenantSettings,
-  WorkflowPatterns,
   TaskDashboard,
   WorkspaceList,
-  WorkspaceCreate,
   AgentDashboard,
   AgentWorkspace,
   SubAgentList,
@@ -58,7 +55,6 @@ import {
   OrgRegistry,
   OrgSmtp,
   OrgGenes,
-  ClusterList,
   ClusterDetail,
   GeneMarket,
   GeneDetail,
@@ -68,7 +64,7 @@ import {
   GenomeDetail,
 } from './webDefaultRouteComponentsV2';
 import { WebRoutePageLoaderV2 as PageLoader } from './WebRoutePageLoaderV2';
-import { LegacyTenantSingleSegmentRedirect } from './webRouteRedirectsV2';
+import { LegacyTenantSingleSegmentRedirect, TenantPackageRouteFallback } from './webRouteRedirectsV2';
 
 export function createTenantGenericRouteElementsV2(): ReactNode {
   return (
@@ -192,13 +188,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-billing' }}
+        handle={{ pluginFeature: 'tenant-billing', signedPage: true, tenantBookmark: true }}
         path="billing"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <Billing />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-settings' }}
@@ -210,13 +202,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-patterns' }}
+        handle={{ pluginFeature: 'tenant-patterns', signedPage: true, tenantBookmark: true }}
         path="patterns"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkflowPatterns />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-tasks' }}
@@ -237,13 +225,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-workspaces' }}
+        handle={{ pluginFeature: 'tenant-workspaces', signedPage: true }}
         path="workspaces/new"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <WorkspaceCreate />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback projectOwned />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-agents' }}
@@ -608,13 +592,9 @@ export function createTenantGenericRouteElementsV2(): ReactNode {
         }
       />
       <Route
-        handle={{ pluginFeature: 'tenant-clusters' }}
+        handle={{ pluginFeature: 'tenant-clusters', signedPage: true, tenantBookmark: true }}
         path="clusters"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <ClusterList />
-          </Suspense>
-        }
+        element={<TenantPackageRouteFallback />}
       />
       <Route
         handle={{ pluginFeature: 'tenant-clusters' }}

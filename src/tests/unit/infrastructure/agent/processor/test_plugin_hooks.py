@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.core.message import ToolPart, ToolState
-from src.infrastructure.agent.processor.processor import (
+from plugins.business.agent.engine.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.plugins.v2.agent_loop import (
     AgentLoopRunContextV2,
@@ -268,7 +268,7 @@ def _llm_text_response(text="Done"):
 
 def _stop_after_first_step():
     """Patch target for _evaluate_goal_progress — returns STOP immediately."""
-    from src.infrastructure.agent.processor.processor import ProcessorResult
+    from plugins.business.agent.engine.processor.processor import ProcessorResult
 
     async def patched(result, had_tool_calls, session_id, messages):
         return ProcessorResult.STOP, []

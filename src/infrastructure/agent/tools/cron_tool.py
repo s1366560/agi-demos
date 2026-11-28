@@ -16,6 +16,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
+from plugins.business.automation.backend.cron_service import (
+    CronExecutionUnavailableError,
+    CronJobService,
+    CronMutationUnavailableError,
+)
 from src.application.schemas.cron import (
     DeliveryConfig,
     PayloadConfig,
@@ -23,11 +28,6 @@ from src.application.schemas.cron import (
     delivery_config_to_domain,
     payload_config_to_domain,
     schedule_config_to_domain,
-)
-from src.application.services.cron_service import (
-    CronExecutionUnavailableError,
-    CronJobService,
-    CronMutationUnavailableError,
 )
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
@@ -60,7 +60,9 @@ def _get_session_factory() -> Callable[..., Any]:
 
 def _build_service(session: Any) -> CronJobService:
     """Build a ``CronJobService`` from a live DB session."""
-    from src.application.services.automation_command_service import AutomationCommandService
+    from plugins.business.automation.backend.automation_command_service import (
+        AutomationCommandService,
+    )
     from src.infrastructure.adapters.secondary.persistence.sql_cron_automation_command_repository import (
         SqlCronAutomationCommandRepository,
     )

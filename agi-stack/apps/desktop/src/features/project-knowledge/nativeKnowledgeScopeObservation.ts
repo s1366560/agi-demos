@@ -1,5 +1,5 @@
 import type { NativeKnowledgeScopeObservationOptions } from './nativeKnowledgeContracts';
-import { projectKnowledgeError } from './projectKnowledgeClient';
+import { projectKnowledgeError } from '@business/knowledge/ui/desktop/project-knowledge/projectKnowledgeClient';
 import { identifier, plain } from './nativeKnowledgeSchema';
 
 export function prepareNativeKnowledgeScopeObservationOptions(

@@ -4,14 +4,14 @@ import {
   RUNTIME_CLUSTERS_CLOUD_ACTIONS,
   RUNTIME_CLUSTERS_CLOUD_REASON,
   RUNTIME_CLUSTERS_LOCAL_REASON,
-} from '../features/runtime-clusters/runtimeClustersContract';
+} from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersContract';
 import type {
   RuntimeClusterHealth,
   RuntimeClusterSummary,
   RuntimeClustersPage,
   RuntimeClustersQuery,
   RuntimeClustersScope,
-} from '../features/runtime-clusters/runtimeClustersTypes';
+} from '@business/environments/ui/desktop/runtime-clusters/runtimeClustersTypes';
 import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
 import type { DesktopRuntimeConfig } from '../types';
 

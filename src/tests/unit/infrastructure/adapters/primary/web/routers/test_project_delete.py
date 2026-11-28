@@ -109,7 +109,7 @@ async def test_project_delete_purges_external_sandbox_resources(
 ) -> None:
     adapter = MagicMock()
     adapter.purge_project_resources = AsyncMock()
-    from src.infrastructure.plugins.v2 import sandbox_projection
+    from plugins.business.environments.backend.sandbox import sandbox_projection
 
     projection = MagicMock(return_value=SimpleNamespace(adapter=adapter))
     monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", projection)
@@ -130,7 +130,7 @@ async def test_project_delete_returns_503_when_external_resource_purge_fails(
 ) -> None:
     adapter = MagicMock()
     adapter.purge_project_resources = AsyncMock(side_effect=RuntimeError("docker unavailable"))
-    from src.infrastructure.plugins.v2 import sandbox_projection
+    from plugins.business.environments.backend.sandbox import sandbox_projection
 
     projection = MagicMock(return_value=SimpleNamespace(adapter=adapter))
     monkeypatch.setattr(sandbox_projection, "current_sandbox_application_services_v2", projection)
@@ -149,13 +149,13 @@ async def test_project_delete_returns_503_when_external_resource_purge_fails(
 
 @pytest.mark.unit
 async def test_project_delete_uses_pinned_sandbox_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-    from src.infrastructure.plugins.v2 import sandbox_projection
-    from src.infrastructure.plugins.v2.sandbox_runtime import (
+    from plugins.business.environments.backend.sandbox import sandbox_projection
+    from plugins.business.environments.backend.sandbox.sandbox_runtime import (
         SANDBOX_APPLICATION_SERVICE_V2,
         SandboxApplicationResolverV2,
         SandboxRuntimeServiceV2,
     )
+    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 
     adapter = SimpleNamespace(purge_project_resources=AsyncMock())
     resolver = SandboxApplicationResolverV2(
@@ -178,7 +178,7 @@ async def test_project_delete_uses_pinned_sandbox_resolver(monkeypatch: pytest.M
 async def test_project_delete_authorization_and_unavailable_runtime_never_commit(
     monkeypatch: pytest.MonkeyPatch, authorized: bool
 ) -> None:
-    from src.infrastructure.plugins.v2 import sandbox_projection
+    from plugins.business.environments.backend.sandbox import sandbox_projection
     from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
     db = SimpleNamespace(

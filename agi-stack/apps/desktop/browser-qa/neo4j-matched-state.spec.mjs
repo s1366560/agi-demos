@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,7 @@ const desktopAppRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8000";
 
 function desktopElectronArgs() {
-  const args = [desktopAppRoot];
+  const args = [resolve(desktopAppRoot, "out-compat/main/index.js")];
   const userDataDir = process.env.AGISTACK_DESKTOP_QA_USER_DATA_DIR;
   if (userDataDir) args.push(`--user-data-dir=${userDataDir}`);
   if (process.env.CI === "true" && process.platform === "linux") {
@@ -110,6 +110,7 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
     const user = await loadCurrentUser(request, token);
     const tenantId = await loadFirstTenantId(request, token);
     projectId = await createProject(request, token, tenantId);
+    await installKnowledgePackage(request, token, tenantId, projectId);
     episodeName = `neo4j-ui-${randomUUID()}`;
     const episodeId = await createEpisode(
       request,
@@ -278,6 +279,32 @@ test("Web and Desktop render one real Neo4j fixture with matched authority state
     ).toEqual([]);
   }
 });
+
+async function installKnowledgePackage(request, token, tenantId, projectId) {
+  const archive = process.env.NEO4J_KNOWLEDGE_PACKAGE;
+  if (!archive) throw new Error("NEO4J_KNOWLEDGE_PACKAGE must point to the signed Knowledge archive");
+  const root = API_BASE + "/api/v1/platform-plugins/v2/optional-business";
+  const headers = authorizationHeaders(token);
+  const scope = { tenant_id: tenantId, project_id: projectId };
+  const data = { ...scope, archive_base64: readFileSync(archive).toString("base64") };
+  const preview = await requireJsonResponse(
+    await request.post(root + "/inspect", { headers, data }), "inspect Knowledge",
+  );
+  expect(preview.plugin_id).toBe("memstack-knowledge");
+  const installed = await requireJsonResponse(
+    await request.post(root + "/install", {
+      headers,
+      data: { ...data, expected_revision: 0, expected_digest: preview.digest, approved_permissions: preview.permissions },
+    }), "install Knowledge",
+  );
+  await requireJsonResponse(await request.post(root + "/memstack-knowledge/enable", {
+    headers, data: { ...scope, expected_revision: installed.desired_revision },
+  }), "enable Knowledge");
+  const active = await requireJsonResponse(await request.get(root + "/memstack-knowledge", {
+    headers, params: scope,
+  }), "read active Knowledge");
+  expect(active.actual_digest).toBe(preview.digest);
+}
 
 async function authenticate(request) {
   const response = await request.post(`${API_BASE}/api/v1/auth/token`, {
@@ -463,6 +490,7 @@ async function primeWebSession(page, token, user) {
     version: 0,
   };
   await page.addInitScript((storage) => {
+    if (window.top !== window) return;
     window.localStorage.setItem(
       "memstack-auth-storage",
       JSON.stringify(storage),
@@ -584,7 +612,12 @@ async function exerciseWeb(
     );
     const startIndex = tracker.recordCount();
     await page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded" });
-    await assertWebSurface(page, kind, fixture);
+    if (kind === "communities") {
+      await expect(page.getByTestId("communities-list-root")).toBeVisible();
+      await expect(page.getByText(fixture.communities.names[0]).first()).toBeVisible();
+    } else {
+      await assertSignedKnowledgeSurface(page, kind, fixture);
+    }
     records[kind] = await tracker.waitFor(kind, startIndex);
     assertNetworkRecord(records[kind], kind, scope, fixture[kind]);
     await page.screenshot({
@@ -595,18 +628,12 @@ async function exerciseWeb(
   return records;
 }
 
-async function assertWebSurface(page, kind, fixture) {
+async function assertSignedKnowledgeSurface(host, kind, fixture) {
+  const page = host.frameLocator('iframe[data-page-ready="true"]').frameLocator("iframe");
   if (kind === "entities") {
     await expect(page.getByTestId("entities-header")).toBeVisible();
     for (const name of FIXTURE_NAMES)
       await expect(page.getByText(name).first()).toBeVisible();
-    return;
-  }
-  if (kind === "communities") {
-    await expect(page.getByTestId("communities-list-root")).toBeVisible();
-    await expect(
-      page.getByText(fixture.communities.names[0]).first(),
-    ).toBeVisible();
     return;
   }
   if (kind === "graph") {
@@ -631,8 +658,6 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
   const records = {};
   for (const kind of ["entities", "communities", "graph", "search"]) {
     const suffix = kind === "search" ? "advanced-search" : kind;
-    const routeId =
-      kind === "search" ? "project-project-search" : `project-project-${kind}`;
     const startIndex = tracker.recordCount();
     await page.evaluate(
       (path) => {
@@ -640,53 +665,13 @@ async function exerciseDesktop(page, tracker, evidenceRoot, scope, fixture) {
       },
       canonicalPath(scope, suffix),
     );
-    const stage = page.locator(
-      `.desktop-production-route-stage[data-route-id="${routeId}"]`,
-    );
-    await expect(stage).toBeVisible();
-    const expectInStage = async (assertion) => {
-      try {
-        await assertion();
-      } catch (error) {
-        const state = await stage.getAttribute("data-route-state");
-        const reason = await stage
-          .locator("[data-reason-code]")
-          .getAttribute("data-reason-code")
-          .catch(() => null);
-        const text = await stage.innerText();
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `${message}\nroute-state=${state}\nreason=${reason}\n${text.slice(0, 600)}`,
-        );
-      }
-    };
-    await expectInStage(async () => {
-      if (kind === "search") {
-        await stage.locator(".desktop-search__query input").fill(FIXTURE_NAMES[0]);
-        await stage.locator('.desktop-search__query button[type="submit"]').click();
-        await expect(
-          stage.getByText(fixture.search.fixture_matches[0]).first(),
-        ).toBeVisible();
-        return;
-      }
-      if (kind === "communities") {
-        await expect(
-          stage.getByText(fixture.communities.names[0]).first(),
-        ).toBeVisible();
-        return;
-      }
-      for (const name of FIXTURE_NAMES) {
-        if (kind === "graph") {
-          const node = stage
-            .locator(".project-graph-nodes button")
-            .filter({ hasText: name });
-          await expect(node.first()).toBeVisible();
-          await expect(node.first()).toContainText(name);
-          continue;
-        }
-        await expect(stage.getByText(name).first()).toBeVisible();
-      }
-    });
+    if (kind === "communities") {
+      const stage = page.locator(`.desktop-production-route-stage[data-route-id="project-project-communities"]`);
+      await expect(stage).toBeVisible();
+      await expect(stage.getByText(fixture.communities.names[0]).first()).toBeVisible();
+    } else {
+      await assertSignedKnowledgeSurface(page, kind, fixture);
+    }
     records[kind] = await tracker.waitFor(kind, startIndex);
     assertNetworkRecord(records[kind], kind, scope, fixture[kind]);
     await page.screenshot({
@@ -739,7 +724,7 @@ function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
     } catch {
       return;
     }
-    const kind = knowledgeKind(entry.method, url.pathname);
+    const kind = knowledgeKind(entry.method, url.pathname, entry.command_id);
     if (!kind) return;
     const bodyScope =
       entry.body && typeof entry.body === "object" ? entry.body : null;
@@ -805,16 +790,18 @@ function createKnowledgeTracker(page, surface, expectedScope, electronApp) {
 
 function knowledgeResponseKind(response) {
   const request = response.request();
-  return knowledgeKind(request.method(), new URL(request.url()).pathname);
+  return knowledgeKind(request.method(), new URL(request.url()).pathname,
+    parseRequestBody(request.postData())?.command_id);
 }
 
-function knowledgeKind(method, path) {
-  if (method === "GET" && path === "/api/v1/graph/entities/") return "entities";
+function knowledgeKind(method, path, command) {
+  if (method === "POST" && path === "/api/v1/platform-plugins/v2/optional-business/memstack-knowledge/commands") {
+    if (command === "list-entities") return "entities";
+    if (command === "read-graph") return "graph";
+    if (command === "search-project") return "search";
+  }
   if (method === "GET" && path === "/api/v1/graph/communities/")
     return "communities";
-  if (method === "GET" && path === "/api/v1/graph/memory/graph") return "graph";
-  if (method === "POST" && path === "/api/v1/search-enhanced/advanced")
-    return "search";
   return null;
 }
 

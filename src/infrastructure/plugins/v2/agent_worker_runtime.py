@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+from weakref import WeakValueDictionary
 
 import redis.asyncio as redis
 
+from plugins.business.environments.backend.sandbox.sandbox_runtime import SandboxRuntimeServiceV2
 from src.configuration.config import get_settings
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
@@ -24,7 +25,12 @@ from .agent_orchestration_runtime import (
     AgentSessionTurnExecutorV2,
     AgentSpawnExecutorV2,
 )
-from .graph_runtime import GraphRuntimeFactoryV2, GraphRuntimeServiceV2
+from .graph_runtime import (
+    GraphRuntimeFactoryV2,
+    GraphRuntimeLeaseV2,
+    GraphRuntimeServiceV2,
+    close_graph_service_v2,
+)
 from .redis_runtime import RedisRuntimeServiceV2
 from .runtime import (
     ContextV2,
@@ -33,7 +39,6 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .sandbox_runtime import SandboxRuntimeServiceV2
 
 if TYPE_CHECKING:
     from .workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
@@ -217,52 +222,61 @@ def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
         return None
 
 
-_process_graph_adapters: dict[str | None, GraphStorePort] = {}
-_process_graph_lock: asyncio.Lock | None = None
+class _TenantGraph:
+    """Share the connection while generations in this event loop own leases."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.graph: GraphStorePort | None = None
+        self.owners = 0
+
+    async def acquire(self, tenant_id: str | None) -> GraphRuntimeLeaseV2:
+        async with self.lock:
+            if self.graph is None:
+                self.graph = await _create_worker_graph(tenant_id)
+            self.owners += 1
+            return GraphRuntimeLeaseV2(graph=self.graph, release=self.release)
+
+    async def release(self) -> None:
+        async with self.lock:
+            self.owners -= 1
+            if self.owners == 0 and self.graph is not None:
+                graph, self.graph = self.graph, None
+                await close_graph_service_v2(graph)
 
 
-def _process_graph_adapter_lock() -> asyncio.Lock:
-    global _process_graph_lock
-    if _process_graph_lock is None:
-        _process_graph_lock = asyncio.Lock()
-    return _process_graph_lock
+_tenant_graphs: WeakValueDictionary[tuple[asyncio.AbstractEventLoop, str | None], _TenantGraph] = (
+    WeakValueDictionary()
+)
 
 
-def agent_worker_graph_runtime_factory_v2(
-    tenant_id: str | None,
-) -> GraphRuntimeFactoryV2:
-    """Build a tenant-bound graph factory for one Agent data-plane generation.
+async def _create_worker_graph(tenant_id: str | None) -> GraphStorePort:
+    from src.configuration.factories import create_native_graph_adapter
+    from src.infrastructure.llm.initializer import initialize_default_llm_providers
 
-    The API process reuses one adapter per tenant. Publishing another generation
-    otherwise reconnects to Neo4j and rebuilds indices while later requests wait.
-    """
+    try:
+        await initialize_default_llm_providers()
+    except Exception as exc:
+        logger.warning(
+            "Agent Worker LLM provider initialization failed before graph activation: "
+            "error_type=%s",
+            type(exc).__name__,
+        )
+    return await create_native_graph_adapter(tenant_id=tenant_id)
 
-    async def factory() -> GraphStorePort:
-        from src.configuration.factories import create_native_graph_adapter
-        from src.infrastructure.llm.initializer import initialize_default_llm_providers
 
-        reuse = "PYTEST_CURRENT_TEST" not in os.environ
-        if reuse:
-            async with _process_graph_adapter_lock():
-                cached = _process_graph_adapters.get(tenant_id)
-                if cached is not None:
-                    return cached
-        try:
-            await initialize_default_llm_providers()
-        except Exception as exc:
-            logger.warning(
-                "Agent Worker LLM provider initialization failed before graph activation: "
-                "error_type=%s",
-                type(exc).__name__,
-            )
-        adapter = await create_native_graph_adapter(tenant_id=tenant_id)
-        if reuse:
-            object.__setattr__(adapter, "_process_shared_graph_v2", True)
-            async with _process_graph_adapter_lock():
-                _process_graph_adapters[tenant_id] = adapter
-        return adapter
+def agent_worker_graph_runtime_factory_v2(tenant_id: str | None) -> GraphRuntimeFactoryV2:
+    """Bind one generation's ownership of the tenant's native graph adapter."""
 
-    return factory
+    async def acquire() -> GraphRuntimeLeaseV2:
+        key = (asyncio.get_running_loop(), tenant_id)
+        pool = _tenant_graphs.get(key)
+        if pool is None:
+            pool = _TenantGraph()
+            _tenant_graphs[key] = pool
+        return await pool.acquire(tenant_id)
+
+    return acquire
 
 
 async def agent_worker_redis_runtime_factory_v2() -> redis.Redis:

@@ -51,6 +51,8 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InitializeRequest {
+    #[serde(default)]
+    runtime_profile: crate::sidecar_profile::SidecarProfile,
     #[serde(rename = "type")]
     message_type: String,
     protocol_version: u16,
@@ -115,7 +117,7 @@ struct ControlState {
     plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     plugin_renderer_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     trusted_sessions: TrustedSessionBroker,
-    workspace_core: WorkspaceCoreSupervisor,
+    workspace_core: Option<WorkspaceCoreSupervisor>,
     plugin_control_plane_v2: PlatformPluginControlPlaneReconcilerV2,
 }
 
@@ -155,6 +157,7 @@ pub(crate) async fn run() -> Result<(), String> {
         initialize.workspace_root,
         credential_vault.clone(),
         local_knowledge_acceptance,
+        initialize.runtime_profile,
     )
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
@@ -177,21 +180,26 @@ pub(crate) async fn run() -> Result<(), String> {
         }
     };
     let status = runtime.status();
-    let workspace_core = match WorkspaceCoreSupervisor::start(
-        initialize.workspace_core_binary_path,
-        &initialize.data_directory,
-        &status.api_base_url,
-        runtime.clone(),
-    )
-    .await
-    {
-        Ok(supervisor) => supervisor,
-        Err(error) => {
-            plugin_control_plane_v2.shutdown().await;
-            runtime.shutdown().await;
-            return Err(error);
-        }
-    };
+    let workspace_core =
+        if initialize.runtime_profile != crate::sidecar_profile::SidecarProfile::PackageHost {
+            match WorkspaceCoreSupervisor::start(
+                initialize.workspace_core_binary_path,
+                &initialize.data_directory,
+                &status.api_base_url,
+                runtime.clone(),
+            )
+            .await
+            {
+                Ok(supervisor) => Some(supervisor),
+                Err(error) => {
+                    plugin_control_plane_v2.shutdown().await;
+                    runtime.shutdown().await;
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
     let ready = ready_response(
         &initialize.nonce,
         &status.api_base_url,
@@ -242,6 +250,16 @@ pub(crate) async fn run() -> Result<(), String> {
         while device_calls.try_join_next().is_some() {}
         while local_run_tasks.try_join_next().is_some() {}
         let response = match serde_json::from_str::<ControlRequest>(&line) {
+            Ok(request)
+                if request.message_type != "request"
+                    || request.id.is_empty()
+                    || request.id.len() > 128 =>
+            {
+                failure(request.id, "sidecar control request is invalid")
+            }
+            Ok(request) if !initialize.runtime_profile.allows_command(&request.command) => {
+                failure(request.id, "desktop command is not supported")
+            }
             Ok(request) if request.command == "local_run_execute" => {
                 if local_run_tasks.len() >= 2 {
                     failure(request.id, "local_run_executor_busy")
@@ -291,7 +309,12 @@ pub(crate) async fn run() -> Result<(), String> {
                                     .and_then(|args| args.get("input"))
                                     .cloned()
                                     .expect("checked cloud call input");
-                                match runtime.computer_use_cloud_v2(&broker, input).await {
+                                let result = if request.command == "device_plugin_manage_v2" {
+                                    runtime.device_plugin_manage_v2(&broker, input).await
+                                } else {
+                                    runtime.computer_use_cloud_v2(&broker, input).await
+                                };
+                                match result {
                                     Ok(result) => ControlResponse {
                                         message_type: "response",
                                         id,
@@ -345,12 +368,24 @@ pub(crate) async fn run() -> Result<(), String> {
     state.runtime.shutdown().await;
     local_requests.shutdown().await;
     device_calls.shutdown().await;
-    state.workspace_core.shutdown().await;
+    if let Some(core) = state.workspace_core {
+        core.shutdown().await;
+    }
     state.plugin_control_plane_v2.shutdown().await;
     output_failure.map_or(Ok(()), Err)
 }
 
 fn parallel_cloud_call(request: &ControlRequest) -> bool {
+    if request.command == "device_plugin_manage_v2" {
+        // Keep grant withdrawal on the control path even when all execution slots are busy.
+        return request
+            .args
+            .as_ref()
+            .and_then(|args| args.get("input"))
+            .is_some_and(|input| {
+                input.pointer("/operation/action").and_then(Value::as_str) != Some("revoke")
+            });
+    }
     request.command == "computer_use_cloud_v2"
         && request
             .args
@@ -474,6 +509,16 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             }
             None => Err("cua_cloud_request_required".into()),
         },
+        "device_plugin_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input"))
+        {
+            Some(input) => {
+                state
+                    .runtime
+                    .device_plugin_manage_v2(&state.trusted_sessions, input.clone())
+                    .await
+            }
+            None => Err("device_plugin_request_invalid".into()),
+        },
         "device_mcp_manage_v2" => match request.args.as_ref().and_then(|args| args.get("input")) {
             Some(input) => {
                 state
@@ -505,8 +550,11 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 None => Err("computer-use command input is required".into()),
             }
         }
-        "workspace_core_status" => serde_json::to_value(state.workspace_core.status().await)
-            .map_err(|error| error.to_string()),
+        "workspace_core_status" => serde_json::to_value(match &state.workspace_core {
+            Some(core) => core.status().await,
+            None => crate::workspace_core_helper::WorkspaceCoreHelperStatus::not_started(),
+        })
+        .map_err(|error| error.to_string()),
         "local_run_stop" => {
             let runtime = state.runtime.clone();
             let args = request.args.clone().unwrap_or(Value::Null);
@@ -837,6 +885,7 @@ mod tests {
     #[test]
     fn initialization_rejects_relative_authority_paths() {
         let initialize = InitializeRequest {
+            runtime_profile: Default::default(),
             message_type: "initialize".to_string(),
             protocol_version: PROTOCOL_VERSION,
             nonce: "a".repeat(32),

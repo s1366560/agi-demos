@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.core.react_agent_stream_mixin import (
+from plugins.business.agent.engine.processor.factory import ProcessorFactory
+from plugins.business.agent.engine.processor.processor import ProcessorConfig
+from plugins.business.agent.engine.react.react_agent_stream_mixin import (
     _bind_processor_model_route,
     _resolve_exact_provider_config_for_route,
     _resolve_model_route_override,
 )
 from src.infrastructure.agent.model_route import ModelRouteRef
-from src.infrastructure.agent.processor.factory import ProcessorFactory
-from src.infrastructure.agent.processor.processor import ProcessorConfig
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 
@@ -154,7 +154,7 @@ class TestBindProcessorModelRoute:
             plugin_id="test-plugin",
         )
         with patch(
-            "src.infrastructure.agent.processor.factory._default_loop_resolver",
+            "plugins.business.agent.engine.processor.factory._default_loop_resolver",
             return_value=loop_resolver,
         ):
             processor = ProcessorFactory().create_for_main(config, [])
@@ -176,7 +176,7 @@ class TestBindProcessorModelRoute:
 
         with (
             patch(
-                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "plugins.business.agent.engine.react.react_agent_stream_mixin."
                 "_resolve_exact_provider_config_for_route",
                 new=AsyncMock(return_value=provider_config),
             ) as resolver,
@@ -229,7 +229,7 @@ async def test_replayed_explicit_route_revalidates_disabled_provider():
     route = ModelRouteRef(provider_id="selected-account", model_id="model")
     with (
         patch(
-            "src.infrastructure.agent.core.react_agent_stream_mixin._resolve_exact_provider_config_for_route",
+            "plugins.business.agent.engine.react.react_agent_stream_mixin._resolve_exact_provider_config_for_route",
             new=AsyncMock(
                 side_effect=RuntimeV2Error("model_route_provider_unavailable", "Provider disabled")
             ),

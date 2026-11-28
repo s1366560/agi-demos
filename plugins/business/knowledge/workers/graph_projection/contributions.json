@@ -1,0 +1,861 @@
+{
+  "schema": "memstack.plugin.contributions/1",
+  "tools": [
+    {
+      "name": "project_graph",
+      "abi": "mcp.stdio",
+      "permissions": [
+        "tools.execute",
+        "graph.projection.compute"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uuid": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              },
+              "required": [
+                "uuid",
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "fact": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 512
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "source",
+                "target",
+                "kind",
+                "fact",
+                "score"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 199
+                },
+                "target_index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 199
+                },
+                "relation_type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "fact": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "source_index",
+                "target_index",
+                "relation_type",
+                "fact",
+                "score"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "entities",
+          "relationships"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "knowledge.list-memories",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-memories command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.read"
+      ]
+    },
+    {
+      "name": "knowledge.read-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.read"
+      ]
+    },
+    {
+      "name": "knowledge.save-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed save-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.write"
+      ]
+    },
+    {
+      "name": "knowledge.list-entities",
+      "abi": "mcp.stdio",
+      "description": "Run the signed list-entities command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.list"
+      ]
+    },
+    {
+      "name": "knowledge.entity-types",
+      "abi": "mcp.stdio",
+      "description": "Run the signed entity-types command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.types"
+      ]
+    },
+    {
+      "name": "knowledge.entity-relationships",
+      "abi": "mcp.stdio",
+      "description": "Run the signed entity-relationships command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.entities.relationships"
+      ]
+    },
+    {
+      "name": "knowledge.delete-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed delete-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.delete"
+      ]
+    },
+    {
+      "name": "knowledge.reindex-memory",
+      "abi": "mcp.stdio",
+      "description": "Run the signed reindex-memory command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.reindex"
+      ]
+    },
+    {
+      "name": "knowledge.index-status",
+      "abi": "mcp.stdio",
+      "description": "Run the signed index-status command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.index_status"
+      ]
+    },
+    {
+      "name": "knowledge.optimize-content",
+      "abi": "mcp.stdio",
+      "description": "Run the signed optimize-content command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.memories.optimize"
+      ]
+    },
+    {
+      "name": "knowledge.read-graph",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-graph command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.graph.read"
+      ]
+    },
+    {
+      "name": "knowledge.read-subgraph",
+      "abi": "mcp.stdio",
+      "description": "Run the signed read-subgraph command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.graph.subgraph"
+      ]
+    },
+    {
+      "name": "knowledge.search-project",
+      "abi": "mcp.stdio",
+      "description": "Run the signed search-project command outside the host process.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "app.knowledge.search"
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "id": "project-graph",
+      "tool": "project_graph",
+      "payload": {
+        "nodes": [],
+        "edges": []
+      },
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "tools.execute",
+        "graph.projection.compute"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "list-memories",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.read"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.list-memories"
+    },
+    {
+      "id": "read-memory",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.read"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.read-memory"
+    },
+    {
+      "id": "save-memory",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.write"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.save-memory"
+    },
+    {
+      "id": "list-entities",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.entities.list"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.list-entities"
+    },
+    {
+      "id": "entity-types",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.entities.types"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.entity-types"
+    },
+    {
+      "id": "entity-relationships",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.entities.relationships"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.entity-relationships"
+    },
+    {
+      "id": "delete-memory",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.delete"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.delete-memory"
+    },
+    {
+      "id": "reindex-memory",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.reindex"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.reindex-memory"
+    },
+    {
+      "id": "index-status",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.index_status"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.index-status"
+    },
+    {
+      "id": "optimize-content",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.memories.optimize"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.optimize-content"
+    },
+    {
+      "id": "read-graph",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.graph.read"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.read-graph"
+    },
+    {
+      "id": "read-subgraph",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.graph.subgraph"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.read-subgraph"
+    },
+    {
+      "id": "search-project",
+      "payload": {},
+      "input_schema": {
+        "type": "object"
+      },
+      "permissions": [
+        "app.knowledge.search"
+      ],
+      "accepts_input": true,
+      "output_schema": {
+        "type": "object"
+      },
+      "tool": "knowledge.search-project"
+    }
+  ],
+  "ui": [
+    {
+      "slot": "settings_page",
+      "path": "ui/settings.json",
+      "digest": "sha256:3385857b96d17d39a6d45d4c0539de98f9c2c468570f39bbc27a47fff448b32a",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "permissions": [
+        "ui.slot"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "knowledge",
+      "title": "Knowledge",
+      "routes": [
+        "/knowledge"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/knowledge.js",
+        "digest": "sha256:17afa30f93eb6a5fd43565c452edb5adf4b7586484bf20422ab7ff8f47955857"
+      },
+      "commands": [
+        "project-graph"
+      ],
+      "device_tools": [
+        "search_documents"
+      ]
+    },
+    {
+      "id": "graph",
+      "title": "Knowledge graph",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/graph",
+        "/project/:projectId/graph"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/graph-web.js",
+        "digest": "sha256:143705994ad493bebcf8e28bdab644d8c450fc893097e6e6184904feacb2f6d5"
+      },
+      "style": {
+        "path": "ui/graph-web.css",
+        "digest": "sha256:f73eb440984bed852ee30b4858bd3f43d1da30a33fdcf226a32ccedeb19eaf57"
+      },
+      "commands": [
+        "read-graph",
+        "read-subgraph"
+      ],
+      "workbench": true
+    },
+    {
+      "id": "memories",
+      "title": "Project memories",
+      "routes": [
+        "/memories",
+        "/project/:projectId/memories",
+        "/tenant/:tenantId/project/:projectId/memories"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
+      },
+      "commands": [
+        "list-memories",
+        "read-memory",
+        "save-memory",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
+      },
+      "query_params": [
+        "q",
+        "type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "id": "desktop-memory-editor",
+      "title": "Memory details",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
+        "/project/:projectId/memory/:memoryId"
+      ],
+      "targets": [
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
+      },
+      "query_params": [
+        "tab"
+      ]
+    },
+    {
+      "id": "memory-detail",
+      "title": "Memory details",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memory/:memoryId",
+        "/project/:projectId/memory/:memoryId"
+      ],
+      "targets": [
+        "web"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
+      },
+      "query_params": [
+        "tab"
+      ]
+    },
+    {
+      "id": "recent-memories",
+      "title": "Recent memories",
+      "routes": [],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "contributes_to": "memstack-workspace/recent-memories@1",
+      "commands": [
+        "list-memories"
+      ],
+      "entry": {
+        "path": "ui/recent.js",
+        "digest": "sha256:f8814a574dc653d2df696d7008a2d287f13d8e56fcf9a4f2bf533d7f5018c95c"
+      }
+    },
+    {
+      "id": "entities",
+      "title": "Graph entities",
+      "routes": [
+        "/entities",
+        "/project/:projectId/entities",
+        "/tenant/:tenantId/project/:projectId/entities"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "commands": [
+        "list-entities",
+        "entity-types",
+        "entity-relationships"
+      ],
+      "query_params": [
+        "page",
+        "type",
+        "q",
+        "sort"
+      ],
+      "entry": {
+        "path": "ui/entities.js",
+        "digest": "sha256:df3ec8cb3cf5b4c767c3d43850b828a04514910897d7693a07cefae4d9b5bda2"
+      },
+      "style": {
+        "path": "ui/entities.css",
+        "digest": "sha256:df041cb2ba6b9db5ed3fc210718e75391bf0f68c3967b95ca5931f0130cb2dc9"
+      },
+      "workbench": true
+    },
+    {
+      "id": "memory-editor",
+      "title": "Memory editor",
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/memories/new",
+        "/project/:projectId/memories/new"
+      ],
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "entry": {
+        "path": "ui/memories-web.js",
+        "digest": "sha256:02cb05effee6316471721679b838f3198deb5a04c28087bbe9a0c984a4264f17"
+      },
+      "commands": [
+        "read-memory",
+        "save-memory",
+        "list-memories",
+        "reindex-memory",
+        "delete-memory",
+        "index-status",
+        "optimize-content"
+      ],
+      "workbench": true,
+      "style": {
+        "path": "ui/memories-web.css",
+        "digest": "sha256:5656722b83fd77b9b7e12a09c5b4dccf5c28efa5cca702a66193219b34c43ae4"
+      }
+    },
+    {
+      "id": "project-search",
+      "title": "Advanced search",
+      "targets": [
+        "web",
+        "desktop-renderer"
+      ],
+      "routes": [
+        "/tenant/:tenantId/project/:projectId/advanced-search",
+        "/tenant/:tenantId/project/:projectId/search",
+        "/project/:projectId/advanced-search",
+        "/project/:projectId/search"
+      ],
+      "entry": {
+        "path": "ui/project-search.js",
+        "digest": "sha256:5341c45c8fcecdabea5488e91ecc80f4503fb2abd93206c889e92b1b34275ae6"
+      },
+      "style": {
+        "path": "ui/project-search.css",
+        "digest": "sha256:95b89ba1726a48d5f414704bd9f90af551d78e80e08fbc9676fee7d170b5ee45"
+      },
+      "commands": [
+        "search-project",
+        "read-graph",
+        "read-subgraph"
+      ],
+      "query_params": [
+        "q",
+        "mode",
+        "start",
+        "community"
+      ],
+      "workbench": true
+    }
+  ]
+}

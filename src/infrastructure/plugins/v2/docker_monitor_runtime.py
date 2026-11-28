@@ -12,7 +12,13 @@ from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.sandbox_status_sync_service import SandboxStatusSyncService
+from plugins.business.environments.backend.sandbox.sandbox_runtime import (
+    SandboxApplicationResolverProtocolV2,
+    SandboxApplicationServicesV2,
+)
+from plugins.business.environments.backend.sandbox.sandbox_status_sync_service import (
+    SandboxStatusSyncService,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
     SqlProjectSandboxRepository,
 )
@@ -28,7 +34,6 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .sandbox_runtime import SandboxApplicationResolverProtocolV2, SandboxApplicationServicesV2
 
 DOCKER_EVENT_MONITOR_MODULE_V2 = "builtin://memstack/runtime/docker-event-monitor"
 DOCKER_EVENT_MONITOR_SERVICE_V2 = "service:runtime.docker-event-monitor"
@@ -156,8 +161,11 @@ class DockerEventMonitorRuntimeV2:
         event_type: str,
     ) -> bool:
         """Resolve the event publisher from the current exact generation."""
+        from plugins.business.environments.backend.sandbox.sandbox_projection import (
+            current_sandbox_application_services_v2,
+        )
+
         from .boundary import current_process_generation_host_v2, pin_generation_v2
-        from .sandbox_projection import current_sandbox_application_services_v2
 
         session_factory = self._session_factory
         fallback = next(reversed(self._sandbox_by_token.values()), None)

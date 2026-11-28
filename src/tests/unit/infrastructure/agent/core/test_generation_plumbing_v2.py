@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from src.infrastructure.agent.core.react_agent_stream_mixin import StreamMixin
+from plugins.business.agent.engine.react.react_agent_stream_mixin import StreamMixin
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 

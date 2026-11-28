@@ -1,0 +1,15 @@
+.directory-rows {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+main { max-width: 68rem; }
+h1 { margin-block-end: .65em; letter-spacing: -.035em; }
+form { max-width: 62rem; }
+label:has(textarea), label:has(select) { max-width: 45rem; }
+label[hidden], button[hidden] { display: none; }
+button, a { touch-action: manipulation; }
+button[type="submit"] { justify-self: start; }
+input[type="checkbox"] { justify-self: start; }
+textarea { resize: vertical; }
+.workspace-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-block: 1rem; }

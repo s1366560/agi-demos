@@ -3,7 +3,7 @@ import { RuntimeV2Error } from '@agistack/plugin-runtime';
 import type {
   TenantEventFilters,
   TenantEventsSnapshot,
-} from '../features/tenant-admin/tenantEventsClient';
+} from '@business/automation/ui/desktop/tenant-admin/tenantEventsClient';
 import type { TenantManagementScope } from '../features/tenant-admin/tenantManagementHttp';
 import type { DesktopRuntimeConfig } from '../types';
 
